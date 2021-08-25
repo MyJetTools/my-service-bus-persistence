@@ -5,6 +5,8 @@ on:
 
 env:
   IMAGE_NAME: myjettools/my-servicebus-persistence
+  VERSION: 1.0.0
+
 
 jobs:
   build:
@@ -23,14 +25,8 @@ jobs:
         run: |
           echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin   
 
-      - name: Cat version
-        run: ver=$(cat Cargo.toml | grep -m1 version | grep  -Eo '["\047].*["\047]' | tr -d '"')
-
-      - name: Echo version
-        run: echo $ver
-
       - name: Docker Build
-        run: docker build -t ${IMAGE_NAME}:$ver .
+        run: docker build -t ${IMAGE_NAME}:${VERSION} .
 
       - name: Docker Push
-        run: docker push ${IMAGE_NAME}:$ver
+        run: docker push ${IMAGE_NAME}:${VERSION}
