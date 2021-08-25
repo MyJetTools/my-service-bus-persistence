@@ -1,0 +1,37 @@
+name: Release App
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: hays720/token-api
+  BUILD_FOLDER: Ms.TokenApi
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo build --release
+
+      - name: Docker login
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
+        run: |
+          echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin   
+
+      - name: Cat version
+        run: ver=$(cat Cargo.toml | grep -m1 version | grep  -Eo '["\047].*["\047]' | tr -d '"')
+
+      - name: Echo version
+        run: echo $ver
+
+      - name: Docker Build
+        run: docker build -t ${DOCKER_IMAGE_TAG}:$ver .
+
+      - name: Docker Push
+        run: docker push ${DOCKER_IMAGE_TAG}:$ver

@@ -1,0 +1,61 @@
+use crate::persistence_grpc::my_service_bus_queue_persistence_grpc_service_server::MyServiceBusQueuePersistenceGrpcService;
+use crate::persistence_grpc::*;
+use anyhow::*;
+use futures_core::Stream;
+use std::pin::Pin;
+use tokio::sync::mpsc;
+use tonic::{Response, Status};
+
+use super::contracts;
+use super::server::MyServicePersistenceGrpc;
+
+#[tonic::async_trait]
+impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
+    type GetSnapshotStream = Pin<
+        Box<
+            dyn Stream<Item = Result<TopicAndQueuesSnapshotGrpcModel, Status>>
+                + Send
+                + Sync
+                + 'static,
+        >,
+    >;
+
+    async fn get_snapshot(
+        &self,
+        _: tonic::Request<()>,
+    ) -> Result<tonic::Response<Self::GetSnapshotStream>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let app = self.app.clone();
+
+        let (tx, rx) = mpsc::channel(4);
+
+        tokio::spawn(async move {
+            let result = app.get_topics_snapshot().await;
+
+            for topic_snapshot in &result.snapshot.data {
+                let grpc_contract =
+                    super::topic_snapshot_mappers::to_topic_snapshot_grpc_model(topic_snapshot);
+                tx.send(Ok(grpc_contract)).await.unwrap();
+            }
+        });
+
+        Ok(Response::new(Box::pin(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        )))
+    }
+
+    async fn save_snapshot(
+        &self,
+        request: tonic::Request<SaveQueueSnapshotGrpcRequest>,
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let grpc_contract = request.into_inner();
+        let snapshot = super::topic_snapshot_mappers::to_topics_data_protobuf_model(&grpc_contract);
+        let mut write_access = self.app.topics_snapshot.write().await;
+        write_access.update(snapshot);
+
+        return Ok(tonic::Response::new(()));
+    }
+}

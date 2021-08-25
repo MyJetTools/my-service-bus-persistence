@@ -1,0 +1,122 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+package persistence;
+
+message TimeSpan {
+  enum TimeSpanScale {
+     DAYS = 0;
+     HOURS = 1;
+     MINUTES = 2;
+     SECONDS = 3;
+     MILLISECONDS = 4;
+     TICKS = 5;
+     MINMAX = 15;
+  }
+  sint64 value = 1;
+  persistence.TimeSpan.TimeSpanScale scale = 2;
+}
+
+message DateTime {
+  enum TimeSpanScale {
+     DAYS = 0;
+     HOURS = 1;
+     MINUTES = 2;
+     SECONDS = 3;
+     MILLISECONDS = 4;
+     TICKS = 5;
+     MINMAX = 15;
+  }
+  enum DateTimeKind {
+     UNSPECIFIED = 0;
+     UTC = 1;
+     LOCAL = 2;
+  }
+  sint64 value = 1;
+  persistence.DateTime.TimeSpanScale scale = 2;
+  persistence.DateTime.DateTimeKind kind = 3;
+}
+
+/////////////////
+
+enum QueueTypePersistenceGrpcEnum {
+   Permanent = 0;
+   AutoDelete = 1;
+   PermanentWithSingleConnection = 2;
+}
+
+message QueueIndexRangeGrpcModel {
+  int64 FromId = 1;
+  int64 ToId = 2;
+}
+
+message QueueSnapshotGrpcModel {
+  string QueueId = 1;
+  repeated persistence.QueueIndexRangeGrpcModel Ranges = 2;
+  persistence.QueueTypePersistenceGrpcEnum QueueType = 3;
+}
+
+message SaveQueueSnapshotGrpcRequest {
+  repeated persistence.TopicAndQueuesSnapshotGrpcModel QueueSnapshot = 1;
+}
+
+message TopicAndQueuesSnapshotGrpcModel {
+  string TopicId = 1;
+  int64 MessageId = 2;
+  repeated persistence.QueueSnapshotGrpcModel QueueSnapshots = 3;
+}
+
+service MyServiceBusQueuePersistenceGrpcService {
+   rpc GetSnapshot(google.protobuf.Empty) returns (stream persistence.TopicAndQueuesSnapshotGrpcModel);
+   rpc SaveSnapshot(persistence.SaveQueueSnapshotGrpcRequest) returns (google.protobuf.Empty);
+}
+
+
+///////////
+
+message GetHistoryByDateGrpcRequest {
+  string TopicId = 1;
+  persistence.DateTime FromDateTime = 2;
+}
+
+message MessageContentGrpcModel {
+  int64 MessageId = 1;
+  persistence.DateTime Created = 2;
+  bytes Data = 3;
+  repeated persistence.MessageContentMetaDataItem MetaData = 4;
+}
+
+message MessageContentMetaDataItem {
+  string Key = 1;
+  string Value = 2;
+}
+
+service MyServiceBusHistoryReaderGrpcService {
+   rpc GetByDate(persistence.GetHistoryByDateGrpcRequest) returns (stream persistence.MessageContentGrpcModel);
+}
+
+
+//////////////
+
+
+message CompressedMessageChunkModel {
+  bytes Chunk = 1;
+}
+
+message GetMessageGrpcRequest {
+  string TopicId = 1;
+  int64 MessageId = 2;
+}
+
+message GetMessagesPageGrpcRequest {
+  string TopicId = 1;
+  int64 PageNo = 2;
+  int64 FromMessageId = 3;
+  int64 ToMessageId = 4;
+}
+
+service MyServiceBusMessagesPersistenceGrpcService {
+   rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
+   rpc GetPageCompressed(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.CompressedMessageChunkModel);
+   rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
+}
+
