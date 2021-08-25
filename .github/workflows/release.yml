@@ -19,8 +19,8 @@ jobs:
 
       - name: Docker login
         env:
-          DOCKER_USER: ${{ secrets.DOCKER_USER }}
-          DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin   
 
