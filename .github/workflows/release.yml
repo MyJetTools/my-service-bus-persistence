@@ -4,8 +4,7 @@ on:
     branches: [main]
 
 env:
-  IMAGE_NAME: hays720/token-api
-  BUILD_FOLDER: Ms.TokenApi
+  IMAGE_NAME: myjettools/my-servicebus-persistence
 
 jobs:
   build:
@@ -31,7 +30,7 @@ jobs:
         run: echo $ver
 
       - name: Docker Build
-        run: docker build -t ${DOCKER_IMAGE_TAG}:$ver .
+        run: docker build -t ${IMAGE_NAME}:$ver .
 
       - name: Docker Push
-        run: docker push ${DOCKER_IMAGE_TAG}:$ver
+        run: docker push ${IMAGE_NAME}:$ver
