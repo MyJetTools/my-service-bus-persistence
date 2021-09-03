@@ -19,8 +19,7 @@ pub struct SettingsModel {
 }
 
 pub async fn read() -> SettingsModel {
-    let home_path = env!("HOME");
-    let filename = format!("{}/{}", home_path, ".myservicebus-persistence");
+    let filename = get_settings_filename();
 
     println!("Reading settings file {}", filename);
 
@@ -46,4 +45,18 @@ pub async fn read() -> SettingsModel {
     }
 
     serde_yaml::from_slice(file_content.as_slice()).unwrap()
+}
+
+#[cfg(target_os = "windows")] 
+fn get_settings_filename() -> String{
+    let home_path = env!("HOME");
+    let filename = format!("{}\\{}", home_path, ".myservicebus-persistence");
+    filename
+}
+
+#[cfg(not(target_os = "windows"))] 
+fn get_settings_filename() -> String{
+    let home_path = env!("HOME");
+    let filename = format!("{}/{}", home_path, ".myservicebus-persistence");
+    filename
 }
