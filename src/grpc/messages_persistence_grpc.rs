@@ -169,4 +169,29 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         return Ok(tonic::Response::new(()));
     }
+
+    async fn delete_topic(
+        &self,
+        request: tonic::Request<DeleteTopicRequest>
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+
+        let req = request.into_inner();
+
+        if req.topic_id != self.app.settings.delete_topic_secret_key {
+            
+            return Ok(tonic::Response::new(()));
+        }
+
+        let topic = self.app.delete_topic(req.topic_id).await;
+
+        self.app.logs
+        .add_info_string(
+            None,
+            "TopicDelete",
+            format!("Topic deleted. Id: {}, Message Id: {}, Not used: {}", topic.topic_id, topic.message_id, topic.not_used),
+        )
+        .await;
+
+        return Ok(tonic::Response::new(()));
+    }
 }

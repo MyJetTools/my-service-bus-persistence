@@ -114,9 +114,14 @@ message GetMessagesPageGrpcRequest {
   int64 ToMessageId = 4;
 }
 
+message DeleteTopicRequest{
+  string TopicId = 3;
+}
+
 service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
    rpc GetPageCompressed(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.CompressedMessageChunkModel);
    rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
+   rpc DeleteTopic(persistence.DeleteTopicRequest) returns (google.protobuf.Empty);
 }
 

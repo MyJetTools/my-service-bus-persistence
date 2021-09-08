@@ -14,6 +14,8 @@ pub struct SettingsModel {
     pub flush_messages_freq: String,
     #[serde(rename = "MaxResponseRecordsAmount")]
     pub max_response_records_amount: usize,
+    #[serde(rename = "DeleteTopicSecretKey")]
+    pub delete_topic_secret_key: String,
 }
 
 pub async fn read() -> SettingsModel {
