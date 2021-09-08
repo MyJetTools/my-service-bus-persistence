@@ -178,7 +178,13 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let req = request.into_inner();
 
         if req.topic_id != self.app.settings.delete_topic_secret_key {
-            
+            self.app.logs
+        .add_info_string(
+            None,
+            "TopicDelete",
+            format!("Skip delete. Wrong secret"),
+        )
+        .await;
             return Ok(tonic::Response::new(()));
         }
 
