@@ -9,13 +9,7 @@ use std::{
 use my_azure_storage_sdk::AzureConnection;
 use tokio::sync::RwLock;
 
-use crate::{
-    compressed_pages::CompressedPagesPool,
-    index_by_minute::{IndexByMinuteUtils, IndexesByMinute},
-    message_pages::data_by_topic::DataByTopic,
-    settings::SettingsModel,
-    toipics_snapshot::{current_snapshot::CurrentTopicsSnapshot, TopicsDataProtobufModel},
-};
+use crate::{compressed_pages::CompressedPagesPool, index_by_minute::{IndexByMinuteUtils, IndexesByMinute}, message_pages::data_by_topic::DataByTopic, settings::SettingsModel, toipics_snapshot::{TopicsDataProtobufModel, TopicsSnaphotProtobufModel, current_snapshot::CurrentTopicsSnapshot}};
 
 use super::{logs::Logs, PrometheusMetrics};
 
@@ -64,6 +58,17 @@ impl AppContext {
         let read_access = self.topics_snapshot.read().await;
 
         read_access.clone()
+    }
+
+    pub async fn delete_topic(&self, topic_id: String) -> TopicsSnaphotProtobufModel {
+        let mut read_access = self.data_by_topic.write().await;
+        read_access.remove(&topic_id);
+        let mut snapshot_read_access = self.topics_snapshot.write().await;
+
+        let mut snapshot = snapshot_read_access.snapshot.clone();
+        let deleted_topic = snapshot.delete_topic(topic_id);
+        snapshot_read_access.update(snapshot);
+        return deleted_topic;
     }
 
     pub async fn get_data_by_topic(&self, topic_id: &str) -> Option<Arc<DataByTopic>> {

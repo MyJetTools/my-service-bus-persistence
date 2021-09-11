@@ -52,7 +52,7 @@ pub fn to_topics_data_protobuf_model(
     src: &SaveQueueSnapshotGrpcRequest,
 ) -> TopicsDataProtobufModel {
     TopicsDataProtobufModel {
-        data: to_topic_snapshot_protobuf_models_vec(src.queue_snapshot.as_slice()),
+        data: to_topic_snapshot_protobuf_models_vec(src.queue_snapshot.as_slice())
     }
 }
 
