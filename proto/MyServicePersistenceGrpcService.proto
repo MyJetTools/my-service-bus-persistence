@@ -115,7 +115,7 @@ message GetMessagesPageGrpcRequest {
 }
 
 message DeleteTopicRequest{
-  string TopicId = 3;
+  string TopicId = 1;
 }
 
 service MyServiceBusMessagesPersistenceGrpcService {
