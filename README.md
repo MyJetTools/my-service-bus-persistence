@@ -13,6 +13,7 @@ LoadBlobPagesSize: 8192
 FlushQueuesSnapshotFreq: 00:00:01
 FlushMessagesFreq: 00:00:01
 MaxResponseRecordsAmount: 500
+DeleteTopicSecretKey: SecretKeyString
 ```
 Install rust: https://www.rust-lang.org/tools/install
 execute: **cargo run --release**
