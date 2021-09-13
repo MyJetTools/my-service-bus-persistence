@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
+use my_service_bus_shared::settings;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
     #[serde(rename = "QueuesConnectionString")]
@@ -19,8 +21,7 @@ pub struct SettingsModel {
 }
 
 pub async fn read() -> SettingsModel {
-    let home_path = env!("HOME");
-    let filename = format!("{}/{}", home_path, ".myservicebus-persistence");
+    let filename = settings::get_settings_filename_path(".myservicebus-persistence");
 
     println!("Reading settings file {}", filename);
 
