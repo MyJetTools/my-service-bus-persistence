@@ -1,3 +1,4 @@
+use core::panic;
 use std::usize;
 
 use my_azure_page_blob::MyPageBlob;
@@ -9,7 +10,18 @@ use super::protobuf_model::TopicsDataProtobufModel;
 pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     my_page_blob: &mut TMyPageBlob,
 ) -> Result<TopicsDataProtobufModel, AzureStorageError> {
-    let content = my_page_blob.download().await.unwrap();
+
+    let mut content = Vec::new();
+
+    match my_page_blob.download().await {
+        Ok(result) => content = result,
+        Err(er) => {
+            match er {
+                AzureStorageError::BlobNotFound =>  my_page_blob.create_if_not_exists(0).await.unwrap(),
+                _ => panic!("error")
+            }
+        }
+    }
 
     let mut array = [0u8; 4];
     let slice = &content[..4];
