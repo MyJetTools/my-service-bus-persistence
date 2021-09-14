@@ -13,6 +13,12 @@ impl TopicsDataProtobufModel {
         self.data = updated_data;
         return deleted_topic; 
     }
+
+    pub fn new() -> TopicsDataProtobufModel{
+        return TopicsDataProtobufModel{
+            data: Vec::new()
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, ::prost::Message)]
