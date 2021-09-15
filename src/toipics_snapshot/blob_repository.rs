@@ -17,10 +17,14 @@ pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
         Ok(result) => content = result,
         Err(er) => {
             match er {
-                AzureStorageError::BlobNotFound =>  my_page_blob.create_if_not_exists(0).await.unwrap(),
-                _ => panic!("error")
+                AzureStorageError::BlobNotFound =>  {my_page_blob.create_if_not_exists(0).await.unwrap()},
+                _ => return Err(er)
             }
         }
+    }
+
+    if content.len() == 0 {
+        return Ok(TopicsDataProtobufModel::new())
     }
 
     let mut array = [0u8; 4];
