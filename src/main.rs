@@ -19,7 +19,7 @@ mod toipics_snapshot;
 mod utils;
 use toipics_snapshot::CurrentTopicsSnapshot;
 
-use my_azure_page_blob::MyAzurePageBlob;
+use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
 
 use crate::app::AppContext;
 
@@ -39,6 +39,8 @@ async fn main() {
 
     let mut topics_snapshot_blob =
         MyAzurePageBlob::new(connection, "topics".to_string(), "topicsdata".to_string());
+
+    topics_snapshot_blob.create_container_if_not_exist().await.unwrap();
 
     let topics_data = toipics_snapshot::blob_repository::read_from_blob(&mut topics_snapshot_blob)
         .await
