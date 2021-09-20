@@ -11,8 +11,16 @@ use crate::{
 use my_azure_page_blob::*;
 use my_azure_storage_sdk::AzureStorageError;
 
-pub async fn execute(app: &AppContext, topics: &TopicsDataProtobufModel) {
-    let active_pages = get_active_pages(&topics);
+pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+    let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
+
+    if let Err(err) = timer_result {
+        app.logs.add_fatal_error("pages_gc_timer", err).await;
+    }
+}
+
+async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+    let active_pages = get_active_pages(topics.as_ref());
 
     let data_by_topic = app.data_by_topic.write().await;
 
@@ -31,7 +39,7 @@ pub async fn execute(app: &AppContext, topics: &TopicsDataProtobufModel) {
             .await;
 
         if let Some(gc_pages) = gc_pages {
-            compress_pages_if_needed_after_gc(app, gc_pages.as_slice()).await;
+            compress_pages_if_needed_after_gc(app.as_ref(), gc_pages.as_slice()).await;
         }
     }
 }

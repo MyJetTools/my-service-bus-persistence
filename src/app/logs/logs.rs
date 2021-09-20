@@ -1,4 +1,4 @@
-use tokio::sync::RwLock;
+use tokio::{sync::RwLock, task::JoinError};
 
 use crate::date_time::DateTimeAsMicroseconds;
 
@@ -8,6 +8,7 @@ use super::LogsCluster;
 pub enum LogLevel {
     Info,
     Error,
+    FatalError,
 }
 #[derive(Debug, Clone)]
 pub struct LogItem {
@@ -118,6 +119,25 @@ impl Logs {
         } else {
             println!("{}: ERR {}", date.to_rfc3339(), item.message);
         }
+
+        wirte_access.push(item);
+    }
+
+    pub async fn add_fatal_error(&self, process: &str, err: JoinError) {
+        let date = DateTimeAsMicroseconds::now();
+
+        let item = LogItem {
+            topic_id: None,
+            date,
+            level: LogLevel::FatalError,
+            process: process.to_string(),
+            message: format!("{:?}", err),
+            err_ctx: None,
+        };
+
+        let mut wirte_access = self.items.write().await;
+
+        println!("{}: FATAL_ERR {}", date.to_rfc3339(), item.message);
 
         wirte_access.push(item);
     }

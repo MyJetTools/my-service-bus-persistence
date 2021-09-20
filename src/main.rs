@@ -19,11 +19,7 @@ mod toipics_snapshot;
 mod utils;
 use toipics_snapshot::CurrentTopicsSnapshot;
 
-use my_azure_page_blob::MyAzurePageBlob;
-
-use crate::app::AppContext;
-
-use my_azure_storage_sdk::AzureConnection;
+use crate::{app::AppContext, settings::SettingsModel};
 
 use tokio::signal;
 
@@ -33,16 +29,14 @@ pub mod persistence_grpc {
 
 #[tokio::main]
 async fn main() {
-    let settings = settings::read().await;
+    let settings = SettingsModel::read().await;
 
-    let connection = AzureConnection::from_conn_string(settings.queues_connection_string.as_str());
+    let mut topics_snapshot_page_blob = settings.get_topics_snapshot_page_blob();
 
-    let mut topics_snapshot_blob =
-        MyAzurePageBlob::new(connection, "topics".to_string(), "topicsdata".to_string());
-
-    let topics_data = toipics_snapshot::blob_repository::read_from_blob(&mut topics_snapshot_blob)
-        .await
-        .unwrap();
+    let topics_data =
+        toipics_snapshot::blob_repository::read_from_blob(&mut topics_snapshot_page_blob)
+            .await
+            .unwrap();
 
     let app = AppContext::new(topics_data, settings);
 
@@ -50,7 +44,7 @@ async fn main() {
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, app.shutting_down.clone()).unwrap();
 
-    tokio::spawn(run_app(app.clone(), topics_snapshot_blob));
+    tokio::spawn(run_app(app.clone()));
 
     let shut_down_task = tokio::spawn(shut_down(app.clone()));
 
@@ -65,10 +59,10 @@ async fn main() {
     shut_down_task.await.unwrap();
 }
 
-async fn run_app(app: Arc<AppContext>, topics_snapshot_blob: MyAzurePageBlob) {
+async fn run_app(app: Arc<AppContext>) {
     let init_handler = tokio::spawn(azure_storage::data_initializer::init(app.clone()));
 
-    timers::timer_3s::start(app.clone(), topics_snapshot_blob);
+    timers::timer_3s::start(app.clone());
 
     let http_server_task = tokio::spawn(http::http_server::start(app.clone(), 7123));
 

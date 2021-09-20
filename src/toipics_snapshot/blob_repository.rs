@@ -76,7 +76,7 @@ mod tests {
         page_blob.create_container_if_not_exist().await.unwrap();
         page_blob.create_if_not_exists(0).await.unwrap();
 
-        let mut src = TopicsDataProtobufModel { data: Vec::new()};
+        let mut src = TopicsDataProtobufModel { data: Vec::new() };
 
         src.data.push(TopicsSnaphotProtobufModel {
             topic_id: "Test".to_string(),

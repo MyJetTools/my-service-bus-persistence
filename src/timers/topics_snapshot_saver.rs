@@ -1,19 +1,28 @@
-use my_azure_page_blob::MyAzurePageBlob;
+use std::sync::Arc;
 
 use crate::{app::AppContext, toipics_snapshot::CurrentTopicsSnapshot};
 
-pub async fn execute(
-    app: &AppContext,
-    snapshot: &CurrentTopicsSnapshot,
-    topics_blob: &mut MyAzurePageBlob,
-) {
+pub async fn execute(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>) {
     if snapshot.last_saved_snapshot_id == snapshot.snapshot_id {
         return;
     }
+    let timer_result = tokio::spawn(process(app.clone(), snapshot)).await;
 
-    let result =
-        crate::toipics_snapshot::blob_repository::write_to_blob(topics_blob, &snapshot.snapshot)
+    if let Err(err) = timer_result {
+        app.logs
+            .add_fatal_error("topics_snapshot_saver_timer", err)
             .await;
+    }
+}
+
+async fn process(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>) {
+    let mut topics_blob = app.settings.get_topics_snapshot_page_blob();
+
+    let result = crate::toipics_snapshot::blob_repository::write_to_blob(
+        &mut topics_blob,
+        &snapshot.snapshot,
+    )
+    .await;
 
     if let Err(err) = result {
         app.logs

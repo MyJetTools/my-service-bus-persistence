@@ -10,7 +10,15 @@ use crate::{
     utils::StopWatch,
 };
 
-pub async fn execute(app: Arc<AppContext>, topics: &TopicsDataProtobufModel) {
+pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+    let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
+
+    if let Err(err) = timer_result {
+        app.logs.add_fatal_error("save_messages_timer", err).await;
+    }
+}
+
+async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
     for topic in &topics.data {
         let data_by_topic = app.get_data_by_topic(&topic.topic_id).await;
 

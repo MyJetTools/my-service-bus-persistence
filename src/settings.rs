@@ -1,6 +1,8 @@
+use my_azure_page_blob::MyAzurePageBlob;
+use my_azure_storage_sdk::AzureConnection;
+use my_service_bus_shared::settings;
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
-use my_service_bus_shared::settings;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
@@ -20,31 +22,38 @@ pub struct SettingsModel {
     pub delete_topic_secret_key: String,
 }
 
-pub async fn read() -> SettingsModel {
-    let filename = settings::get_settings_filename_path(".myservicebus-persistence");
-
-    println!("Reading settings file {}", filename);
-
-    let file = File::open(&filename).await;
-
-    if let Err(err) = file {
-        panic!(
-            "Can not open settings file: {}. The reason is: {:?}",
-            filename, err
-        );
+impl SettingsModel {
+    pub fn get_topics_snapshot_page_blob(&self) -> MyAzurePageBlob {
+        let connection = AzureConnection::from_conn_string(self.queues_connection_string.as_str());
+        MyAzurePageBlob::new(connection, "topics".to_string(), "topicsdata".to_string())
     }
 
-    let mut file = file.unwrap();
+    pub async fn read() -> Self {
+        let filename = settings::get_settings_filename_path(".myservicebus-persistence");
 
-    let mut file_content: Vec<u8> = Vec::new();
+        println!("Reading settings file {}", filename);
 
-    loop {
-        let res = file.read_buf(&mut file_content).await.unwrap();
+        let file = File::open(&filename).await;
 
-        if res == 0 {
-            break;
+        if let Err(err) = file {
+            panic!(
+                "Can not open settings file: {}. The reason is: {:?}",
+                filename, err
+            );
         }
-    }
 
-    serde_yaml::from_slice(file_content.as_slice()).unwrap()
+        let mut file = file.unwrap();
+
+        let mut file_content: Vec<u8> = Vec::new();
+
+        loop {
+            let res = file.read_buf(&mut file_content).await.unwrap();
+
+            if res == 0 {
+                break;
+            }
+        }
+
+        serde_yaml::from_slice(file_content.as_slice()).unwrap()
+    }
 }
