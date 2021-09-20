@@ -52,3 +52,66 @@ pub async fn copy_blob(
 
     Ok(())
 }
+
+pub async fn delete_blob_with_retries(
+    connection: &AzureConnection,
+    container_name: &str,
+    blob_name: &str,
+) -> Result<(), AzureStorageError> {
+    loop {
+        let result = connection
+            .delete_blob_if_exists(container_name, blob_name)
+            .await;
+
+        if result.is_ok() {
+            break;
+        }
+
+        let err = result.err().unwrap();
+
+        match err {
+            AzureStorageError::ContainerNotFound => {
+                break;
+            }
+            AzureStorageError::BlobNotFound => {
+                break;
+            }
+            AzureStorageError::ContainerBeingDeleted => {
+                break;
+            }
+            _ => {
+                return Err(err);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn rename_blob_with_retries(
+    connection: &AzureConnection,
+    from_container: &str,
+    from_blob: &str,
+    to_container: &str,
+    to_blob: &str,
+) -> Result<(), AzureStorageError> {
+    loop {
+        let result = crate::azure_storage::page_blob_utils::copy_blob(
+            &connection,
+            from_container,
+            from_blob,
+            to_container,
+            to_blob,
+            5_000,
+        )
+        .await;
+
+        if result.is_ok() {
+            break;
+        }
+    }
+
+    delete_blob_with_retries(connection, from_container, from_blob).await?;
+
+    Ok(())
+}

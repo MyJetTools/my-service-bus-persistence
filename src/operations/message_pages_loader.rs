@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use my_azure_storage_sdk::{AzureConnection, AzureStorageError, BlobApi};
+use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
 
 use crate::{
     app::AppContext,
@@ -71,7 +71,9 @@ async fn get_uncompressed_page(
                     .await;
 
                 if check_if_blob_is_corrupted(&err) {
-                    rename_corrupted_file(app.as_ref(), topic_id, page_id).await;
+                    rename_corrupted_file(app.as_ref(), topic_id, page_id)
+                        .await
+                        .unwrap();
                     return None;
                 }
 
@@ -94,8 +96,28 @@ async fn get_uncompressed_page(
     }
 }
 
-async fn rename_corrupted_file(as_ref: &AppContext, topic_id: &str, page_id: MessagePageId) -> () {
-    todo!()
+async fn rename_corrupted_file(
+    app: &AppContext,
+    topic_id: &str,
+    page_id: MessagePageId,
+) -> Result<(), AzureStorageError> {
+    let now = DateTimeAsMicroseconds::now();
+
+    let from_blob_name = generage_blob_name(&page_id);
+
+    let to_blob_name = format!("{}.err-{}", from_blob_name, now.to_rfc3339());
+
+    let connection =
+        AzureConnection::from_conn_string(app.settings.messages_connection_string.as_str());
+
+    crate::azure_storage::page_blob_utils::rename_blob_with_retries(
+        &connection,
+        topic_id,
+        from_blob_name.as_str(),
+        topic_id,
+        to_blob_name.as_str(),
+    )
+    .await
 }
 
 async fn get_compressed_page(
@@ -150,86 +172,8 @@ fn check_if_blob_is_corrupted(err: &PageBlobAppendCacheError) -> bool {
             AzureStorageError::ContainerAlreadyExists => return false,
             AzureStorageError::InvalidPageRange => return true,
             AzureStorageError::RequestBodyTooLarge => return false,
-            AzureStorageError::UnknownError { msg } => return true,
-            AzureStorageError::HyperError { err } => return false,
+            AzureStorageError::UnknownError { msg: _ } => return true,
+            AzureStorageError::HyperError { err: _ } => return false,
         },
-    }
-}
-
-async fn rename_file_with_retries(
-    connection: &AzureConnection,
-    app: &AppContext,
-    topic_id: &str,
-    page_id: MessagePageId,
-) {
-    let from_blob_name = generage_blob_name(&page_id);
-
-    loop {
-        let now = DateTimeAsMicroseconds::now();
-
-        let to_blob_name = format!("{}.err-{}", from_blob_name, now.to_rfc3339());
-
-        app.logs
-            .add_info_string(
-                Some(topic_id),
-                "Renaming corrupted blob",
-                format!("Page: {}", page_id.value),
-            )
-            .await;
-
-        let result = crate::azure_storage::page_blob_utils::copy_blob(
-            &connection,
-            topic_id,
-            from_blob_name.as_str(),
-            topic_id,
-            to_blob_name.as_str(),
-            10_000,
-        )
-        .await;
-
-        if result.is_ok() {
-            break;
-        }
-
-        let err = result.err().unwrap();
-    }
-}
-
-async fn delete_blob_with_retries(
-    connection: &AzureConnection,
-    app: &AppContext,
-    topic_id: &str,
-    page_id: MessagePageId,
-) {
-    let from_blob_name = generage_blob_name(&page_id);
-
-    loop {
-        let result = connection
-            .delete_blob_if_exists(topic_id, from_blob_name.as_str())
-            .await;
-
-        if result.is_ok() {
-            break;
-        }
-
-        let err = result.err().unwrap();
-
-        match err {
-            AzureStorageError::ContainerNotFound => {
-                break;
-            }
-            AzureStorageError::BlobNotFound => {
-                break;
-            }
-            AzureStorageError::BlobAlreadyExists => todo!(),
-            AzureStorageError::ContainerBeingDeleted => {
-                break;
-            }
-            AzureStorageError::ContainerAlreadyExists => todo!(),
-            AzureStorageError::InvalidPageRange => todo!(),
-            AzureStorageError::RequestBodyTooLarge => todo!(),
-            AzureStorageError::UnknownError { msg } => todo!(),
-            AzureStorageError::HyperError { err } => todo!(),
-        }
     }
 }

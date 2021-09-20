@@ -41,7 +41,7 @@ impl DataByTopic {
             return result.unwrap();
         }
 
-        let result = crate::message_pages_loader::get_from_compressed_and_uncompressed(
+        let result = crate::operations::message_pages_loader::get_from_compressed_and_uncompressed(
             self.app.clone(),
             self.topic_id.as_str(),
             page_id,
