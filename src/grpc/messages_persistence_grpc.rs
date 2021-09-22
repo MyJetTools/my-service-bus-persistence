@@ -1,10 +1,9 @@
-use crate::compression;
 use crate::message_pages::MessagePageId;
-use crate::messages_protobuf::MessageProtobufModel;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
 use anyhow::*;
 use futures_core::Stream;
+use my_service_bus_shared::{page_compressor, MessageProtobufModel};
 use std::collections::HashMap;
 use std::pin::Pin;
 use tokio::sync::mpsc;
@@ -126,7 +125,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             payload.extend(next.chunk);
         }
 
-        let unzipped = compression::zip::decompress_payload(payload.as_slice()).unwrap();
+        let unzipped = page_compressor::zip::decompress_payload(payload.as_slice()).unwrap();
 
         let mut contract = NewMessagesProtobufContract::parse(unzipped.as_slice());
 
@@ -172,31 +171,31 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
     async fn delete_topic(
         &self,
-        request: tonic::Request<DeleteTopicRequest>
+        request: tonic::Request<DeleteTopicRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
-
         let req = request.into_inner();
 
         if req.topic_id != self.app.settings.delete_topic_secret_key {
-            self.app.logs
-        .add_info_string(
-            None,
-            "TopicDelete",
-            format!("Skip delete. Wrong secret"),
-        )
-        .await;
+            self.app
+                .logs
+                .add_info_string(None, "TopicDelete", format!("Skip delete. Wrong secret"))
+                .await;
             return Ok(tonic::Response::new(()));
         }
 
         let topic = self.app.delete_topic(req.topic_id).await;
 
-        self.app.logs
-        .add_info_string(
-            None,
-            "TopicDelete",
-            format!("Topic deleted. Id: {}, Message Id: {}, Not used: {}", topic.topic_id, topic.message_id, topic.not_used),
-        )
-        .await;
+        self.app
+            .logs
+            .add_info_string(
+                None,
+                "TopicDelete",
+                format!(
+                    "Topic deleted. Id: {}, Message Id: {}, Not used: {}",
+                    topic.topic_id, topic.message_id, topic.not_used
+                ),
+            )
+            .await;
 
         return Ok(tonic::Response::new(()));
     }

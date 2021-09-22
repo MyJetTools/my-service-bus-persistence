@@ -1,6 +1,5 @@
+use my_service_bus_shared::{bcl::BclToUnixMicroseconds, MessageProtobufModel};
 use serde::{Deserialize, Serialize};
-
-use crate::{bcl_proto::BclToUnixMicroseconds, messages_protobuf::MessageProtobufModel};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetMessagesResponseModel {

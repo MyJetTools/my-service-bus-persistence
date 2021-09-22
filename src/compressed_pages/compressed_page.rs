@@ -1,7 +1,9 @@
+use my_service_bus_shared::MessagesProtobufModel;
+use zip::result::ZipError;
+
 use crate::{
     app::AppError,
     message_pages::{MessagesPage, MessagesPageData},
-    messages_protobuf::MessagesProtobufModel,
 };
 
 pub struct CompressedPage {
@@ -29,7 +31,7 @@ impl CompressedPage {
     }
 }
 
-pub async fn to_zip(data: MessagesPageData) -> Result<Vec<u8>, AppError> {
+pub async fn to_zip(data: MessagesPageData) -> Result<Vec<u8>, ZipError> {
     let mut protobuf_model = MessagesProtobufModel {
         messages: Vec::new(),
     };
@@ -40,7 +42,7 @@ pub async fn to_zip(data: MessagesPageData) -> Result<Vec<u8>, AppError> {
 
     let payload = protobuf_model.serialize();
 
-    let compressed = crate::compression::zip::compress_payload(&payload)?;
+    let compressed = my_service_bus_shared::page_compressor::zip::compress_payload(&payload)?;
 
     Ok(compressed)
 }

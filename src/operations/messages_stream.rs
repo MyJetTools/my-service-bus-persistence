@@ -1,8 +1,7 @@
 use crate::azure_page_blob_writer::{PageBlobAppendCache, PageBlobAppendCacheError};
 
-use super::MessageProtobufModel;
-
 use my_azure_page_blob::*;
+use my_service_bus_shared::MessageProtobufModel;
 
 pub struct MessagesStream {
     pub append_cache: PageBlobAppendCache,

@@ -1,6 +1,6 @@
-use crate::{
-    app::AppContext, bcl_proto::BclToUnixMicroseconds, messages_protobuf::MessageProtobufModel,
-};
+use crate::app::AppContext;
+
+use my_service_bus_shared::{bcl::BclToUnixMicroseconds, MessageProtobufModel};
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessagesProtobufContract {
@@ -19,15 +19,19 @@ impl NewMessagesProtobufContract {
 
 impl BclToUnixMicroseconds for crate::persistence_grpc::DateTime {
     fn to_unix_microseconds(&self) -> Result<i64, String> {
-        crate::bcl_proto::bcl_date_time_utils::to_unix_microseconds(self.value, self.scale)
+        my_service_bus_shared::bcl::bcl_date_time_utils::to_unix_microseconds(
+            self.value, self.scale,
+        )
     }
 
-    fn to_date_time(&self) -> Result<crate::date_time::DateTimeAsMicroseconds, String> {
-        crate::bcl_proto::bcl_date_time_utils::to_date_time(self)
+    fn to_date_time(
+        &self,
+    ) -> Result<my_service_bus_shared::date_time::DateTimeAsMicroseconds, String> {
+        my_service_bus_shared::bcl::bcl_date_time_utils::to_date_time(self)
     }
 
     fn to_rfc3339(&self) -> String {
-        crate::bcl_proto::bcl_date_time_utils::to_rfc3339(self)
+        my_service_bus_shared::bcl::bcl_date_time_utils::to_rfc3339(self)
     }
 }
 

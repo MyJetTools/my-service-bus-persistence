@@ -1,13 +1,8 @@
-use crate::{
-    app::AppError,
-    bcl_proto::BclDateTime,
-    compression,
-    message_pages::MessagesPage,
-    messages_protobuf::{
-        MessageMetaDataProtobufModel, MessageProtobufModel, MessagesProtobufModel,
-    },
-    persistence_grpc::*,
+use my_service_bus_shared::{
+    bcl::BclDateTime, MessageMetaDataProtobufModel, MessageProtobufModel, MessagesProtobufModel,
 };
+
+use crate::{app::AppError, message_pages::MessagesPage, persistence_grpc::*};
 
 pub fn get_none_message() -> MessageContentGrpcModel {
     MessageContentGrpcModel {
@@ -93,7 +88,8 @@ pub async fn get_compressed_page(
     let mut encoded_payload: Vec<u8> = Vec::new();
     prost::Message::encode(&protobuf_model, &mut encoded_payload).unwrap();
 
-    let zipped = compression::zip::compress_payload(encoded_payload.as_slice())?;
+    let zipped =
+        my_service_bus_shared::page_compressor::zip::compress_payload(encoded_payload.as_slice())?;
 
     return Ok(split(zipped.as_slice(), max_payload_size));
 }

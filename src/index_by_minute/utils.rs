@@ -1,8 +1,7 @@
 use std::{collections::HashMap, usize};
 
 use chrono::{Datelike, Timelike};
-
-use crate::date_time::DateTimeAsMicroseconds;
+use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
 
 use super::MsgData;
 
@@ -136,7 +135,8 @@ impl IndexByMinuteUtils {
 
 #[cfg(test)]
 mod tests {
-    use crate::date_time::DateTimeAsMicroseconds;
+
+    use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
 
     use super::IndexByMinuteUtils;
 

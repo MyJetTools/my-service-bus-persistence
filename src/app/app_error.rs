@@ -1,22 +1,30 @@
 use my_azure_storage_sdk::AzureStorageError;
+use zip::result::ZipError;
 
 use crate::azure_page_blob_writer::PageBlobAppendCacheError;
 
 #[derive(Debug)]
 pub enum AppError {
-    AzureStorageError { err: AzureStorageError },
-    PageBlobAppendCacheError { err: PageBlobAppendCacheError },
+    AzureStorageError(AzureStorageError),
+    PageBlobAppendCacheError(PageBlobAppendCacheError),
+    ZipError(ZipError),
     Other { msg: String },
 }
 
 impl From<AzureStorageError> for AppError {
     fn from(err: AzureStorageError) -> Self {
-        AppError::AzureStorageError { err }
+        AppError::AzureStorageError(err)
     }
 }
 
 impl From<PageBlobAppendCacheError> for AppError {
     fn from(err: PageBlobAppendCacheError) -> Self {
-        AppError::PageBlobAppendCacheError { err }
+        AppError::PageBlobAppendCacheError(err)
+    }
+}
+
+impl From<ZipError> for AppError {
+    fn from(err: ZipError) -> Self {
+        AppError::ZipError(err)
     }
 }

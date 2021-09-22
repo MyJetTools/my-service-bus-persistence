@@ -1,6 +1,5 @@
+use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
 use tokio::{sync::RwLock, task::JoinError};
-
-use crate::date_time::DateTimeAsMicroseconds;
 
 use super::LogsCluster;
 

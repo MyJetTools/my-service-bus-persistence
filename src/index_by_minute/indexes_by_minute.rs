@@ -1,9 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use my_azure_storage_sdk::AzureConnection;
+use my_service_bus_shared::MessageProtobufModel;
 use tokio::sync::Mutex;
 
-use crate::{app::Logs, messages_protobuf::MessageProtobufModel};
+use crate::app::Logs;
 
 use super::IndexByMinuteHandler;
 

@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::{
-    date_time::DateTimeAsMicroseconds, message_pages::MessagePageId,
-    messages_protobuf::MessageProtobufModel,
-};
+use my_service_bus_shared::{date_time::DateTimeAsMicroseconds, MessageProtobufModel};
+
+use crate::message_pages::MessagePageId;
 
 pub struct MessagesPageData {
     pub page_id: MessagePageId,
@@ -108,7 +107,8 @@ pub fn get_min_max(messages: &BTreeMap<i64, MessageProtobufModel>) -> (Option<i6
 
 #[cfg(test)]
 mod tests {
-    use crate::bcl_proto::BclDateTime;
+
+    use my_service_bus_shared::bcl::BclDateTime;
 
     use super::*;
 

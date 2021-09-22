@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::date_time::DateTimeAsMicroseconds;
+use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
 
 use super::PageCacheItem;
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::date_time::DateTimeAsMicroseconds;
+use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
 
 #[derive(Debug, Clone)]
 pub struct PageWriterMetrics {

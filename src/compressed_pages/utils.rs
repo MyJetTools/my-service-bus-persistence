@@ -1,6 +1,7 @@
+use my_service_bus_shared::{MessageProtobufModel, MessagesProtobufModel};
+
 use crate::app::{AppError, Logs};
 use crate::message_pages::MessagePageId;
-use crate::messages_protobuf::{MessageProtobufModel, MessagesProtobufModel};
 use crate::utils::StopWatch;
 
 const PAGES_IN_CLUSTER: i64 = 100;
@@ -31,7 +32,7 @@ pub async fn decompress_cluster(
 ) -> Result<Option<Vec<MessageProtobufModel>>, AppError> {
     let mut sw = StopWatch::new();
     sw.start();
-    let unzipped = crate::compression::zip::decompress_payload(payload)?;
+    let unzipped = my_service_bus_shared::page_compressor::zip::decompress_payload(payload)?;
     sw.pause();
 
     logs.add_info_string(
