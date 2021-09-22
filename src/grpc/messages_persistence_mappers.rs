@@ -78,7 +78,7 @@ pub async fn get_compressed_page(
 
     let read_access = read_access.get(0).unwrap();
 
-    if msg_from != 0 && msg_to != 0 {
+    if msg_from == 0 && msg_to == 0 {
         for msg in read_access.messages.values() {
             protobuf_model.messages.push(msg.clone());
         }

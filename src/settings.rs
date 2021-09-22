@@ -29,7 +29,9 @@ impl SettingsModel {
     }
 
     pub async fn read() -> Self {
-        let filename = settings::get_settings_filename_path(".myservicebus-persistence");
+        let filename = my_service_bus_shared::settings::get_settings_filename_path(
+            ".myservicebus-persistence",
+        );
 
         println!("Reading settings file {}", filename);
 

@@ -9,8 +9,26 @@ use super::protobuf_model::TopicsDataProtobufModel;
 pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     my_page_blob: &mut TMyPageBlob,
 ) -> Result<TopicsDataProtobufModel, AzureStorageError> {
-    let content = my_page_blob.download().await.unwrap();
+    my_page_blob.create_container_if_not_exist().await.unwrap();
 
+    let download_result = my_page_blob.download().await;
+
+    match download_result {
+        Ok(content) => {
+            return Ok(deserialize_model(content.as_slice()));
+        }
+        Err(err) => {
+            if let AzureStorageError::BlobNotFound = &err {
+                my_page_blob.create_if_not_exists(0).await.unwrap();
+                return Ok(TopicsDataProtobufModel::create_default());
+            }
+
+            return Err(err);
+        }
+    }
+}
+
+fn deserialize_model(content: &[u8]) -> TopicsDataProtobufModel {
     let mut array = [0u8; 4];
     let slice = &content[..4];
 
@@ -19,18 +37,22 @@ pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     let data_size = u32::from_le_bytes(array) as usize;
 
     let data = &content[4..data_size + 4];
-    let msg = deserialize_model(data);
 
-    println!(
-        "Loaded topic snapshot. Topics amount is: {}",
-        msg.data.len()
-    );
+    let result = TopicsDataProtobufModel::decode(data);
 
-    Ok(msg)
-}
+    match result {
+        Ok(msg) => {
+            println!(
+                "Loaded topic snapshot. Topics amount is: {}",
+                msg.data.len()
+            );
 
-fn deserialize_model(slice: &[u8]) -> TopicsDataProtobufModel {
-    return TopicsDataProtobufModel::decode(slice).unwrap();
+            return msg;
+        }
+        Err(_) => {
+            panic!("The content inside topics_and_queue_blob blob can not be deserialized");
+        }
+    }
 }
 
 pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(

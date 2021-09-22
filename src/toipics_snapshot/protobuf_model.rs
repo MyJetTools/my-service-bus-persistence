@@ -5,13 +5,21 @@ pub struct TopicsDataProtobufModel {
 }
 
 impl TopicsDataProtobufModel {
-    pub fn delete_topic(&mut self, topic_id : String) -> TopicsSnaphotProtobufModel{
-        let topic_index = self.data.iter().position(|itm| itm.topic_id == topic_id).unwrap();
+    pub fn create_default() -> Self {
+        Self { data: Vec::new() }
+    }
+
+    pub fn delete_topic(&mut self, topic_id: String) -> TopicsSnaphotProtobufModel {
+        let topic_index = self
+            .data
+            .iter()
+            .position(|itm| itm.topic_id == topic_id)
+            .unwrap();
         let deleted_topic = self.data.get(topic_index).unwrap().clone();
         let mut updated_data = self.data.clone();
         updated_data.remove(topic_index);
         self.data = updated_data;
-        return deleted_topic; 
+        return deleted_topic;
     }
 }
 
