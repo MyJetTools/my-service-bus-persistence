@@ -1,7 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
 mod app;
-mod azure_page_blob_writer;
 mod azure_storage;
 mod compressed_pages;
 mod grpc;

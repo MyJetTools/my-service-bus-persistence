@@ -1,7 +1,6 @@
+use my_azure_page_blob_append::PageBlobAppendCacheError;
 use my_azure_storage_sdk::AzureStorageError;
 use zip::result::ZipError;
-
-use crate::azure_page_blob_writer::PageBlobAppendCacheError;
 
 #[derive(Debug)]
 pub enum AppError {

@@ -1,11 +1,9 @@
 use std::{collections::HashMap, usize};
 
+use my_azure_page_blob_append::{page_blob_utils::get_pages_amount_by_size, PageBlobRandomAccess};
 use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureConnection, AzureStorageError};
 
-use crate::{
-    azure_page_blob_writer::{page_blob_utils::get_pages_amount_by_size, PageBlobRandomAccess},
-    index_by_minute::utils::{INDEX_STEP, MINUTE_INDEX_BLOB_SIZE},
-};
+use crate::index_by_minute::utils::{INDEX_STEP, MINUTE_INDEX_BLOB_SIZE};
 
 use super::utils::MinuteWithinYear;
 

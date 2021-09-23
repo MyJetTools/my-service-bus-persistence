@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
+use my_azure_page_blob_append::PageBlobAppendCacheError;
 use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
 use my_service_bus_shared::MessageProtobufModel;
 
 use crate::{
     app::{AppContext, AppError},
-    azure_page_blob_writer::PageBlobAppendCacheError,
     azure_storage::consts::generage_blob_name,
     message_pages::MessagePageId,
     operations::MessagesStream,
