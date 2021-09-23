@@ -517,7 +517,7 @@
         }
       }
     },
-    "/": {
+    "/topic": {
       "delete": {
         "tags": [
           "Topic"
