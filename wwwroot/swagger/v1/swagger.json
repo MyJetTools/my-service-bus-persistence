@@ -516,6 +516,23 @@
           }
         }
       }
+    },
+    "/": {
+      "delete": {
+        "tags": [
+          "Topic"
+        ],
+        "operationId": "Topic_Delete",
+        "responses": {
+          "200": {
+            "x-nullable": true,
+            "description": "",
+            "schema": {
+              "type": "file"
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

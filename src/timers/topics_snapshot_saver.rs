@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::{app::AppContext, toipics_snapshot::CurrentTopicsSnapshot};
+use crate::{app::AppContext, toipics_snapshot::current_snapshot::TopicsSnapshotData};
 
-pub async fn execute(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>) {
+pub async fn execute(app: Arc<AppContext>, snapshot: Arc<TopicsSnapshotData>) {
     if snapshot.last_saved_snapshot_id == snapshot.snapshot_id {
         return;
     }
@@ -15,7 +15,7 @@ pub async fn execute(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>)
     }
 }
 
-async fn process(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>) {
+async fn process(app: Arc<AppContext>, snapshot: Arc<TopicsSnapshotData>) {
     let mut topics_blob = app.settings.get_topics_snapshot_page_blob();
 
     let result = crate::toipics_snapshot::blob_repository::write_to_blob(
@@ -34,7 +34,8 @@ async fn process(app: Arc<AppContext>, snapshot: Arc<CurrentTopicsSnapshot>) {
             )
             .await
     } else {
-        let mut write_access = app.topics_snapshot.write().await;
-        write_access.saved(snapshot.snapshot_id);
+        app.topics_snapshot
+            .update_snapshot_id(snapshot.snapshot_id)
+            .await;
     }
 }

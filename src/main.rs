@@ -12,7 +12,7 @@ mod settings;
 mod timers;
 mod toipics_snapshot;
 mod utils;
-use toipics_snapshot::CurrentTopicsSnapshot;
+use toipics_snapshot::current_snapshot::TopicsSnapshotData;
 
 use crate::{app::AppContext, settings::SettingsModel};
 
@@ -80,11 +80,12 @@ async fn shut_down(app: Arc<AppContext>) {
     println!("Waiting until we flush all the queues and messages");
     tokio::time::sleep(duration).await;
 
-    let mut snapshot = app.get_topics_snapshot().await;
+    let mut snapshot = app.topics_snapshot.get().await;
+
     while snapshot.snapshot_id != snapshot.last_saved_snapshot_id {
         println!("Topic Snapshot is not synchronized yet. SnapshotID is {}. Last saved snapshot Id is: {}", snapshot.snapshot_id, snapshot.last_saved_snapshot_id);
         tokio::time::sleep(duration).await;
-        snapshot = app.get_topics_snapshot().await;
+        snapshot = app.topics_snapshot.get().await;
     }
 
     println!("Topic snapshot is flushed");
@@ -94,7 +95,7 @@ async fn shut_down(app: Arc<AppContext>) {
     println!("Application can be closed now safely");
 }
 
-async fn check_queues_are_empty(app: &AppContext, snapshot: &CurrentTopicsSnapshot) {
+async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData) {
     let duration = Duration::from_secs(1);
 
     loop {

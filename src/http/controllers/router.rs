@@ -31,6 +31,10 @@ pub async fn route_requests(
             return super::debug::page::get(ctx, app.as_ref()).await;
         }
 
+        (&Method::DELETE, "/topic") => {
+            return super::topic::delete::delete_topic(ctx, app.as_ref()).await;
+        }
+
         _ => {}
     }
 

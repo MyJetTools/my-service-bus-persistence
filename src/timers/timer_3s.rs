@@ -12,7 +12,8 @@ pub async fn three_sec_loop(app: Arc<AppContext>) {
     let duration = Duration::from_secs(3);
 
     loop {
-        let topics = app.get_topics_snapshot().await;
+        let topics = app.topics_snapshot.get().await;
+
         let topics = Arc::new(topics);
 
         let topics_snapshot = Arc::new(topics.snapshot.clone());

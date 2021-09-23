@@ -191,7 +191,7 @@ async fn get_topics_model(
 }
 
 async fn get_model(app: &AppContext) -> StatusModel {
-    let topics_snapshot = app.topics_snapshot.read().await;
+    let topics_snapshot = app.topics_snapshot.get().await;
 
     let mut topics = Vec::new();
     let now = DateTimeAsMicroseconds::now();

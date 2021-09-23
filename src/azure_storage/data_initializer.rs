@@ -15,7 +15,7 @@ pub struct LoadingTopicHandle {
 }
 
 pub async fn init(app: Arc<AppContext>) {
-    let topics_snapshots = app.get_topics_snapshot().await;
+    let topics_snapshots = app.topics_snapshot.get().await;
 
     let mut result = Vec::new();
     let mut sw = StopWatch::new();

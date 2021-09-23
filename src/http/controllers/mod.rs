@@ -6,3 +6,4 @@ mod read;
 pub mod router;
 mod static_content;
 mod swagger;
+mod topic;

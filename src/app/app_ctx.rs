@@ -20,7 +20,7 @@ use crate::{
 use super::{logs::Logs, DataByTopic, PrometheusMetrics};
 
 pub struct AppContext {
-    pub topics_snapshot: RwLock<CurrentTopicsSnapshot>,
+    pub topics_snapshot: CurrentTopicsSnapshot,
     pub logs: Arc<Logs>,
     pub data_by_topic: RwLock<HashMap<String, Arc<DataByTopic>>>,
     pub index_by_minute: IndexesByMinute,
@@ -49,7 +49,7 @@ impl AppContext {
         let compressed_pages_pool = CompressedPagesPool::new(messages_connection.clone());
 
         AppContext {
-            topics_snapshot: RwLock::new(CurrentTopicsSnapshot::new(topics_snapshot)),
+            topics_snapshot: CurrentTopicsSnapshot::new(topics_snapshot),
             logs: logs.clone(),
             data_by_topic: RwLock::new(HashMap::new()),
             settings,
@@ -62,11 +62,6 @@ impl AppContext {
             initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
         }
-    }
-    pub async fn get_topics_snapshot(&self) -> CurrentTopicsSnapshot {
-        let read_access = self.topics_snapshot.read().await;
-
-        read_access.clone()
     }
 
     pub async fn get_data_by_topic(&self, topic_id: &str) -> Option<Arc<DataByTopic>> {

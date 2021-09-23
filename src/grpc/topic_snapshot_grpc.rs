@@ -31,7 +31,7 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
-            let result = app.get_topics_snapshot().await;
+            let result = app.topics_snapshot.get().await;
 
             for topic_snapshot in &result.snapshot.data {
                 let grpc_contract =
@@ -53,8 +53,8 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
 
         let grpc_contract = request.into_inner();
         let snapshot = super::topic_snapshot_mappers::to_topics_data_protobuf_model(&grpc_contract);
-        let mut write_access = self.app.topics_snapshot.write().await;
-        write_access.update(snapshot);
+
+        self.app.topics_snapshot.update(snapshot).await;
 
         return Ok(tonic::Response::new(()));
     }

@@ -33,6 +33,14 @@ impl HttpFailResult {
             status_code: 301,
         }
     }
+
+    pub fn not_authorized(message: &str) -> Self {
+        Self {
+            content_type: WebContentType::Text,
+            content: message.to_string().into_bytes(),
+            status_code: 301,
+        }
+    }
 }
 
 impl From<AzureStorageError> for HttpFailResult {
