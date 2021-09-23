@@ -6,9 +6,9 @@ use my_service_bus_shared::{
 };
 
 use crate::{
-    app::{AppContext, AppError},
+    app::{AppContext, AppError, DataByTopic},
     azure_storage::messages_page_blob::MessagesPageBlob,
-    message_pages::{data_by_topic::DataByTopic, MessagePageId, MessagesPage, MessagesPageStorage},
+    message_pages::{MessagePageId, MessagesPage, MessagesPageStorage},
     utils::StopWatch,
 };
 

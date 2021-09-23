@@ -13,12 +13,11 @@ use tokio::sync::RwLock;
 use crate::{
     compressed_pages::CompressedPagesPool,
     index_by_minute::{IndexByMinuteUtils, IndexesByMinute},
-    message_pages::data_by_topic::DataByTopic,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
 };
 
-use super::{logs::Logs, PrometheusMetrics};
+use super::{logs::Logs, DataByTopic, PrometheusMetrics};
 
 pub struct AppContext {
     pub topics_snapshot: RwLock<CurrentTopicsSnapshot>,

@@ -2,7 +2,6 @@ mod messages_page;
 mod metrics;
 mod page_id;
 
-pub mod data_by_topic;
 pub mod utils;
 
 pub use messages_page::MessagesPage;
