@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{date_time::DateTimeAsMicroseconds, MessageProtobufModel};
+use my_service_bus_shared::{
+    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel,
+};
 
 use crate::message_pages::MessagePageId;
 

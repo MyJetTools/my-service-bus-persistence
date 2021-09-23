@@ -2,13 +2,12 @@ use std::usize;
 
 use my_azure_page_blob::MyPageBlob;
 use my_azure_storage_sdk::AzureStorageError;
+use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use prost::Message;
-
-use super::protobuf_model::TopicsDataProtobufModel;
 
 pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     my_page_blob: &mut TMyPageBlob,
-) -> Result<TopicsDataProtobufModel, AzureStorageError> {
+) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
     my_page_blob.create_container_if_not_exist().await.unwrap();
 
     let download_result = my_page_blob.download().await;
@@ -20,7 +19,7 @@ pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
         Err(err) => {
             if let AzureStorageError::BlobNotFound = &err {
                 my_page_blob.create_if_not_exists(0).await.unwrap();
-                return Ok(TopicsDataProtobufModel::create_default());
+                return Ok(TopicsSnapshotProtobufModel::create_default());
             }
 
             return Err(err);
@@ -28,7 +27,7 @@ pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     }
 }
 
-fn deserialize_model(content: &[u8]) -> TopicsDataProtobufModel {
+fn deserialize_model(content: &[u8]) -> TopicsSnapshotProtobufModel {
     let mut array = [0u8; 4];
     let slice = &content[..4];
 
@@ -38,7 +37,7 @@ fn deserialize_model(content: &[u8]) -> TopicsDataProtobufModel {
 
     let data = &content[4..data_size + 4];
 
-    let result = TopicsDataProtobufModel::decode(data);
+    let result = TopicsSnapshotProtobufModel::decode(data);
 
     match result {
         Ok(msg) => {
@@ -57,7 +56,7 @@ fn deserialize_model(content: &[u8]) -> TopicsDataProtobufModel {
 
 pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(
     my_page_blob: &mut TMyPageBlob,
-    model: &TopicsDataProtobufModel,
+    model: &TopicsSnapshotProtobufModel,
 ) -> Result<(), AzureStorageError> {
     let mut data = Vec::new();
     data.push(0);
@@ -87,9 +86,11 @@ mod tests {
 
     use my_azure_page_blob::*;
 
-    use crate::toipics_snapshot::TopicsSnaphotProtobufModel;
-
     use super::*;
+
+    use my_service_bus_shared::protobuf_models::{
+        TopicSnapshotProtobufModel, TopicsSnapshotProtobufModel,
+    };
 
     #[tokio::test]
     async fn test_serialize_deserialize() {
@@ -98,9 +99,9 @@ mod tests {
         page_blob.create_container_if_not_exist().await.unwrap();
         page_blob.create_if_not_exists(0).await.unwrap();
 
-        let mut src = TopicsDataProtobufModel { data: Vec::new() };
+        let mut src = TopicsSnapshotProtobufModel { data: Vec::new() };
 
-        src.data.push(TopicsSnaphotProtobufModel {
+        src.data.push(TopicSnapshotProtobufModel {
             topic_id: "Test".to_string(),
             message_id: 12,
             not_used: 55,

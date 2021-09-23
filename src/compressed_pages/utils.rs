@@ -1,4 +1,4 @@
-use my_service_bus_shared::{MessageProtobufModel, MessagesProtobufModel};
+use my_service_bus_shared::protobuf_models::{MessageProtobufModel, MessagesProtobufModel};
 
 use crate::app::{AppError, Logs};
 use crate::message_pages::MessagePageId;

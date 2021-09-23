@@ -1,14 +1,14 @@
-use super::protobuf_model::TopicsDataProtobufModel;
+use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
 #[derive(Clone)]
 pub struct CurrentTopicsSnapshot {
     pub snapshot_id: i64,
     pub last_saved_snapshot_id: i64,
-    pub snapshot: TopicsDataProtobufModel,
+    pub snapshot: TopicsSnapshotProtobufModel,
 }
 
 impl CurrentTopicsSnapshot {
-    pub fn new(snapshot: TopicsDataProtobufModel) -> Self {
+    pub fn new(snapshot: TopicsSnapshotProtobufModel) -> Self {
         Self {
             snapshot,
             snapshot_id: 0,
@@ -16,7 +16,7 @@ impl CurrentTopicsSnapshot {
         }
     }
 
-    pub fn update(&mut self, snapshot: TopicsDataProtobufModel) {
+    pub fn update(&mut self, snapshot: TopicsSnapshotProtobufModel) {
         self.snapshot = snapshot;
         self.snapshot_id += 1;
     }

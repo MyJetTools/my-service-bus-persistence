@@ -1,6 +1,6 @@
 use my_azure_page_blob::*;
 use my_azure_page_blob_append::{PageBlobAppendCache, PageBlobAppendCacheError};
-use my_service_bus_shared::MessageProtobufModel;
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
 pub struct MessagesStream {
     pub append_cache: PageBlobAppendCache,

@@ -1,4 +1,4 @@
-use my_service_bus_shared::MessagesProtobufModel;
+use my_service_bus_shared::protobuf_models::MessagesProtobufModel;
 use zip::result::ZipError;
 
 use crate::{

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
 use my_azure_page_blob_append::PageBlobAppendCacheError;
 use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
-use my_service_bus_shared::MessageProtobufModel;
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
 use crate::{
     app::{AppContext, AppError},

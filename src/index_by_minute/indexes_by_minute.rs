@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use my_azure_storage_sdk::AzureConnection;
-use my_service_bus_shared::MessageProtobufModel;
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 use tokio::sync::Mutex;
 
 use crate::app::Logs;

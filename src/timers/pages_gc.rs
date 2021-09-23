@@ -4,14 +4,14 @@ use crate::{
     app::AppContext,
     azure_storage::messages_page_blob::MessagesPageBlob,
     message_pages::{MessagePageId, MessagesPage},
-    toipics_snapshot::TopicsDataProtobufModel,
     utils::StopWatch,
 };
 
 use my_azure_page_blob::*;
 use my_azure_storage_sdk::AzureStorageError;
+use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
-pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
 
     if let Err(err) = timer_result {
@@ -19,7 +19,7 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>)
     }
 }
 
-async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let active_pages = get_active_pages(topics.as_ref());
 
     let data_by_topic = app.data_by_topic.write().await;
@@ -44,7 +44,7 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) 
     }
 }
 
-pub fn get_active_pages(s: &TopicsDataProtobufModel) -> HashMap<String, Vec<MessagePageId>> {
+pub fn get_active_pages(s: &TopicsSnapshotProtobufModel) -> HashMap<String, Vec<MessagePageId>> {
     let mut result = HashMap::new();
 
     for topic in &s.data {

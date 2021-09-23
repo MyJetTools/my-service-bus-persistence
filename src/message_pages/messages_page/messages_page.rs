@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{date_time::DateTimeAsMicroseconds, MessageProtobufModel};
+use my_service_bus_shared::{
+    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel,
+};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::azure_storage::messages_page_blob::MessagesPageBlob;

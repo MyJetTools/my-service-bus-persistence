@@ -1,16 +1,18 @@
 use std::{sync::Arc, time::Duration};
 
-use my_service_bus_shared::{date_time::DateTimeAsMicroseconds, MessageProtobufModel};
+use my_service_bus_shared::{
+    date_time::DateTimeAsMicroseconds,
+    protobuf_models::{MessageProtobufModel, TopicsSnapshotProtobufModel},
+};
 
 use crate::{
     app::{AppContext, AppError},
     azure_storage::messages_page_blob::MessagesPageBlob,
     message_pages::{data_by_topic::DataByTopic, MessagePageId, MessagesPage, MessagesPageStorage},
-    toipics_snapshot::TopicsDataProtobufModel,
     utils::StopWatch,
 };
 
-pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
 
     if let Err(err) = timer_result {
@@ -18,7 +20,7 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>)
     }
 }
 
-async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     for topic in &topics.data {
         let data_by_topic = app.get_data_by_topic(&topic.topic_id).await;
 

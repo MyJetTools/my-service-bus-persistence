@@ -1,12 +1,13 @@
-use crate::persistence_grpc::*;
-use crate::toipics_snapshot::{
-    QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicsDataProtobufModel,
-    TopicsSnaphotProtobufModel,
+use my_service_bus_shared::protobuf_models::{
+    QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
+    TopicsSnapshotProtobufModel,
 };
+
+use crate::persistence_grpc::*;
 
 // From Domain to Grpc-Contract
 pub fn to_topic_snapshot_grpc_model(
-    src: &TopicsSnaphotProtobufModel,
+    src: &TopicSnapshotProtobufModel,
 ) -> TopicAndQueuesSnapshotGrpcModel {
     TopicAndQueuesSnapshotGrpcModel {
         topic_id: src.topic_id.to_string(),
@@ -50,17 +51,17 @@ pub fn to_queue_snapshot_grpc_models_vec(
 
 pub fn to_topics_data_protobuf_model(
     src: &SaveQueueSnapshotGrpcRequest,
-) -> TopicsDataProtobufModel {
-    TopicsDataProtobufModel {
-        data: to_topic_snapshot_protobuf_models_vec(src.queue_snapshot.as_slice())
+) -> TopicsSnapshotProtobufModel {
+    TopicsSnapshotProtobufModel {
+        data: to_topic_snapshot_protobuf_models_vec(src.queue_snapshot.as_slice()),
     }
 }
 
 pub fn to_topic_snapshot_protobuf_models_vec(
     src: &[TopicAndQueuesSnapshotGrpcModel],
-) -> Vec<TopicsSnaphotProtobufModel> {
+) -> Vec<TopicSnapshotProtobufModel> {
     src.iter()
-        .map(|itm| TopicsSnaphotProtobufModel {
+        .map(|itm| TopicSnapshotProtobufModel {
             topic_id: itm.topic_id.to_string(),
             message_id: itm.message_id,
             not_used: 0,

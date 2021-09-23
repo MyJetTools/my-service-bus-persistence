@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use chrono::Datelike;
 use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
 use my_service_bus_shared::{
-    bcl::BclToUnixMicroseconds, date_time::DateTimeAsMicroseconds, MessageProtobufModel,
+    bcl::BclToUnixMicroseconds, date_time::DateTimeAsMicroseconds,
+    protobuf_models::MessageProtobufModel,
 };
 use tokio::sync::Mutex;
 

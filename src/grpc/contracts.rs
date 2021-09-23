@@ -1,6 +1,6 @@
 use crate::app::AppContext;
 
-use my_service_bus_shared::{bcl::BclToUnixMicroseconds, MessageProtobufModel};
+use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessagesProtobufContract {

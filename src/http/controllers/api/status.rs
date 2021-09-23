@@ -4,10 +4,12 @@ use crate::{
     app::AppContext,
     http::{HttpFailResult, HttpOkResult},
     message_pages::data_by_topic::DataByTopic,
-    toipics_snapshot::{QueueSnapshotProtobufModel, TopicsSnaphotProtobufModel},
     utils::duration_to_string,
 };
-use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+use my_service_bus_shared::{
+    date_time::DateTimeAsMicroseconds,
+    protobuf_models::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
+};
 use serde::{Deserialize, Serialize};
 
 use sysinfo::SystemExt;
@@ -164,7 +166,7 @@ async fn get_loaded_pages(pages_cache: &DataByTopic) -> Vec<LoadedPageModel> {
 }
 
 async fn get_topics_model(
-    snapshot: &TopicsSnaphotProtobufModel,
+    snapshot: &TopicSnapshotProtobufModel,
     cache_by_topic: &DataByTopic,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {

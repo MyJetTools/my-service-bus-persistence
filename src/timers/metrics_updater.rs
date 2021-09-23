@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use crate::{app::AppContext, toipics_snapshot::TopicsDataProtobufModel};
+use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
-pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+use crate::app::AppContext;
+
+pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
 
     if let Err(err) = timer_result {
@@ -10,7 +12,7 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>)
     }
 }
 
-async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsDataProtobufModel>) {
+async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     for topic in &topics.data {
         let topic = app.get_data_by_topic(topic.topic_id.as_str()).await;
 

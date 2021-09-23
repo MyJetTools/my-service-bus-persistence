@@ -3,7 +3,7 @@ use std::sync::Arc;
 use my_azure_page_blob::*;
 use my_azure_page_blob_append::page_blob_utils::get_pages_amount_by_size;
 use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureConnection, AzureStorageError};
-use my_service_bus_shared::MessageProtobufModel;
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 use tokio::sync::Mutex;
 
 use crate::{

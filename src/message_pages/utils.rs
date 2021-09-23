@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
-use crate::{message_pages::MessagePageId, toipics_snapshot::TopicsSnaphotProtobufModel};
+use my_service_bus_shared::protobuf_models::TopicSnapshotProtobufModel;
+
+use crate::message_pages::MessagePageId;
 
 pub const MESSAGES_PER_PAGE: i64 = 100_000;
 
-pub fn get_active_pages(snapshot: &TopicsSnaphotProtobufModel) -> HashMap<i64, MessagePageId> {
+pub fn get_active_pages(snapshot: &TopicSnapshotProtobufModel) -> HashMap<i64, MessagePageId> {
     let mut result: HashMap<i64, MessagePageId> = HashMap::new();
 
     let page_id = MessagePageId::from_message_id(snapshot.message_id);

@@ -1,4 +1,4 @@
-use my_service_bus_shared::{bcl::BclToUnixMicroseconds, MessageProtobufModel};
+use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]

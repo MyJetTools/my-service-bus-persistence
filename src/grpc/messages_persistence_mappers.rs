@@ -1,5 +1,6 @@
 use my_service_bus_shared::{
-    bcl::BclDateTime, MessageMetaDataProtobufModel, MessageProtobufModel, MessagesProtobufModel,
+    bcl::BclDateTime,
+    protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel, MessagesProtobufModel},
 };
 
 use crate::{app::AppError, message_pages::MessagesPage, persistence_grpc::*};
