@@ -8,8 +8,9 @@ pub async fn handle(ctx: HttpContext) -> Result<HttpOkResult, HttpFailResult> {
 
     let host = ctx.get_host();
 
-    if path.starts_with("/swagger") {
-        return super::files::get_content_from_file(path, None).await;
+    if path == "/swagger" {
+        let new_url = format!("{}://{}/swagger/Index.html", scheme, host);
+        return Ok(HttpOkResult::Redirect { url: new_url });
     }
 
     if path == "/swagger/v1/swagger.json" {
@@ -19,7 +20,13 @@ pub async fn handle(ctx: HttpContext) -> Result<HttpOkResult, HttpFailResult> {
 
         placehloders.insert("HOST", host.to_string());
 
+        placehloders.insert("VERSION", crate::app::APP_VERSION.to_string());
+
         return super::files::serve_file_with_placeholders(path, None, &placehloders).await;
+    }
+
+    if path.starts_with("/swagger") {
+        return super::files::get_content_from_file(path, None).await;
     }
 
     let new_url = format!("{}://{}/swagger/Index.html", scheme, host);

@@ -19,6 +19,8 @@ use crate::{
 
 use super::{logs::Logs, DataByTopic, PrometheusMetrics};
 
+pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 pub struct AppContext {
     pub topics_snapshot: CurrentTopicsSnapshot,
     pub logs: Arc<Logs>,

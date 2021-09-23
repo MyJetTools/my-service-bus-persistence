@@ -71,13 +71,11 @@ impl Into<Response<Body>> for HttpOkResult {
     }
 }
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 fn build_html(head: String, body: String) -> String {
     format!(
         r###"<!DOCTYPE html><html lang="en"><head><title>{ver} MyServiceBus-Persistence</title>{head}
         </head><body>{body}</body></html>"###,
-        ver = VERSION,
+        ver = crate::app::APP_VERSION,
         head = head,
         body = body
     )

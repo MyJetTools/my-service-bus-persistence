@@ -3,7 +3,7 @@
   "swagger": "2.0",
   "info": {
     "title": "MyServiceBus-Persistence",
-    "version": "1.0.0"
+    "version": "***VERSION***"
   },
   "host": "***HOST***",
   "schemes": [
@@ -416,7 +416,7 @@
       }
     },
     "/read/listFromDate": {
-      "get": {
+      "post": {
         "tags": [
           "Read"
         ],
@@ -523,6 +523,20 @@
           "Topic"
         ],
         "operationId": "Topic_Delete",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "topicId",
+            "in": "query",
+            "x-nullable": true
+          },
+          {
+            "type": "string",
+            "name": "apiKey",
+            "in": "query",
+            "x-nullable": true
+          }
+        ],
         "responses": {
           "200": {
             "x-nullable": true,
