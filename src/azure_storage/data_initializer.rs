@@ -27,13 +27,16 @@ pub async fn init(app: Arc<AppContext>) {
             continue;
         }
 
+        let current_page_id = MessagePageId::from_message_id(topic_snapshot.message_id);
+
         let active_pages = get_active_pages(topic_snapshot);
 
         for page_id in active_pages.values() {
             let handler = tokio::spawn(restore_page(
-                page_id.clone(),
-                topic_snapshot.topic_id.clone(),
                 app.clone(),
+                page_id.clone(),
+                page_id.value >= current_page_id.value,
+                topic_snapshot.topic_id.to_string(),
             ));
 
             let handler = LoadingTopicHandle {
@@ -75,7 +78,12 @@ async fn handle_init_result(handle: LoadingTopicHandle) {
     }
 }
 
-async fn restore_page(page_id: MessagePageId, topic_id: String, app: Arc<AppContext>) {
+async fn restore_page(
+    app: Arc<AppContext>,
+    page_id: MessagePageId,
+    is_page_current: bool,
+    topic_id: String,
+) {
     let mut sw = StopWatch::new();
     sw.start();
 
@@ -87,11 +95,13 @@ async fn restore_page(page_id: MessagePageId, topic_id: String, app: Arc<AppCont
         )
         .await;
 
-    let pages_cache = app
+    let topic_data = app
+        .topics_data_list
         .get_or_create_data_by_topic(topic_id.as_str(), app.clone())
         .await;
 
-    pages_cache.get(page_id).await;
+    crate::operations::pages::get_or_restore(app.clone(), topic_data, page_id, is_page_current)
+        .await;
 
     sw.pause();
 

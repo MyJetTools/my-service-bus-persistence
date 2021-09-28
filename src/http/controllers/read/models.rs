@@ -15,25 +15,21 @@ impl GetMessagesResponseModel {
             data.push(MessageJsonModel::new(msg))
         }
 
-        GetMessagesResponseModel {
-            result: 0, //TODO - засинкать как это сделано с C#
-            data,
-        }
+        GetMessagesResponseModel { result: 0, data }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetMessageResponseModel {
     result: i32,
-    data: Option<MessageJsonModel>,
+    data: MessageJsonModel,
 }
 
 impl GetMessageResponseModel {
-    pub fn create(message: Option<&MessageProtobufModel>) -> GetMessageResponseModel {
+    pub fn create(message: &MessageProtobufModel) -> GetMessageResponseModel {
         GetMessageResponseModel {
             result: 0,
-            //TODO - засинкать как это сделано с C#
-            data: MessageJsonModel::new_optional(message),
+            data: MessageJsonModel::new(message),
         }
     }
 }

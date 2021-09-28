@@ -1,36 +1,32 @@
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
 use my_azure_storage_sdk::AzureConnection;
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
-use tokio::sync::RwLock;
 
 use crate::{
-    compressed_pages::CompressedPagesPool,
     index_by_minute::{IndexByMinuteUtils, IndexesByMinute},
+    message_pages::MessagePageId,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
 };
 
-use super::{logs::Logs, DataByTopic, PrometheusMetrics};
+use super::{logs::Logs, PrometheusMetrics, TopicsDataList};
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct AppContext {
     pub topics_snapshot: CurrentTopicsSnapshot,
     pub logs: Arc<Logs>,
-    pub data_by_topic: RwLock<HashMap<String, Arc<DataByTopic>>>,
+
+    pub topics_data_list: TopicsDataList,
     pub index_by_minute: IndexesByMinute,
     pub settings: SettingsModel,
     pub index_by_minute_utils: IndexByMinuteUtils,
     pub queue_connection: AzureConnection,
     pub messages_connection: AzureConnection,
-    pub compressed_page_blob: CompressedPagesPool,
     pub shutting_down: Arc<AtomicBool>,
     pub initialized: AtomicBool,
     pub metrics_keeper: PrometheusMetrics,
@@ -48,17 +44,14 @@ impl AppContext {
         let queue_connection =
             AzureConnection::from_conn_string(settings.queues_connection_string.as_str());
 
-        let compressed_pages_pool = CompressedPagesPool::new(messages_connection.clone());
-
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::new(topics_snapshot),
             logs: logs.clone(),
-            data_by_topic: RwLock::new(HashMap::new()),
+            topics_data_list: TopicsDataList::new(),
             settings,
             index_by_minute_utils: IndexByMinuteUtils::new(),
             index_by_minute: IndexesByMinute::new(messages_connection.clone(), logs),
             messages_connection,
-            compressed_page_blob: compressed_pages_pool,
             queue_connection,
             shutting_down: Arc::new(AtomicBool::new(false)),
             initialized: AtomicBool::new(false),
@@ -66,39 +59,32 @@ impl AppContext {
         }
     }
 
-    pub async fn get_data_by_topic(&self, topic_id: &str) -> Option<Arc<DataByTopic>> {
-        let read_access = self.data_by_topic.read().await;
-
-        let result = read_access.get(topic_id)?;
-
-        return Some(result.clone());
-    }
-
-    pub async fn get_or_create_data_by_topic(
+    pub async fn get_current_page_id_or_default(
         &self,
         topic_id: &str,
-        app: Arc<AppContext>,
-    ) -> Arc<DataByTopic> {
-        let data_by_topic = self.get_data_by_topic(topic_id).await;
-        if data_by_topic.is_some() {
-            return data_by_topic.unwrap();
+        default: MessagePageId,
+    ) -> MessagePageId {
+        let snapshot = self.topics_snapshot.get().await;
+
+        for topic_data in &snapshot.snapshot.data {
+            if topic_data.topic_id == topic_id {
+                return MessagePageId::from_message_id(topic_data.message_id);
+            }
         }
 
-        let mut write_access = self.data_by_topic.write().await;
+        default
+    }
 
-        let result = write_access.get(topic_id);
+    pub async fn get_current_page_id(&self, topic_id: &str) -> Option<MessagePageId> {
+        let snapshot = self.topics_snapshot.get().await;
 
-        if result.is_some() {
-            return data_by_topic.unwrap();
+        for topic_data in &snapshot.snapshot.data {
+            if topic_data.topic_id == topic_id {
+                return Some(MessagePageId::from_message_id(topic_data.message_id));
+            }
         }
 
-        let result = DataByTopic::new(topic_id, app);
-
-        let result = Arc::new(result);
-
-        write_access.insert(topic_id.to_string(), result.clone());
-
-        result
+        None
     }
 
     pub fn get_max_payload_size(&self) -> usize {

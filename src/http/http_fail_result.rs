@@ -41,6 +41,14 @@ impl HttpFailResult {
             status_code: 301,
         }
     }
+
+    pub fn error(message: String) -> Self {
+        Self {
+            content_type: WebContentType::Text,
+            content: message.into_bytes(),
+            status_code: 500,
+        }
+    }
 }
 
 impl From<AzureStorageError> for HttpFailResult {

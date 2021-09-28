@@ -1,7 +1,7 @@
 use std::usize;
 
 use crate::{
-    app::{AppContext, DataByTopic},
+    app::{AppContext, TopicData},
     http::{HttpFailResult, HttpOkResult},
     utils::duration_to_string,
 };
@@ -128,29 +128,18 @@ struct StatusModel {
     initialing: Option<bool>,
 }
 
-async fn get_loaded_pages(pages_cache: &DataByTopic) -> Vec<LoadedPageModel> {
+async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
     let mut result: Vec<LoadedPageModel> = Vec::new();
 
-    let pages_access = pages_cache.pages.lock().await;
-
-    for page in pages_access.values() {
-        let mut write_position = 0;
-
-        {
-            let storage = page.storage.lock().await;
-            if let Some(blob) = &storage.blob {
-                write_position = blob.get_wirte_position().await;
-            }
-        }
-        let read_access = page.data.read().await;
-        let read_access = read_access.get(0).unwrap();
+    for page in topic_data.get_all().await {
+        let read_access = page.data.lock().await;
 
         let item = LoadedPageModel {
             page_id: page.page_id.value,
             percent: read_access.percent(),
-            count: read_access.messages.len(),
+            count: read_access.message_count(),
             has_skipped_messages: read_access.has_skipped_messages(),
-            write_position,
+            write_position: read_access.get_write_position().await,
         };
 
         result.push(item);
@@ -166,7 +155,7 @@ async fn get_loaded_pages(pages_cache: &DataByTopic) -> Vec<LoadedPageModel> {
 
 async fn get_topics_model(
     snapshot: &TopicSnapshotProtobufModel,
-    cache_by_topic: &DataByTopic,
+    cache_by_topic: &TopicData,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {
     let active_pages = crate::message_pages::utils::get_active_pages(snapshot);
@@ -197,9 +186,7 @@ async fn get_model(app: &AppContext) -> StatusModel {
     let now = DateTimeAsMicroseconds::now();
 
     for snapshot in &topics_snapshot.snapshot.data {
-        let data_by_topic_read_access = app.data_by_topic.read().await;
-
-        let data_by_topic = data_by_topic_read_access.get(&snapshot.topic_id);
+        let data_by_topic = app.topics_data_list.get(snapshot.topic_id.as_str()).await;
 
         if data_by_topic.is_none() {
             continue;

@@ -3,17 +3,16 @@ use my_service_bus_shared::{
 };
 
 use crate::{
-    app::DataByTopic, azure_storage::messages_page_blob::MessagesPageBlob,
-    message_pages::MessagesPage, utils::StopWatch,
+    app::TopicData, azure_storage::messages_page_blob::MessagesPageBlob,
+    message_pages::MessagePageId, utils::StopWatch,
 };
 
 pub async fn save_to_blob(
     page_blob: &mut MessagesPageBlob,
-    page: &MessagesPage,
-    data_by_topic: &DataByTopic,
+    data_by_topic: &TopicData,
+    messages_to_save: &[MessageProtobufModel],
+    page_id: MessagePageId,
 ) {
-    let messages_to_save = page.get_messages_to_save().await;
-
     let max_message_id = get_max_message_id(&messages_to_save);
     let mut sw = StopWatch::new();
     sw.start();
@@ -36,7 +35,7 @@ pub async fn save_to_blob(
                 "Saving messages",
                 format!(
                     "Can no save messages {}/#{} messages to save by there is no loader. Reason: {:?}",
-                    data_by_topic.topic_id, page.page_id.value, error
+                    data_by_topic.topic_id, page_id.value, error
                 ),
             )
             .await

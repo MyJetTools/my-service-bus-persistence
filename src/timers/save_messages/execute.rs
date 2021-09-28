@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
-use crate::{app::AppContext, message_pages::MessagePageId};
+use crate::app::AppContext;
 
 pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
@@ -14,7 +14,7 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMod
 
 async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     for topic in &topics.data {
-        let data_by_topic = app.get_data_by_topic(&topic.topic_id).await;
+        let data_by_topic = app.topics_data_list.get(&topic.topic_id).await;
 
         if data_by_topic.is_none() {
             app.logs
@@ -33,47 +33,28 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
         let pages_with_data_to_save = data_by_topic.get_pages_with_data_to_save().await;
 
         for page in pages_with_data_to_save {
-            let mut storage = page.storage.lock().await;
+            let mut write_access = page.data.lock().await;
 
-            loop {
-                if let Some(page_blob) = &mut storage.blob {
-                    super::save_to_blob(page_blob, page.as_ref(), data_by_topic.as_ref()).await;
-                    break;
-                } else {
-                    let current_page_id = MessagePageId::from_message_id(topic.message_id);
-
-                    if current_page_id.value == page.page_id.value {
-                        app.logs
-                            .add_info_string(
-                                Some(topic.topic_id.as_str()),
-                                "Saving messages",
-                                format!(
-                                    "Found {} messages to save by page has no pageBlob initialized. Since this is a current page - we initialize blob",
-                                    page.get_messages_to_save_amount().await,
-                                ),
-                            )
-                            .await;
-
-                        super::initialize_uncompressed_blob(
-                            &mut storage,
-                            page.as_ref(),
-                            app.clone(),
+            match &mut *write_access {
+                crate::message_pages::MessagesPageData::Uncompressed(page) => {
+                    let messages_to_save = page.get_messages_to_save();
+                    super::save_to_blob(
+                        &mut page.blob,
+                        data_by_topic.as_ref(),
+                        messages_to_save.as_ref(),
+                        page.page_id,
+                    )
+                    .await;
+                }
+                _ => {
+                    app.logs
+                        .add_error_str(
+                            Some(data_by_topic.topic_id.as_str()),
+                            "save_data_to_blob",
+                            format!("Somehow we get to the point we have to Save messages but or Page is {}", write_access.get_page_type()),
+                            format!("N/A")
                         )
                         .await;
-                    } else {
-                        app.logs
-                            .add_info_string(
-                                Some(topic.topic_id.as_str()),
-                                "Saving messages",
-                                format!(
-                                    "Found {} messages to save by page has no pageBlob initialized. Page is #{} There is a bug.... Skipping...",
-                                    page.get_messages_to_save_amount().await,
-                                    MessagePageId::from_message_id(topic.message_id).value
-                                ),
-                            )
-                            .await;
-                        break;
-                    }
                 }
             }
         }

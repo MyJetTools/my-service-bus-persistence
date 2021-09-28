@@ -14,7 +14,7 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMod
 
 async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     for topic in &topics.data {
-        let topic = app.get_data_by_topic(topic.topic_id.as_str()).await;
+        let topic = app.topics_data_list.get(topic.topic_id.as_str()).await;
 
         if topic.is_none() {
             continue;

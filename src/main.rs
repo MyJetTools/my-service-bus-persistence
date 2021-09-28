@@ -11,6 +11,7 @@ mod operations;
 mod settings;
 mod timers;
 mod toipics_snapshot;
+mod uncompressed_pages;
 mod utils;
 use toipics_snapshot::current_snapshot::TopicsSnapshotData;
 
@@ -101,7 +102,7 @@ async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData)
     loop {
         let mut has_data_to_sync = None;
         for topic in &snapshot.snapshot.data {
-            let topic_data = app.get_data_by_topic(&topic.topic_id).await;
+            let topic_data = app.topics_data_list.get(&topic.topic_id).await;
 
             if topic_data.is_none() {
                 continue;

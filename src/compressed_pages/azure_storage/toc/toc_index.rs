@@ -1,9 +1,9 @@
 use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
 
-use crate::message_pages::MessagePageId;
+use crate::{compressed_pages::ClusterPageId, message_pages::MessagePageId};
 use my_azure_page_blob::*;
 
-use super::{super::ClusterPageId, PageAllocationIndex};
+use super::PageAllocationIndex;
 
 pub const TOC_PAGES_AMOUNT: usize = 2;
 

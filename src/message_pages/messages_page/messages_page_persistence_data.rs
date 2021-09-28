@@ -1,3 +1,4 @@
+/*
 use std::sync::Arc;
 
 use my_azure_storage_sdk::AzureStorageError;
@@ -41,3 +42,5 @@ impl MessagesPageStorage {
         Ok(())
     }
 }
+
+ */

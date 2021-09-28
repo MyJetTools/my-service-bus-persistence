@@ -1,9 +1,10 @@
 use my_service_bus_shared::{
     bcl::BclDateTime,
-    protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel, MessagesProtobufModel},
+    page_compressor::CompressedPageBuilder,
+    protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel},
 };
 
-use crate::{app::AppError, message_pages::MessagesPage, persistence_grpc::*};
+use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
 pub fn get_none_message() -> MessageContentGrpcModel {
     MessageContentGrpcModel {
@@ -60,39 +61,68 @@ pub fn to_message_grpc_contract(src: &MessageProtobufModel) -> MessageContentGrp
     }
 }
 
+pub struct MsgRange {
+    pub msg_from: i64,
+    pub msg_to: i64,
+}
+
 pub async fn get_compressed_page(
     page: &MessagesPage,
     max_payload_size: usize,
-    msg_from: i64,
-    msg_to: i64,
-) -> Result<Vec<Vec<u8>>, AppError> {
-    let mut protobuf_model = MessagesProtobufModel {
-        messages: Vec::with_capacity(100_000),
-    };
-
-    let read_access = page.data.read().await;
-
-    let read_access = read_access.get(0).unwrap();
-
-    if msg_from == 0 && msg_to == 0 {
-        for msg in read_access.messages.values() {
-            protobuf_model.messages.push(msg.clone());
+    range: Option<MsgRange>,
+) -> Result<Vec<Vec<u8>>, OperationError> {
+    match &*page.data.lock().await {
+        crate::message_pages::MessagesPageData::NotInitialized(_) => {
+            panic!("Can not get data from not initialized page")
         }
-    } else {
-        for msg in read_access.messages.values() {
-            if msg.message_id >= msg_from && msg.message_id <= msg_to {
-                protobuf_model.messages.push(msg.clone());
+        crate::message_pages::MessagesPageData::Uncompressed(uncompressed_page) => {
+            let mut zip_builder = CompressedPageBuilder::new();
+
+            for msg in uncompressed_page.messages.values() {
+                if let Some(range) = &range {
+                    if range.msg_from <= msg.message_id && msg.message_id <= range.msg_to {
+                        let mut buffer = Vec::new();
+                        msg.serialize(&mut buffer)?;
+                        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+                    }
+                } else {
+                    let mut buffer = Vec::new();
+                    msg.serialize(&mut buffer)?;
+                    zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+                }
+            }
+
+            let zip_payload = zip_builder.get_payload()?;
+
+            let result = split(zip_payload.as_slice(), max_payload_size);
+            return Ok(result);
+        }
+        crate::message_pages::MessagesPageData::Compressed(compressed_page) => {
+            if let Some(range) = &range {
+                let mut zip_builder = CompressedPageBuilder::new();
+                for msg_id in range.msg_from..range.msg_to {
+                    let msg = compressed_page.get(msg_id)?;
+
+                    if let Some(msg) = msg {
+                        let mut buffer = Vec::new();
+                        msg.serialize(&mut buffer)?;
+                        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+                    }
+                }
+
+                let zip_payload = zip_builder.get_payload()?;
+
+                let result = split(zip_payload.as_slice(), max_payload_size);
+                return Ok(result);
+            } else {
+                let result = split(compressed_page.zip_data.as_slice(), max_payload_size);
+                return Ok(result);
             }
         }
+        crate::message_pages::MessagesPageData::Blank(_) => {
+            return Ok(Vec::new());
+        }
     }
-
-    let mut encoded_payload: Vec<u8> = Vec::new();
-    prost::Message::encode(&protobuf_model, &mut encoded_payload).unwrap();
-
-    let zipped =
-        my_service_bus_shared::page_compressor::zip::compress_payload(encoded_payload.as_slice())?;
-
-    return Ok(split(zipped.as_slice(), max_payload_size));
 }
 
 fn split(src: &[u8], max_payload_size: usize) -> Vec<Vec<u8>> {

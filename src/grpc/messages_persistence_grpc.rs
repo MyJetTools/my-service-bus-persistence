@@ -1,3 +1,4 @@
+use crate::grpc::messages_persistence_mappers::MsgRange;
 use crate::message_pages::MessagePageId;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
@@ -27,33 +28,38 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
-        let pages_cache = self.app.get_data_by_topic(&req.topic_id).await;
+        let topic_data = self.app.topics_data_list.get(&req.topic_id).await;
 
-        if pages_cache.is_none() {
+        if topic_data.is_none() {
             let result = super::messages_persistence_mappers::get_none_message();
             return Ok(tonic::Response::new(result));
         }
 
-        let pages_cache = pages_cache.unwrap();
+        let topic_data = topic_data.unwrap();
 
         let page_id = MessagePageId::from_message_id(req.message_id);
 
-        let data_by_topic = pages_cache.as_ref().get(page_id).await;
+        let messages_page = topic_data.as_ref().get(page_id).await;
 
-        let read_access = data_by_topic.data.read().await;
+        if messages_page.is_none() {
+            let result = super::messages_persistence_mappers::get_none_message();
+            return Ok(tonic::Response::new(result));
+        }
 
-        let read_access = read_access.get(0).unwrap();
+        let messages_page = messages_page.unwrap();
 
-        let message = read_access.messages.get(&req.message_id);
+        let read_access = messages_page.data.lock().await;
+
+        let message = read_access.get_message(req.message_id).unwrap();
 
         if message.is_none() {
             let result = super::messages_persistence_mappers::get_none_message();
             return Ok(tonic::Response::new(result));
         }
 
-        let message = message.unwrap();
-
-        let result = super::messages_persistence_mappers::to_message_grpc_contract(message);
+        let result = super::messages_persistence_mappers::to_message_grpc_contract(
+            message.as_ref().unwrap(),
+        );
         return Ok(tonic::Response::new(result));
     }
 
@@ -71,22 +77,44 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
-            let data_by_topic = app.get_data_by_topic(&req.topic_id).await;
+            //TODO - Restore page before
+            let data_by_topic = app.topics_data_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
                 return;
             }
 
-            let data_by_topic = data_by_topic.unwrap();
+            let topic_data = data_by_topic.unwrap();
 
-            let page_no = MessagePageId::new(req.page_no);
+            let page_id = MessagePageId::new(req.page_no);
 
-            let data_by_topic = data_by_topic.get(page_no).await;
+            let current_page_id = app
+                .get_current_page_id(topic_data.topic_id.as_str())
+                .await
+                .unwrap();
+
+            let page = crate::operations::pages::get_or_restore(
+                app.clone(),
+                topic_data.clone(),
+                page_id,
+                page_id.value >= current_page_id.value,
+            )
+            .await;
+
+            let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
+                Some(MsgRange {
+                    msg_from: req.from_message_id,
+                    msg_to: req.to_message_id,
+                })
+            } else {
+                None
+            };
+
+            let max_payload_size = app.get_max_payload_size();
 
             let mut compressed_data = super::messages_persistence_mappers::get_compressed_page(
-                &data_by_topic,
-                app.get_max_payload_size(),
-                req.from_message_id,
-                req.to_message_id,
+                page.as_ref(),
+                max_payload_size,
+                range,
             )
             .await
             .unwrap();
@@ -145,9 +173,10 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let app = self.app.clone();
 
-        let data_by_topic = self
+        let topic_data = self
             .app
-            .get_or_create_data_by_topic(&contract.topic_id, app)
+            .topics_data_list
+            .get_or_create_data_by_topic(contract.topic_id.as_str(), app.clone())
             .await;
 
         for (page_id, messages) in messages_by_page {
@@ -158,12 +187,15 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 .new_messages(&contract.topic_id, messages.as_slice())
                 .await;
 
-            let data_by_topic = data_by_topic
-                .get_restore_or_create_uncompressed_only(page_id)
-                .await
-                .unwrap();
+            let page = crate::operations::pages::get_or_restore(
+                app.clone(),
+                topic_data.clone(),
+                page_id,
+                true,
+            )
+            .await;
 
-            data_by_topic.new_messages(messages).await;
+            page.new_messages(messages).await;
         }
 
         return Ok(tonic::Response::new(()));

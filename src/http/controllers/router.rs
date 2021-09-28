@@ -68,7 +68,7 @@ pub async fn route_requests(
         }
 
         (&Method::GET, "/read/byid") => {
-            return super::read::by_id::get(ctx, app.as_ref()).await;
+            return super::read::by_id::get(ctx, app.clone()).await;
         }
 
         (&Method::GET, "/read/listfromdate") => {

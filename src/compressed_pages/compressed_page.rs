@@ -29,6 +29,7 @@ impl CompressedPage {
             }
         }
     }
+
 }
 
 pub async fn to_zip(data: MessagesPageData) -> Result<Vec<u8>, ZipError> {

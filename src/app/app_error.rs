@@ -7,7 +7,6 @@ pub enum AppError {
     AzureStorageError(AzureStorageError),
     PageBlobAppendCacheError(PageBlobAppendCacheError),
     ZipError(ZipError),
-    Other { msg: String },
 }
 
 impl From<AzureStorageError> for AppError {
