@@ -31,6 +31,14 @@ pub async fn execute(
 
         let compressed = page_builder.get_payload()?;
 
+        println!(
+            "Page {}#{} is compressed. Uncompressed: {}, Compressed size: {}",
+            topic_data.topic_id,
+            uncompressed_page.page_id.value,
+            uncompressed_page.blob.get_wirte_position().await,
+            compressed.len()
+        );
+
         topic_data
             .pages_cluster
             .write(uncompressed_page.page_id, compressed.as_slice())
