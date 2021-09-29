@@ -5,10 +5,11 @@ use crate::message_pages::PageOperationError;
 
 #[derive(Debug)]
 pub enum OperationError {
-    TopicNotFound,
+    TopicNotFound(String),
     PageOperationError(PageOperationError),
     ProtobufEncodeError(EncodeError),
     ZipError(ZipError),
+    Other(String),
 }
 
 impl From<PageOperationError> for OperationError {

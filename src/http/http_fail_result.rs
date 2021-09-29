@@ -1,6 +1,8 @@
 use hyper::{Body, Response};
 use my_azure_storage_sdk::AzureStorageError;
 
+use crate::operations::OperationError;
+
 use super::web_content_type::WebContentType;
 
 pub struct HttpFailResult {
@@ -68,5 +70,23 @@ impl Into<Response<Body>> for HttpFailResult {
             .status(self.status_code)
             .body(Body::from(self.content))
             .unwrap()
+    }
+}
+
+impl From<OperationError> for HttpFailResult {
+    fn from(src: OperationError) -> Self {
+        match src {
+            OperationError::TopicNotFound(topic_id) => {
+                HttpFailResult::not_found(format!("Topic {} not found", topic_id))
+            }
+            OperationError::PageOperationError(err) => {
+                HttpFailResult::error(format!("ERR:{:?}", err))
+            }
+            OperationError::ProtobufEncodeError(err) => {
+                HttpFailResult::error(format!("ERR:{:?}", err))
+            }
+            OperationError::ZipError(err) => HttpFailResult::error(format!("ERR:{:?}", err)),
+            OperationError::Other(err) => HttpFailResult::error(format!("ERR:{}", err)),
+        }
     }
 }

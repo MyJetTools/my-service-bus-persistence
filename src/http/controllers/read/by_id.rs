@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::{
     app::AppContext,
     http::{HttpContext, HttpFailResult, HttpOkResult},
-    message_pages::MessagePageId,
 };
 
 use super::models::GetMessageResponseModel;
@@ -16,38 +15,11 @@ pub async fn get(ctx: HttpContext, app: Arc<AppContext>) -> Result<HttpOkResult,
 
     let message_id = message_id.parse::<i64>().unwrap();
 
-    let topic_data = app.topics_data_list.get(topic_id).await;
+    let message = crate::operations::messages::get_message(app, topic_id, message_id).await?;
 
-    if topic_data.is_none() {
-        return Err(HttpFailResult::not_found(format!(
-            "Topic {} not found",
-            topic_id
-        )));
-    }
-
-    let topic_data = topic_data.unwrap();
-
-    let current_page_id = app.get_current_page_id(topic_id).await.unwrap();
-
-    let page_id = MessagePageId::from_message_id(message_id);
-
-    let page = crate::operations::pages::get_or_restore(
-        app,
-        topic_data,
-        page_id,
-        page_id.value >= current_page_id.value,
-    )
-    .await;
-
-    let message = page.get_message(message_id).await;
-
-    if let Err(err) = message {
-        return Err(HttpFailResult::error(format!("{:?}", err)));
-    }
-
-    match message.as_ref().unwrap() {
+    match message {
         Some(msg) => {
-            let model = GetMessageResponseModel::create(msg);
+            let model = GetMessageResponseModel::create(&msg);
             return Ok(HttpOkResult::create_json_response(model));
         }
         None => {

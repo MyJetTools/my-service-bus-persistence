@@ -59,22 +59,6 @@ impl AppContext {
         }
     }
 
-    pub async fn get_current_page_id_or_default(
-        &self,
-        topic_id: &str,
-        default: MessagePageId,
-    ) -> MessagePageId {
-        let snapshot = self.topics_snapshot.get().await;
-
-        for topic_data in &snapshot.snapshot.data {
-            if topic_data.topic_id == topic_id {
-                return MessagePageId::from_message_id(topic_data.message_id);
-            }
-        }
-
-        default
-    }
-
     pub async fn get_current_page_id(&self, topic_id: &str) -> Option<MessagePageId> {
         let snapshot = self.topics_snapshot.get().await;
 

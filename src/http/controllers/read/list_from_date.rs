@@ -1,26 +1,28 @@
+use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+
 use crate::{
     app::AppContext,
     http::{HttpContext, HttpFailResult, HttpOkResult},
+    message_pages::MessagePageId,
 };
 
-pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
-    todo!("Restore it later");
+use super::models::GetMessagesResponseModel;
 
-    /*
+pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
     let q = ctx.get_query_string();
 
     let topic_id = q.get_required_query_parameter("topicId")?;
 
-    let pages_cache = app.topics_data_list.get(topic_id).await;
+    let topic_data = app.topics_data_list.get(topic_id).await;
 
-    if pages_cache.is_none() {
+    if topic_data.is_none() {
         return Err(HttpFailResult::not_found(format!(
             "Topic {} not found",
             topic_id
         )));
     }
 
-    let pages_cache = pages_cache.unwrap();
+    let topic_data = topic_data.unwrap();
 
     let max_amount: usize = q.get_query_parameter_or_defaul("maxAmount", 1);
 
@@ -42,18 +44,20 @@ pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, Htt
 
     let page_id = MessagePageId::from_message_id(message_id);
 
-    let data_by_topic = pages_cache.get(page_id).await;
+    let page = topic_data.get(page_id).await;
 
     let mut messages = Vec::new();
 
-    if data_by_topic.is_none() {
+    if page.is_none() {
         let model = GetMessagesResponseModel::create(messages);
         return Ok(HttpOkResult::create_json_response(model));
     }
 
-    let read_access = read_access.get(0).unwrap();
+    let page = page.unwrap();
 
-    while let Some(message) = read_access.messages.get(&message_id) {
+    let read_access = page.data.lock().await;
+
+    while let Some(message) = read_access.get_message(message_id).unwrap() {
         messages.push(message);
 
         if messages.len() >= max_amount {
@@ -66,5 +70,4 @@ pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, Htt
     let model = GetMessagesResponseModel::create(messages);
 
     Ok(HttpOkResult::create_json_response(model))
-     */
 }

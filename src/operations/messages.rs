@@ -20,9 +20,16 @@ pub async fn get_message(
     let messages_page_data = page.data.lock().await;
 
     if !messages_page_data.is_initialized() {
-        let current_page_id = app
-            .get_current_page_id_or_default(topic_id, MessagePageId::new(0))
-            .await;
+        let current_page_id = app.get_current_page_id(topic_id).await;
+
+        if current_page_id.is_none() {
+            return Err(OperationError::Other(format!(
+                "Somehow we can not get current_page_id for topic {}",
+                topic_id,
+            )));
+        }
+
+        let current_page_id = current_page_id.unwrap();
 
         super::pages::get_or_restore(
             app,

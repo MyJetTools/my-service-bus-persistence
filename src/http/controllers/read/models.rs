@@ -8,10 +8,10 @@ pub struct GetMessagesResponseModel {
 }
 
 impl GetMessagesResponseModel {
-    pub fn create(messages: Vec<&MessageProtobufModel>) -> Self {
+    pub fn create(messages: Vec<MessageProtobufModel>) -> Self {
         let mut data = Vec::new();
 
-        for msg in messages {
+        for msg in &messages {
             data.push(MessageJsonModel::new(msg))
         }
 

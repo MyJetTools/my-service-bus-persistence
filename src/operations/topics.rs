@@ -9,6 +9,6 @@ pub async fn get_topic(app: &AppContext, topic_id: &str) -> Result<Arc<TopicData
 
     match result {
         Some(topic) => Ok(topic),
-        None => Err(OperationError::TopicNotFound),
+        None => Err(OperationError::TopicNotFound(topic_id.to_string())),
     }
 }

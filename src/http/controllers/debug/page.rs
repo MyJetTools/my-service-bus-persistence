@@ -1,12 +1,10 @@
 use crate::{
     app::AppContext,
     http::{HttpContext, HttpFailResult, HttpOkResult},
+    message_pages::MessagePageId,
 };
 
 pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
-    todo!("Debug it later");
-
-    /*
     let q = ctx.get_query_string();
 
     let topic_id = q.get_required_query_parameter("topicId")?;
@@ -20,12 +18,15 @@ pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, Htt
         return Err(HttpFailResult::not_found("Topic not found".to_string()));
     }
 
-    let pages_access = topic_data.unwrap().pages.lock().await;
+    let page = topic_data.unwrap().get(MessagePageId::new(page_id)).await;
 
-    let page = pages_access.get(&page_id).unwrap().as_ref();
+    if page.is_none() {
+        return Err(HttpFailResult::not_found("Page not found".to_string()));
+    }
+
+    let page = page.unwrap();
 
     let data = page.data.lock().await;
 
-    return Ok("Not Supported yet".to_string().into());
-     */
+    return Ok(format!("{}", data.get_page_type()).into());
 }
