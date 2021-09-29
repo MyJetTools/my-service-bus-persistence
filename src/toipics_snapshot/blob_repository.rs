@@ -78,7 +78,9 @@ pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(
 
     &data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
-    my_page_blob.auto_ressize_and_save_pages(0, data, 1).await
+    my_page_blob
+        .auto_ressize_and_save_pages(0, 8000, data, 1)
+        .await
 }
 
 #[cfg(test)]

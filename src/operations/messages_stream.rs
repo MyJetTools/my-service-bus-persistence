@@ -55,7 +55,7 @@ impl MessagesStream {
         }
 
         self.append_cache
-            .append_and_write(page_blob, &pages_to_append)
+            .append_and_write(page_blob, &pages_to_append, 8000)
             .await
     }
 
