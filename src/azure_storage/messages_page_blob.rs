@@ -12,6 +12,8 @@ use crate::{
     operations::MessagesStream,
 };
 
+const BLOB_AUTO_RESSIZE_IN_PAGES: usize = 16384;
+
 pub struct MessagesPageBlob {
     pub topic_id: String,
     pub page_id: MessagePageId,
@@ -28,8 +30,11 @@ impl MessagesPageBlob {
 
         let blob = MyAzurePageBlob::new(connection, topic_id.clone(), blob_name);
 
-        let messages_stream =
-            MessagesStream::new(app.settings.load_blob_pages_size, 16384, 1024 * 1024 * 1024);
+        let messages_stream = MessagesStream::new(
+            app.settings.load_blob_pages_size,
+            BLOB_AUTO_RESSIZE_IN_PAGES,
+            1024 * 1024 * 1024,
+        );
         Self {
             topic_id,
             page_id,
@@ -69,7 +74,7 @@ impl MessagesPageBlob {
 
     pub async fn create_new(&mut self) -> Result<(), AzureStorageError> {
         self.blob.create_if_not_exists(0).await?;
-        self.blob.resize(0).await?;
+        self.blob.resize(BLOB_AUTO_RESSIZE_IN_PAGES).await?;
         Ok(())
     }
 }

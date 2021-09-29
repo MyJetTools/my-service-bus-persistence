@@ -15,32 +15,17 @@ pub async fn get_message(
 
     let page_id = MessagePageId::from_message_id(message_id);
 
-    let page = topic_data.try_get_or_create_uninitialized(page_id).await;
+    let current_page_id = app.get_current_page_id(topic_id).await.unwrap();
 
-    let messages_page_data = page.data.lock().await;
+    let page = super::pages::get_or_restore(
+        app,
+        topic_data,
+        page_id,
+        page_id.value >= current_page_id.value,
+    )
+    .await;
 
-    if !messages_page_data.is_initialized() {
-        let current_page_id = app.get_current_page_id(topic_id).await;
-
-        if current_page_id.is_none() {
-            return Err(OperationError::Other(format!(
-                "Somehow we can not get current_page_id for topic {}",
-                topic_id,
-            )));
-        }
-
-        let current_page_id = current_page_id.unwrap();
-
-        super::pages::get_or_restore(
-            app,
-            topic_data,
-            page_id,
-            page_id.value >= current_page_id.value,
-        )
-        .await;
-    }
-
-    let message = messages_page_data.get_message(message_id)?;
+    let message = page.get_message(message_id).await?;
 
     Ok(message)
 }

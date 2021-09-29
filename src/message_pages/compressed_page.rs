@@ -75,7 +75,6 @@ fn get_max_msg_id(page_id: MessagePageId, zip_data: &[u8]) -> Option<(usize, Opt
 
     let mut zip = zip.unwrap();
     let amount = zip.len();
-    return Some((amount, None));
 
     let mut result = None;
 
