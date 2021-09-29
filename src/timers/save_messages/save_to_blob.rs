@@ -28,18 +28,21 @@ pub async fn save_to_blob(
         }
         Err(error) => {
             data_by_topic
-            .app
-            .logs
-            .add_info_string(
-                Some(data_by_topic.topic_id.as_str()),
-                "Saving messages",
-                format!(
-                    "Can no save messages {}/#{} messages to save by there is no loader. Reason: {:?}",
-                    data_by_topic.topic_id, page_id.value, error
-                ),
-            )
-            .await
-        },
+                .app
+                .logs
+                .add_info_string(
+                    Some(data_by_topic.topic_id.as_str()),
+                    "Saving messages",
+                    format!(
+                        "Can no save messages {}/#{} . Amount:{}, Reason: {:?}",
+                        data_by_topic.topic_id,
+                        page_id.value,
+                        messages_to_save.len(),
+                        error
+                    ),
+                )
+                .await
+        }
     }
 }
 
