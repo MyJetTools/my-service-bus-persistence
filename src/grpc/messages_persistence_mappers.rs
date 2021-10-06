@@ -81,17 +81,21 @@ pub async fn get_compressed_page_v2(
 
             let mut messages = 0;
 
+            let mut used_messages = 0;
+
             for msg in uncompressed_page.messages.values() {
                 if let Some(range) = &range {
                     if range.msg_from <= msg.message_id && msg.message_id <= range.msg_to {
                         let mut buffer = Vec::new();
                         msg.serialize(&mut buffer)?;
                         zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+                        used_messages += 1;
                     }
                 } else {
                     let mut buffer = Vec::new();
                     msg.serialize(&mut buffer)?;
                     zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+                    used_messages += 1;
                 }
                 messages += 1;
             }
@@ -99,11 +103,12 @@ pub async fn get_compressed_page_v2(
             let zip_payload = zip_builder.get_payload()?;
 
             println!(
-                "Sending zip for topic {}/{}. Size {}. Messages: {}",
+                "Sending zip for topic {}/{}. Size {}. Messages: {}. Filtered: {}",
                 topic_id,
                 page.page_id.value,
                 zip_payload.len(),
-                messages
+                messages,
+                used_messages
             );
 
             let result = split(zip_payload.as_slice(), max_payload_size);
