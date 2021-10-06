@@ -1,19 +1,19 @@
 use std::{collections::HashMap, sync::Arc};
 
 use my_service_bus_shared::page_id::PageId;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use crate::{
     app::AppContext,
-    message_pages::{MessagePageId, MessagesPage, PageWriterMetrics},
+    message_pages::{MessagePageId, MessagesPage},
 };
 
-use super::current_pages_cluster::CurrentPagesCluster;
+use super::{current_pages_cluster::CurrentPagesCluster, topic_data_metrics::TopicDataMetrics};
 
 pub struct TopicData {
     pub topic_id: String,
-    pub pages: Mutex<HashMap<PageId, Arc<MessagesPage>>>,
-    pub metrics: RwLock<PageWriterMetrics>,
+    pages: Mutex<HashMap<PageId, Arc<MessagesPage>>>,
+    pub metrics: TopicDataMetrics,
     pub app: Arc<AppContext>,
     pub pages_cluster: CurrentPagesCluster,
 }
@@ -23,7 +23,7 @@ impl TopicData {
         Self {
             topic_id: topic_id.to_string(),
             pages: Mutex::new(HashMap::new()),
-            metrics: RwLock::new(PageWriterMetrics::new()),
+            metrics: TopicDataMetrics::new(),
             app: app.clone(),
             pages_cluster: CurrentPagesCluster::new(app, topic_id.to_string()),
         }
@@ -57,10 +57,10 @@ impl TopicData {
     }
 
     pub async fn has_messages_to_save(&self) -> bool {
-        let pages_access = self.pages.lock().await;
+        let pages_access = self.get_all().await;
 
-        for page in pages_access.values() {
-            if page.as_ref().has_messages_to_save().await {
+        for page in pages_access {
+            if page.has_messages_to_save() {
                 return true;
             }
         }
@@ -74,9 +74,7 @@ impl TopicData {
         let pages_access = self.pages.lock().await;
 
         for page in pages_access.values() {
-            let has_messages_to_save = page.has_messages_to_save().await;
-
-            if has_messages_to_save {
+            if page.has_messages_to_save() {
                 result.push(page.clone());
             }
         }
@@ -84,30 +82,16 @@ impl TopicData {
         return result;
     }
 
-    pub async fn get_metrics(&self) -> PageWriterMetrics {
-        let metrics_access = self.metrics.read().await;
-        return metrics_access.clone();
-    }
-
-    pub async fn get_queue_size(&self) -> usize {
-        let pages_access = self.pages.lock().await;
+    pub async fn get_messages_amount_to_save(&self) -> usize {
+        let pages_access = self.get_all().await;
 
         let mut result = 0;
-        for page in pages_access.values() {
-            result += page.get_messages_to_save_amount().await;
+        for page in pages_access {
+            result += page.metrics.get_messages_amount_to_save()
         }
 
         result
     }
-
-    /*
-       pub async fn add_new_messages(
-           &self,
-           page_id: MessagePageId,
-           messages: &[MessageProtobufModel],
-       ) {
-       }
-    */
 
     pub async fn get_all(&self) -> Vec<Arc<MessagesPage>> {
         let mut result = Vec::new();

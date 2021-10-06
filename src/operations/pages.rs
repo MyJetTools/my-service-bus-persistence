@@ -20,9 +20,11 @@ pub async fn get_or_restore(
             return page.clone();
         }
 
-        let page =
+        let page_data =
             super::message_pages_loader::load_page(app, topic_data, page_id, is_current_page).await;
-        *page_write_access = page;
+        page_data.update_metrics(&page.metrics);
+
+        *page_write_access = page_data;
     }
 
     return page;

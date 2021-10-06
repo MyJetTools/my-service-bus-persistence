@@ -42,14 +42,6 @@ pub struct MessageJsonModel {
 }
 
 impl MessageJsonModel {
-    pub fn new_optional(src: Option<&MessageProtobufModel>) -> Option<Self> {
-        if src.is_none() {
-            return None;
-        }
-
-        Some(MessageJsonModel::new(src.unwrap()))
-    }
-
     pub fn new(src: &MessageProtobufModel) -> Self {
         let created = match src.created {
             Some(result) => result.to_rfc3339(),

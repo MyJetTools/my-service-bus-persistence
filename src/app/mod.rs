@@ -4,6 +4,7 @@ mod current_pages_cluster;
 mod logs;
 mod prometheus_metrics;
 mod topic_data;
+mod topic_data_metrics;
 mod topics_data_list;
 
 pub use app_ctx::{AppContext, APP_VERSION};

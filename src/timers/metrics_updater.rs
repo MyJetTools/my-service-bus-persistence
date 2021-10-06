@@ -22,7 +22,7 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
 
         let topic = topic.unwrap();
 
-        let queue_size = topic.get_queue_size().await;
+        let queue_size = topic.get_messages_amount_to_save().await;
 
         app.metrics_keeper
             .update_topic_queue_size(topic.topic_id.as_str(), queue_size)

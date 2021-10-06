@@ -23,17 +23,6 @@ impl TopicsDataList {
         return Some(result.clone());
     }
 
-    pub async fn get_all(&self) -> Vec<Arc<TopicData>> {
-        let mut result = Vec::new();
-        let read_access = self.data.read().await;
-
-        for data in read_access.values() {
-            result.push(data.clone())
-        }
-
-        result
-    }
-
     pub async fn get_or_create_data_by_topic(
         &self,
         topic_id: &str,
@@ -49,7 +38,7 @@ impl TopicsDataList {
         let result = write_access.get(topic_id);
 
         if result.is_some() {
-            return data_by_topic.unwrap();
+            return result.unwrap().clone();
         }
 
         let result = TopicData::new(topic_id, app);

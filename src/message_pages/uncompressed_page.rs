@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{
-    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel, MessageId,
-};
+use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
 use crate::{azure_storage::messages_page_blob::MessagesPageBlob, message_pages::MessagePageId};
 
@@ -10,25 +8,12 @@ pub struct UncompressedPage {
     pub page_id: MessagePageId,
     pub messages: BTreeMap<i64, MessageProtobufModel>,
     pub queue_to_save: Vec<i64>,
-    pub last_access: DateTimeAsMicroseconds,
     pub min_message_id: Option<i64>,
     pub max_message_id: Option<i64>,
     pub blob: MessagesPageBlob,
 }
 
 impl UncompressedPage {
-    pub fn new_empty(page_id: MessagePageId, blob: MessagesPageBlob) -> Self {
-        Self {
-            page_id,
-            messages: BTreeMap::new(),
-            queue_to_save: Vec::new(),
-            last_access: DateTimeAsMicroseconds::now(),
-            max_message_id: None,
-            min_message_id: None,
-            blob,
-        }
-    }
-
     pub fn new(
         page_id: MessagePageId,
         messages: BTreeMap<i64, MessageProtobufModel>,
@@ -39,7 +24,6 @@ impl UncompressedPage {
             page_id,
             messages: messages,
             queue_to_save: Vec::new(),
-            last_access: DateTimeAsMicroseconds::now(),
             max_message_id: min_max.0,
             min_message_id: min_max.1,
             blob,

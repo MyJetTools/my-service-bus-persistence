@@ -1,32 +1,34 @@
 use my_azure_page_blob::*;
-use my_azure_page_blob_append::{PageBlobAppendCache, PageBlobAppendCacheError};
+use my_azure_page_blob_append::{PageBlobAppend, PageBlobAppendError};
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
-pub struct MessagesStream {
-    pub append_cache: PageBlobAppendCache,
+pub struct MessagesStream<TMyPageBlob: MyPageBlob> {
+    pub page_blob_append: PageBlobAppend<TMyPageBlob>,
 }
 
-impl MessagesStream {
+impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
     pub fn new(
-        capacity_in_pages: usize,
+        page_blob: TMyPageBlob,
+        cache_capacity_in_pages: usize,
         blob_auto_resize_in_pages: usize,
-        max_page_size_protection: usize,
+        max_payload_size_protection: i32,
     ) -> Self {
-        let append_cache = PageBlobAppendCache::new(
-            capacity_in_pages,
+        let settings = my_azure_page_blob_append::AppendPageBlobSettings {
             blob_auto_resize_in_pages,
-            max_page_size_protection,
-            true,
-        );
+            cache_capacity_in_pages,
+            max_pages_to_write_single_round_trip: 8000,
+            max_payload_size_protection,
+        };
 
-        Self { append_cache }
+        let page_blob_append = PageBlobAppend::new(page_blob, settings);
+
+        Self { page_blob_append }
     }
 
-    pub async fn get_next_message<T: MyPageBlob>(
+    pub async fn get_next_message(
         &mut self,
-        page_blob: &mut T,
-    ) -> Result<Option<MessageProtobufModel>, PageBlobAppendCacheError> {
-        let payload_result = self.append_cache.get_next_payload(page_blob).await?;
+    ) -> Result<Option<MessageProtobufModel>, PageBlobAppendError> {
+        let payload_result = self.page_blob_append.get_next_payload().await?;
 
         let result = match payload_result {
             Some(payload) => {
@@ -41,11 +43,11 @@ impl MessagesStream {
         return Ok(result);
     }
 
-    pub async fn append<T: MyPageBlob>(
+    pub async fn append(
         &mut self,
-        page_blob: &mut T,
+
         messages: &[MessageProtobufModel],
-    ) -> Result<(), PageBlobAppendCacheError> {
+    ) -> Result<(), PageBlobAppendError> {
         let mut pages_to_append = Vec::new();
 
         for message in messages {
@@ -54,12 +56,12 @@ impl MessagesStream {
             pages_to_append.push(payload);
         }
 
-        self.append_cache
-            .append_and_write(page_blob, &pages_to_append, 8000)
+        self.page_blob_append
+            .append_and_write(&pages_to_append)
             .await
     }
 
-    pub async fn get_write_position(&self) -> usize {
-        self.append_cache.blob_position
+    pub fn get_write_position(&self) -> usize {
+        self.page_blob_append.get_blob_position()
     }
 }

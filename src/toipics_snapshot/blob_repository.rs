@@ -80,7 +80,9 @@ pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(
 
     my_page_blob
         .auto_ressize_and_save_pages(0, 8000, data, 1)
-        .await
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

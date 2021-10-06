@@ -6,8 +6,7 @@ use my_service_bus_shared::page_compressor::CompressedPageBuilder;
 
 use crate::{
     app::{AppContext, TopicData},
-    message_pages::MessagesPageData,
-    uncompressed_pages::UncompressedPage,
+    message_pages::{MessagesPageData, UncompressedPage},
 };
 
 use super::OperationError;
@@ -35,7 +34,7 @@ pub async fn execute(
             "Page {}#{} is compressed. Uncompressed: {}, Compressed size: {}",
             topic_data.topic_id,
             uncompressed_page.page_id.value,
-            uncompressed_page.blob.get_wirte_position().await,
+            uncompressed_page.blob.get_write_position(),
             compressed.len()
         );
 
@@ -56,7 +55,9 @@ async fn delete_uncompressed_page(topic_id: &str, page: &mut UncompressedPage, a
     let mut attempt_no: usize = 0;
 
     loop {
-        match page.blob.blob.delete().await {
+        let page_blob = page.blob.messages_stream.page_blob_append.get_page_blob();
+
+        match page_blob.delete().await {
             Ok(()) => {
                 app.logs
                     .as_ref()

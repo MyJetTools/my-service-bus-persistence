@@ -132,14 +132,12 @@ async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
     let mut result: Vec<LoadedPageModel> = Vec::new();
 
     for page in topic_data.get_all().await {
-        let read_access = page.data.lock().await;
-
         let item = LoadedPageModel {
             page_id: page.page_id.value,
-            percent: read_access.percent(),
-            count: read_access.message_count(),
-            has_skipped_messages: read_access.has_skipped_messages(),
-            write_position: read_access.get_write_position().await,
+            percent: page.metrics.get_precent(),
+            count: page.metrics.get_messages_count(),
+            has_skipped_messages: page.metrics.get_has_skipped_messages(),
+            write_position: page.metrics.get_blob_position(),
         };
 
         result.push(item);
@@ -160,10 +158,9 @@ async fn get_topics_model(
 ) -> TopicInfo {
     let active_pages = crate::message_pages::utils::get_active_pages(snapshot);
 
-    let metrics = cache_by_topic.get_metrics().await;
+    let last_save_moment_since = now.duration_since(cache_by_topic.metrics.get_last_saved_moment());
 
-    let last_save_moment_since = now.duration_since(metrics.last_saved_moment);
-    let queue_size = cache_by_topic.get_queue_size().await;
+    let queue_size = cache_by_topic.get_messages_amount_to_save().await;
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
@@ -171,10 +168,10 @@ async fn get_topics_model(
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
         loaded_pages: get_loaded_pages(cache_by_topic).await,
         queues: get_queues(&snapshot.queues),
-        last_save_chunk: metrics.last_saved_chunk,
-        last_save_duration: duration_to_string(metrics.last_saved_duration),
+        last_save_chunk: cache_by_topic.metrics.get_last_saved_chunk(),
+        last_save_duration: duration_to_string(cache_by_topic.metrics.get_last_saved_duration()),
         last_save_moment: duration_to_string(last_save_moment_since),
-        saved_message_id: metrics.last_saved_message_id,
+        saved_message_id: cache_by_topic.metrics.get_last_saved_message_id(),
         queue_size,
     }
 }
@@ -195,6 +192,7 @@ async fn get_model(app: &AppContext) -> StatusModel {
         let data_by_topic = data_by_topic.unwrap();
 
         let topic_info_model = get_topics_model(snapshot, data_by_topic.as_ref(), now).await;
+
         topics.push(topic_info_model)
     }
 

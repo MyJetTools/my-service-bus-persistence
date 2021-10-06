@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
-use my_azure_page_blob_append::PageBlobAppendCacheError;
-use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
+use my_azure_page_blob::MyAzurePageBlob;
+use my_azure_page_blob_append::PageBlobAppendError;
+use my_azure_storage_sdk::AzureConnection;
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
 use crate::{
@@ -17,9 +17,8 @@ const BLOB_AUTO_RESSIZE_IN_PAGES: usize = 16384;
 pub struct MessagesPageBlob {
     pub topic_id: String,
     pub page_id: MessagePageId,
-    pub messages_stream: MessagesStream,
+    pub messages_stream: MessagesStream<MyAzurePageBlob>,
     pub app: Arc<AppContext>,
-    pub blob: MyAzurePageBlob,
 }
 
 impl MessagesPageBlob {
@@ -31,6 +30,7 @@ impl MessagesPageBlob {
         let blob = MyAzurePageBlob::new(connection, topic_id.clone(), blob_name);
 
         let messages_stream = MessagesStream::new(
+            blob,
             app.settings.load_blob_pages_size,
             BLOB_AUTO_RESSIZE_IN_PAGES,
             1024 * 1024 * 1024,
@@ -40,18 +40,13 @@ impl MessagesPageBlob {
             page_id,
             app,
             messages_stream: messages_stream,
-            blob,
         }
     }
 
-    pub async fn load(&mut self) -> Result<Vec<MessageProtobufModel>, PageBlobAppendCacheError> {
+    pub async fn load(&mut self) -> Result<Vec<MessageProtobufModel>, PageBlobAppendError> {
         let mut result = Vec::new();
 
-        while let Some(message) = self
-            .messages_stream
-            .get_next_message(&mut self.blob)
-            .await?
-        {
+        while let Some(message) = self.messages_stream.get_next_message().await? {
             result.push(message);
         }
 
@@ -62,19 +57,11 @@ impl MessagesPageBlob {
         &mut self,
         messages: &[MessageProtobufModel],
     ) -> Result<(), AppError> {
-        self.messages_stream
-            .append(&mut self.blob, &messages)
-            .await?;
+        self.messages_stream.append(&messages).await?;
         Ok(())
     }
 
-    pub async fn get_wirte_position(&self) -> usize {
-        self.messages_stream.get_write_position().await
-    }
-
-    pub async fn create_new(&mut self) -> Result<(), AzureStorageError> {
-        self.blob.create_if_not_exists(0).await?;
-        self.blob.resize(BLOB_AUTO_RESSIZE_IN_PAGES).await?;
-        Ok(())
+    pub fn get_write_position(&self) -> usize {
+        self.messages_stream.get_write_position()
     }
 }

@@ -5,10 +5,6 @@ use zip::result::ZipError;
 
 use super::super::ReadCompressedPageError;
 
-const PAGES_IN_CLUSTER: i64 = 100;
-
-const V1_FILE_NAME: &str = "d";
-
 pub fn decompress_v1(
     payload: &[u8],
 ) -> Result<Option<Vec<MessageProtobufModel>>, ReadCompressedPageError> {

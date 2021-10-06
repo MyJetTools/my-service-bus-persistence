@@ -20,11 +20,21 @@ pub async fn save_to_blob(
     sw.pause();
     match save_result {
         Ok(()) => {
-            let mut metrics = data_by_topic.metrics.write().await;
-            metrics.last_saved_duration = sw.duration();
-            metrics.last_saved_chunk = messages_to_save.len();
-            metrics.last_saved_moment = DateTimeAsMicroseconds::now();
-            metrics.last_saved_message_id = max_message_id;
+            data_by_topic
+                .metrics
+                .update_last_saved_duration(sw.duration());
+
+            data_by_topic
+                .metrics
+                .update_last_saved_chunk(messages_to_save.len());
+
+            data_by_topic
+                .metrics
+                .update_last_saved_moment(DateTimeAsMicroseconds::now());
+
+            data_by_topic
+                .metrics
+                .update_last_saved_message_id(max_message_id);
         }
         Err(error) => {
             data_by_topic

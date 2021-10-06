@@ -70,7 +70,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         contracts::check_flags(self.app.as_ref())?;
 
         let req = request.into_inner();
-        println!("{:?}", req);
 
         let app = self.app.clone();
 
@@ -111,7 +110,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let max_payload_size = app.get_max_payload_size();
 
-            let mut compressed_data = super::messages_persistence_mappers::get_compressed_page(
+            let mut compressed_data = super::messages_persistence_mappers::get_compressed_page_v2(
                 page.as_ref(),
                 max_payload_size,
                 range,

@@ -42,14 +42,17 @@ pub async fn gc_if_needed(
 async fn get_pages_to_gc(topic: &TopicData, active_pages: &[MessagePageId]) -> Vec<i64> {
     let now = DateTimeAsMicroseconds::now();
 
-    let pages_read_access = topic.pages.lock().await;
+    let pages = topic.get_all().await;
 
     let mut pages_to_gc = Vec::new();
 
-    for (page_id, page) in &*pages_read_access {
-        if active_pages.iter().all(|itm| itm.value != *page_id) {
-            if now.seconds_before(page.as_ref().get_last_access().await) > 30 {
-                pages_to_gc.push(*page_id);
+    for page in pages {
+        if active_pages
+            .iter()
+            .all(|itm| itm.value != page.page_id.value)
+        {
+            if now.seconds_before(page.as_ref().metrics.get_last_access()) > 30 {
+                pages_to_gc.push(page.page_id.value);
             }
         }
     }

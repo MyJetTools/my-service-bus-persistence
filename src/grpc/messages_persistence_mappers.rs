@@ -66,7 +66,7 @@ pub struct MsgRange {
     pub msg_to: i64,
 }
 
-pub async fn get_compressed_page(
+pub async fn get_compressed_page_v2(
     page: &MessagesPage,
     max_payload_size: usize,
     range: Option<MsgRange>,
