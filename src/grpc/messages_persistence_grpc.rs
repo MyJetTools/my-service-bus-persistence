@@ -100,12 +100,12 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             .await;
 
             let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
+                None
+            } else {
                 Some(MsgRange {
                     msg_from: req.from_message_id,
                     msg_to: req.to_message_id,
                 })
-            } else {
-                None
             };
 
             let max_payload_size = app.get_max_payload_size();
