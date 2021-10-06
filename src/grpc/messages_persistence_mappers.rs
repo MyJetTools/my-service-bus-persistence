@@ -67,6 +67,7 @@ pub struct MsgRange {
 }
 
 pub async fn get_compressed_page_v2(
+    topic_id: &str,
     page: &MessagesPage,
     max_payload_size: usize,
     range: Option<MsgRange>,
@@ -93,6 +94,13 @@ pub async fn get_compressed_page_v2(
             }
 
             let zip_payload = zip_builder.get_payload()?;
+
+            println!(
+                "Sending zip for topic {}/{}. Size {}",
+                topic_id,
+                page.page_id.value,
+                zip_payload.len()
+            );
 
             let result = split(zip_payload.as_slice(), max_payload_size);
             return Ok(result);
