@@ -79,6 +79,8 @@ pub async fn get_compressed_page_v2(
         crate::message_pages::MessagesPageData::Uncompressed(uncompressed_page) => {
             let mut zip_builder = CompressedPageBuilder::new();
 
+            let mut messages = 0;
+
             for msg in uncompressed_page.messages.values() {
                 if let Some(range) = &range {
                     if range.msg_from <= msg.message_id && msg.message_id <= range.msg_to {
@@ -91,15 +93,17 @@ pub async fn get_compressed_page_v2(
                     msg.serialize(&mut buffer)?;
                     zip_builder.add_message(msg.message_id, buffer.as_slice())?;
                 }
+                messages += 1;
             }
 
             let zip_payload = zip_builder.get_payload()?;
 
             println!(
-                "Sending zip for topic {}/{}. Size {}",
+                "Sending zip for topic {}/{}. Size {}. Messages: {}",
                 topic_id,
                 page.page_id.value,
-                zip_payload.len()
+                zip_payload.len(),
+                messages
             );
 
             let result = split(zip_payload.as_slice(), max_payload_size);
