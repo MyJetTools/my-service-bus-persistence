@@ -111,6 +111,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             let max_payload_size = app.get_max_payload_size();
 
             let mut compressed_data = super::messages_persistence_mappers::get_compressed_page_v2(
+                topic_data.topic_id.as_str(),
                 page.as_ref(),
                 max_payload_size,
                 range,
