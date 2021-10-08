@@ -30,13 +30,9 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
     ) -> Result<Option<MessageProtobufModel>, PageBlobAppendError> {
         loop {
             let pos = self.page_blob_append.get_blob_position();
-            let getting_payload_result = self.page_blob_append.get_next_payload().await;
+            let getting_payload_result = self.page_blob_append.get_next_payload().await?;
 
-            if let Err(err) = getting_payload_result {
-                return Err(err);
-            }
-
-            match getting_payload_result.unwrap() {
+            match getting_payload_result {
                 Some(payload) => {
                     let payload_size = payload.len();
 

@@ -1,13 +1,15 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_shared::{
+    protobuf_models::MessageProtobufModel, queue_with_intervals::QueueWithIntervals, MessageId,
+};
 
 use crate::{azure_storage::messages_page_blob::MessagesPageBlob, message_pages::MessagePageId};
 
 pub struct UncompressedPage {
     pub page_id: MessagePageId,
     pub messages: BTreeMap<i64, MessageProtobufModel>,
-    pub queue_to_save: Vec<i64>,
+    pub queue_to_save: QueueWithIntervals,
     pub min_message_id: Option<i64>,
     pub max_message_id: Option<i64>,
     pub blob: MessagesPageBlob,
@@ -23,7 +25,7 @@ impl UncompressedPage {
         Self {
             page_id,
             messages: messages,
-            queue_to_save: Vec::new(),
+            queue_to_save: QueueWithIntervals::new(),
             max_message_id: min_max.0,
             min_message_id: min_max.1,
             blob,
@@ -32,7 +34,7 @@ impl UncompressedPage {
 
     pub fn add(&mut self, messages: Vec<MessageProtobufModel>) {
         for msg in messages {
-            self.queue_to_save.push(msg.message_id);
+            self.queue_to_save.enqueue(msg.message_id);
             self.update_min_max(msg.message_id);
             self.messages.insert(msg.message_id, msg);
         }
@@ -43,11 +45,17 @@ impl UncompressedPage {
         Some(result.clone())
     }
 
+    pub fn commit_saved(&mut self, messages: &[MessageProtobufModel]) {
+        for msg in messages {
+            self.queue_to_save.remove(msg.message_id);
+        }
+    }
+
     pub fn get_messages_to_save(&self) -> Vec<MessageProtobufModel> {
         let mut result = Vec::new();
 
         for msg_id in &self.queue_to_save {
-            let msg = self.messages.get(msg_id);
+            let msg = self.messages.get(&msg_id);
 
             if let Some(msg) = msg {
                 result.push(msg.clone());

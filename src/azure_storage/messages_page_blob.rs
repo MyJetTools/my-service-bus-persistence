@@ -3,7 +3,9 @@ use std::sync::Arc;
 use my_azure_page_blob::MyAzurePageBlob;
 use my_azure_page_blob_append::PageBlobAppendError;
 use my_azure_storage_sdk::AzureConnection;
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_service_bus_shared::{
+    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel,
+};
 
 use crate::{
     app::{AppContext, AppError},
@@ -46,11 +48,49 @@ impl MessagesPageBlob {
     pub async fn load(&mut self) -> Result<Vec<MessageProtobufModel>, PageBlobAppendError> {
         let mut result = Vec::new();
 
-        while let Some(message) = self.messages_stream.get_next_message().await? {
-            result.push(message);
-        }
+        loop {
+            let get_message_result = self.messages_stream.get_next_message().await;
 
-        Ok(result)
+            match get_message_result {
+                Ok(message) => {
+                    if message.is_none() {
+                        return Ok(result);
+                    }
+
+                    result.push(message.unwrap());
+                }
+                Err(err) => {
+                    if let PageBlobAppendError::Corrupted(corrupted_reason) = &err {
+                        println!(
+                                "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
+                                self.topic_id, self.page_id.value,
+                                corrupted_reason.broken_pos,
+                                corrupted_reason.msg
+                            );
+
+                        let now = DateTimeAsMicroseconds::now();
+                        let conn_string = AzureConnection::from_conn_string(
+                            self.app.settings.messages_connection_string.as_str(),
+                        );
+                        let mut backup_blob = MyAzurePageBlob::new(
+                            conn_string,
+                            self.topic_id.to_string(),
+                            format!(
+                                "{}.{}",
+                                generate_blob_name(&self.page_id),
+                                &now.to_rfc3339()[0..23]
+                            ),
+                        );
+
+                        self.init(&mut backup_blob).await?;
+
+                        return Ok(result);
+                    } else {
+                        return Err(err);
+                    }
+                }
+            }
+        }
     }
 
     pub async fn save_messages(

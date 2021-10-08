@@ -27,10 +27,6 @@ impl MessagesPageData {
         }
     }
 
-    pub fn restored_from_corrupted(page_id: MessagePageId, blob: MessagesPageBlob) -> Self {
-        Self::Uncompressed(UncompressedPage::new(page_id, BTreeMap::new(), blob))
-    }
-
     pub fn restored_uncompressed(
         page_id: MessagePageId,
         messages: BTreeMap<MessageId, MessageProtobufModel>,
@@ -67,19 +63,10 @@ impl MessagesPageData {
         }
     }
 
-    pub fn has_messages_to_save(&self) -> bool {
-        match self {
-            MessagesPageData::NotInitialized(_) => false,
-            MessagesPageData::Uncompressed(page) => page.queue_to_save.len() > 0,
-            MessagesPageData::Compressed(_) => false,
-            MessagesPageData::Blank(_) => false,
-        }
-    }
-
     pub fn get_messages_to_save_amount(&self) -> usize {
         match self {
             MessagesPageData::NotInitialized(_) => 0,
-            MessagesPageData::Uncompressed(page) => page.queue_to_save.len(),
+            MessagesPageData::Uncompressed(page) => page.queue_to_save.len() as usize,
             MessagesPageData::Compressed(_) => 0,
             MessagesPageData::Blank(_) => 0,
         }

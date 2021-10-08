@@ -38,6 +38,7 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
             match &mut *write_access {
                 crate::message_pages::MessagesPageData::Uncompressed(uncompressed_page) => {
                     let messages_to_save = uncompressed_page.get_messages_to_save();
+
                     super::save_to_blob(
                         &mut uncompressed_page.blob,
                         data_by_topic.as_ref(),
@@ -46,6 +47,7 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
                     )
                     .await;
 
+                    uncompressed_page.commit_saved(&messages_to_save);
                     write_access.update_metrics(&page.metrics);
                 }
                 _ => {
