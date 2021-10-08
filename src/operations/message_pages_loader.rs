@@ -78,8 +78,10 @@ async fn load_uncompressed_page(
             if page_is_current {
                 if let PageBlobAppendError::Corrupted(corrupted_reason) = &err {
                     println!(
-                        "Can not load from uncompressed page {}/{}. Blob is corrupted. Page is current. We are reopening the blob as empty. Reason: {:?}",
-                        topic_id, page_id.value, corrupted_reason
+                        "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
+                        topic_id, page_id.value,
+                        corrupted_reason.pos,
+                        corrupted_reason.msg
                     );
 
                     let now = DateTimeAsMicroseconds::now();
