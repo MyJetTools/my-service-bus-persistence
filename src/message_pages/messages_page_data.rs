@@ -27,6 +27,10 @@ impl MessagesPageData {
         }
     }
 
+    pub fn restored_from_corrupted(page_id: MessagePageId, blob: MessagesPageBlob) -> Self {
+        Self::Uncompressed(UncompressedPage::new(page_id, BTreeMap::new(), blob))
+    }
+
     pub fn restored_uncompressed(
         page_id: MessagePageId,
         messages: BTreeMap<MessageId, MessageProtobufModel>,

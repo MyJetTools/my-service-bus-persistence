@@ -7,7 +7,7 @@ use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
 use crate::{
     app::{AppContext, AppError},
-    azure_storage::consts::generage_blob_name,
+    azure_storage::consts::generate_blob_name,
     message_pages::MessagePageId,
     operations::MessagesStream,
 };
@@ -25,7 +25,7 @@ impl MessagesPageBlob {
     pub fn new(topic_id: String, page_id: MessagePageId, app: Arc<AppContext>) -> Self {
         let connection =
             AzureConnection::from_conn_string(app.settings.messages_connection_string.as_str());
-        let blob_name = generage_blob_name(&page_id);
+        let blob_name = generate_blob_name(&page_id);
 
         let blob = MyAzurePageBlob::new(connection, topic_id.clone(), blob_name);
 
@@ -33,7 +33,7 @@ impl MessagesPageBlob {
             blob,
             app.settings.load_blob_pages_size,
             BLOB_AUTO_RESSIZE_IN_PAGES,
-            1024 * 1024 * 1024,
+            1024 * 1024 * 5,
         );
         Self {
             topic_id,
@@ -63,5 +63,12 @@ impl MessagesPageBlob {
 
     pub fn get_write_position(&self) -> usize {
         self.messages_stream.get_write_position()
+    }
+
+    pub async fn init(
+        &mut self,
+        backup_blob: &mut MyAzurePageBlob,
+    ) -> Result<(), PageBlobAppendError> {
+        self.messages_stream.init(backup_blob).await
     }
 }

@@ -28,21 +28,40 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
     pub async fn get_next_message(
         &mut self,
     ) -> Result<Option<MessageProtobufModel>, PageBlobAppendError> {
-        let payload_result = self.page_blob_append.get_next_payload().await?;
+        loop {
+            let pos = self.page_blob_append.get_blob_position();
+            let getting_payload_result = self.page_blob_append.get_next_payload().await;
 
-        match payload_result {
-            Some(payload) => {
-                let result: Result<MessageProtobufModel, prost::DecodeError> =
-                    prost::Message::decode(payload.as_slice());
-
-                return match result {
-                    Ok(model) => Ok(Some(model)),
-                    Err(err) => Err(PageBlobAppendError::Corrupted(format!("{:?}", err))),
-                };
+            if let Err(err) = getting_payload_result {
+                return Err(err);
             }
 
-            None => return Ok(None),
-        };
+            match getting_payload_result.unwrap() {
+                Some(payload) => {
+                    let payload_size = payload.len();
+
+                    let result: Result<MessageProtobufModel, prost::DecodeError> =
+                        prost::Message::decode(payload.as_slice());
+
+                    match result {
+                        Ok(model) => {
+                            return Ok(Some(model));
+                        }
+                        Err(err) => {
+                            let page_blob = self.page_blob_append.get_page_blob();
+                            println!(
+                                "[{}/{}]Can not decode message at position: {} with size {}. Skipping it Err: {:?}",
+                                page_blob.get_container_name(),
+                                page_blob.get_blob_name(),
+                                pos, payload_size, err
+                            );
+                        }
+                    };
+                }
+
+                None => return Ok(None),
+            };
+        }
     }
 
     pub async fn append(
@@ -65,5 +84,9 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
 
     pub fn get_write_position(&self) -> usize {
         self.page_blob_append.get_blob_position()
+    }
+
+    pub async fn init(&mut self, backup_blob: &mut TMyPageBlob) -> Result<(), PageBlobAppendError> {
+        self.page_blob_append.init_blob(Some(backup_blob)).await
     }
 }
