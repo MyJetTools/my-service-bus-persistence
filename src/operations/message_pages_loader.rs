@@ -80,7 +80,7 @@ async fn load_uncompressed_page(
                     println!(
                         "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
                         topic_id, page_id.value,
-                        corrupted_reason.pos,
+                        corrupted_reason.broken_pos,
                         corrupted_reason.msg
                     );
 
