@@ -1,4 +1,3 @@
-use prost::EncodeError;
 use zip::result::ZipError;
 
 use crate::{compressed_pages::ReadCompressedPageError, message_pages::PageOperationError};
@@ -7,7 +6,8 @@ use crate::{compressed_pages::ReadCompressedPageError, message_pages::PageOperat
 pub enum OperationError {
     TopicNotFound(String),
     PageOperationError(PageOperationError),
-    ProtobufEncodeError(EncodeError),
+    ProtobufDecodeError(prost::DecodeError),
+    ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
     ReadCompressedPageError(ReadCompressedPageError),
     Other(String),
@@ -25,8 +25,14 @@ impl From<PageOperationError> for OperationError {
     }
 }
 
-impl From<EncodeError> for OperationError {
-    fn from(src: EncodeError) -> Self {
+impl From<prost::DecodeError> for OperationError {
+    fn from(src: prost::DecodeError) -> Self {
+        Self::ProtobufDecodeError(src)
+    }
+}
+
+impl From<prost::EncodeError> for OperationError {
+    fn from(src: prost::EncodeError) -> Self {
         Self::ProtobufEncodeError(src)
     }
 }

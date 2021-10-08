@@ -90,6 +90,9 @@ impl From<OperationError> for HttpFailResult {
             OperationError::ReadCompressedPageError(err) => {
                 HttpFailResult::error(format!("ERR:{:?}", err))
             }
+            OperationError::ProtobufDecodeError(err) => {
+                HttpFailResult::error(format!("ERR:{:?}", err))
+            }
         }
     }
 }

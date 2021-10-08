@@ -30,17 +30,19 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
     ) -> Result<Option<MessageProtobufModel>, PageBlobAppendError> {
         let payload_result = self.page_blob_append.get_next_payload().await?;
 
-        let result = match payload_result {
+        match payload_result {
             Some(payload) => {
-                let result: MessageProtobufModel =
-                    prost::Message::decode(payload.as_slice()).unwrap();
-                Some(result)
+                let result: Result<MessageProtobufModel, prost::DecodeError> =
+                    prost::Message::decode(payload.as_slice());
+
+                return match result {
+                    Ok(model) => Ok(Some(model)),
+                    Err(err) => Err(PageBlobAppendError::Corrupted(format!("{:?}", err))),
+                };
             }
 
-            None => None,
+            None => return Ok(None),
         };
-
-        return Ok(result);
     }
 
     pub async fn append(
