@@ -41,7 +41,7 @@ pub async fn execute(
         topic_data
             .pages_cluster
             .write(uncompressed_page.page_id, compressed.as_slice())
-            .await;
+            .await?;
 
         delete_uncompressed_page(topic_data.topic_id.as_str(), uncompressed_page, app).await;
 

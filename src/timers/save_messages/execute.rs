@@ -21,7 +21,7 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
                 .add_info(
                     Some(topic.topic_id.as_str()),
                     "Saving messages",
-                    "Topic data is not found",
+                    format!("Topic data {} is not found", topic.topic_id),
                 )
                 .await;
 

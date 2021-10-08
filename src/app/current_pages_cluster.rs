@@ -24,14 +24,20 @@ impl CurrentPagesCluster {
         }
     }
 
-    pub async fn write(&self, page_id: MessagePageId, payload: &[u8]) {
+    pub async fn write(
+        &self,
+        page_id: MessagePageId,
+        payload: &[u8],
+    ) -> Result<(), ReadCompressedPageError> {
         self.update_current_cluster(page_id).await;
 
         let mut page_cluster = self.data.lock().await;
 
         if let Some(cluster) = &mut *page_cluster {
-            cluster.write(page_id, payload).await;
+            cluster.write(page_id, payload).await?;
         }
+
+        Ok(())
     }
 
     pub async fn read(

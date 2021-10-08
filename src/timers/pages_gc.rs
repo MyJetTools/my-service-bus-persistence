@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     app::{AppContext, TopicData},
     message_pages::MessagePageId,
+    operations::OperationError,
 };
 
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
@@ -15,7 +16,10 @@ pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMod
     }
 }
 
-async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
+async fn timer_tick(
+    app: Arc<AppContext>,
+    topics: Arc<TopicsSnapshotProtobufModel>,
+) -> Result<(), OperationError> {
     for topic_snapshot in &topics.data {
         let active_pages = crate::operations::get_active_pages(topic_snapshot);
 
@@ -46,8 +50,10 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
             topic_data.clone(),
             active_pages.as_slice(),
         )
-        .await;
+        .await?;
     }
+
+    Ok(())
 }
 
 async fn warm_up_pages(

@@ -87,6 +87,9 @@ impl From<OperationError> for HttpFailResult {
             }
             OperationError::ZipError(err) => HttpFailResult::error(format!("ERR:{:?}", err)),
             OperationError::Other(err) => HttpFailResult::error(format!("ERR:{}", err)),
+            OperationError::ReadCompressedPageError(err) => {
+                HttpFailResult::error(format!("ERR:{:?}", err))
+            }
         }
     }
 }

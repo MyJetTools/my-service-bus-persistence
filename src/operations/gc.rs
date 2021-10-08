@@ -31,7 +31,7 @@ pub async fn gc_if_needed(
             .add_info(
                 Some(topic_data.topic_id.as_str()),
                 "Page GC",
-                "Page is garbage collected",
+                format!("Page {} is garbage collected", page_to_gc),
             )
             .await;
     }
