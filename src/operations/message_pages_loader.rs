@@ -15,8 +15,13 @@ pub async fn load_page(
     page_id: MessagePageId,
     page_id_current: bool,
 ) -> MessagesPageData {
-    let uncompressed_page_load_result =
-        load_uncompressed_page(app.clone(), topic_data.topic_id.as_str(), page_id).await;
+    let uncompressed_page_load_result = load_uncompressed_page(
+        app.clone(),
+        topic_data.topic_id.as_str(),
+        page_id,
+        page_id_current,
+    )
+    .await;
 
     match uncompressed_page_load_result {
         Ok(page_data) => {
@@ -46,11 +51,12 @@ async fn load_uncompressed_page(
     app: Arc<AppContext>,
     topic_id: &str,
     page_id: MessagePageId,
+    page_us_current: bool,
 ) -> Result<MessagesPageData, PageBlobAppendError> {
     let mut messages_page_blob =
         MessagesPageBlob::new(topic_id.to_string(), page_id.clone(), app.clone());
 
-    let messages = messages_page_blob.load().await?;
+    let messages = messages_page_blob.load(page_us_current).await?;
 
     let as_tree_map = to_tree_map(messages);
 

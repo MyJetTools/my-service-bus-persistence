@@ -55,7 +55,11 @@ async fn delete_uncompressed_page(topic_id: &str, page: &mut UncompressedPage, a
     let mut attempt_no: usize = 0;
 
     loop {
-        let page_blob = page.blob.messages_stream.page_blob_append.get_page_blob();
+        let page_blob = page
+            .blob
+            .messages_stream
+            .page_blob_append
+            .get_page_blob_mut();
 
         match page_blob.delete().await {
             Ok(()) => {

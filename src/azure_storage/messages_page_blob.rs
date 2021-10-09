@@ -45,7 +45,10 @@ impl MessagesPageBlob {
         }
     }
 
-    pub async fn load(&mut self) -> Result<Vec<MessageProtobufModel>, PageBlobAppendError> {
+    pub async fn load(
+        &mut self,
+        blob_is_current: bool,
+    ) -> Result<Vec<MessageProtobufModel>, PageBlobAppendError> {
         let mut result = Vec::new();
 
         loop {
@@ -60,35 +63,79 @@ impl MessagesPageBlob {
                     result.push(message.unwrap());
                 }
                 Err(err) => {
-                    if let PageBlobAppendError::Corrupted(corrupted_reason) = &err {
+                    self.handle_load_error(blob_is_current, err).await?;
+                    return Ok(result);
+                }
+            }
+        }
+    }
+
+    async fn handle_load_error(
+        &mut self,
+        blob_is_current: bool,
+        err: PageBlobAppendError,
+    ) -> Result<(), PageBlobAppendError> {
+        match err {
+            PageBlobAppendError::Corrupted(corrupted_reason) => {
+                println!(
+                    "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
+                    self.topic_id, self.page_id.value,
+                    corrupted_reason.broken_pos,
+                    corrupted_reason.msg
+                );
+
+                let now = DateTimeAsMicroseconds::now();
+                let conn_string = AzureConnection::from_conn_string(
+                    self.app.settings.messages_connection_string.as_str(),
+                );
+                let mut backup_blob = MyAzurePageBlob::new(
+                    conn_string,
+                    self.topic_id.to_string(),
+                    format!(
+                        "{}.{}",
+                        generate_blob_name(&self.page_id),
+                        &now.to_rfc3339()[0..23]
+                    ),
+                );
+
+                self.init(&mut backup_blob).await?;
+
+                return Ok(());
+            }
+            PageBlobAppendError::NotInitialized => return Err(err),
+
+            PageBlobAppendError::AzureStorageError(azure_error) => match azure_error {
+                my_azure_storage_sdk::AzureStorageError::ContainerNotFound => {
+                    if blob_is_current {
+                        self.messages_stream.init_new_blob().await?;
                         println!(
-                                "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
-                                self.topic_id, self.page_id.value,
-                                corrupted_reason.broken_pos,
-                                corrupted_reason.msg
-                            );
-
-                        let now = DateTimeAsMicroseconds::now();
-                        let conn_string = AzureConnection::from_conn_string(
-                            self.app.settings.messages_connection_string.as_str(),
+                            "New blob is created for {}",
+                            self.messages_stream.get_blob_formal_name()
                         );
-                        let mut backup_blob = MyAzurePageBlob::new(
-                            conn_string,
-                            self.topic_id.to_string(),
-                            format!(
-                                "{}.{}",
-                                generate_blob_name(&self.page_id),
-                                &now.to_rfc3339()[0..23]
-                            ),
-                        );
-
-                        self.init(&mut backup_blob).await?;
-
-                        return Ok(result);
+                        return Ok(());
                     } else {
-                        return Err(err);
+                        return Err(PageBlobAppendError::AzureStorageError(azure_error));
                     }
                 }
+                my_azure_storage_sdk::AzureStorageError::BlobNotFound => {
+                    if blob_is_current {
+                        self.messages_stream.init_new_blob().await?;
+                        println!(
+                            "New blob is created for {}",
+                            self.messages_stream.get_blob_formal_name()
+                        );
+                        return Ok(());
+                    } else {
+                        return Err(PageBlobAppendError::AzureStorageError(azure_error));
+                    }
+                }
+                _ => {
+                    return Err(PageBlobAppendError::AzureStorageError(azure_error));
+                }
+            },
+            _ => {
+                println!("{:?}", err);
+                return Err(err);
             }
         }
     }

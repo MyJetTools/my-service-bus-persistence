@@ -82,7 +82,16 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
         self.page_blob_append.get_blob_position()
     }
 
+    pub async fn init_new_blob(&mut self) -> Result<(), PageBlobAppendError> {
+        self.page_blob_append.init_blob(None).await
+    }
+
     pub async fn init(&mut self, backup_blob: &mut TMyPageBlob) -> Result<(), PageBlobAppendError> {
         self.page_blob_append.init_blob(Some(backup_blob)).await
+    }
+
+    pub fn get_blob_formal_name(&self) -> String {
+        let blob = self.page_blob_append.get_page_blob();
+        format!("{}/{}", blob.get_container_name(), blob.get_blob_name())
     }
 }
