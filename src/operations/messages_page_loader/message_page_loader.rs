@@ -97,7 +97,11 @@ async fn handle_fail_of_loading_compressed_page(
     match result {
         Ok(page) => return page,
         Err(_) => {
-            panic!("Did not handle yet the case when we could not restore uncompressed page");
+            println!(
+                "{}/{}. Could not load from compressed and uncompressed. Creating blank page",
+                topic_data.topic_id, page_id.value
+            );
+            return MessagesPageData::new_blank();
         }
     }
 }

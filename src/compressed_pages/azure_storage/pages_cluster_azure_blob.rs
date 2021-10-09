@@ -33,6 +33,8 @@ impl<T: MyPageBlob> PagesClusterAzureBlob<T> {
             .get_page_alocation_index(&mut self.page_blob, page_id)
             .await?;
 
+        // println!("Allocating for zip {}", toc_index.data_len);
+
         let pages_amount = get_pages_amount_by_size(toc_index.data_len, BLOB_PAGE_SIZE);
 
         let data = self

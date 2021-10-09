@@ -17,7 +17,7 @@ pub struct LoadingTopicHandle {
 pub async fn init(app: Arc<AppContext>) {
     let topics_snapshots = app.topics_snapshot.get().await;
 
-    let mut result = Vec::new();
+    // let mut result = Vec::new();
     let mut sw = StopWatch::new();
 
     sw.start();
@@ -32,13 +32,15 @@ pub async fn init(app: Arc<AppContext>) {
         let active_pages = get_active_pages(topic_snapshot);
 
         for page_id in active_pages.values() {
-            let handler = tokio::spawn(restore_page(
+            restore_page(
                 app.clone(),
                 page_id.clone(),
                 page_id.value >= current_page_id.value,
                 topic_snapshot.topic_id.to_string(),
-            ));
+            )
+            .await;
 
+            /*
             let handler = LoadingTopicHandle {
                 join_handle: handler,
                 topic_id: topic_snapshot.topic_id.clone(),
@@ -46,14 +48,17 @@ pub async fn init(app: Arc<AppContext>) {
 
             let handler = tokio::spawn(handle_init_result(handler));
 
-            result.push(handler)
+
+            result.push(handler)*/
         }
     }
 
-    for itm in result {
-        itm.await.unwrap();
-    }
+    /*
+        for itm in result {
+            itm.await.unwrap();
+        }
 
+    */
     sw.pause();
 
     app.logs
