@@ -21,7 +21,7 @@ pub async fn get_or_restore(
         }
 
         let page_data =
-            super::message_pages_loader::load_page(app, topic_data, page_id, is_current_page).await;
+            super::messages_page_loader::load_page(app, topic_data, page_id, is_current_page).await;
         page_data.update_metrics(&page.metrics);
 
         *page_write_access = page_data;

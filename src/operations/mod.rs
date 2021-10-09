@@ -1,8 +1,8 @@
 mod error;
 pub mod gc;
 mod get_active_pages;
-mod message_pages_loader;
 pub mod messages;
+mod messages_page_loader;
 mod messages_stream;
 pub mod page_compression;
 pub mod pages;

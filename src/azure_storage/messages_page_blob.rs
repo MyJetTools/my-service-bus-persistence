@@ -158,4 +158,8 @@ impl MessagesPageBlob {
     ) -> Result<(), PageBlobAppendError> {
         self.messages_stream.init(backup_blob).await
     }
+
+    pub async fn init_new_blob(&mut self) -> Result<(), PageBlobAppendError> {
+        self.messages_stream.init_new_blob().await
+    }
 }

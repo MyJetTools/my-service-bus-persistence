@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use my_service_bus_shared::protobuf_models::TopicSnapshotProtobufModel;
+use my_service_bus_shared::{
+    protobuf_models::{MessageProtobufModel, TopicSnapshotProtobufModel},
+    MessageId,
+};
 
 use crate::message_pages::MessagePageId;
 
@@ -24,4 +27,16 @@ pub fn get_active_pages(snapshot: &TopicSnapshotProtobufModel) -> HashMap<i64, M
 
 pub fn get_message_page_id(message_id: i64) -> i64 {
     message_id / MESSAGES_PER_PAGE
+}
+
+pub fn vec_of_messages_to_tree_map(
+    msgs: Vec<MessageProtobufModel>,
+) -> BTreeMap<MessageId, MessageProtobufModel> {
+    let mut result = BTreeMap::new();
+
+    for msg in msgs {
+        result.insert(msg.message_id, msg);
+    }
+
+    result
 }
