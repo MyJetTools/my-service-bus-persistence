@@ -24,8 +24,10 @@ impl TopicDataMetrics {
     }
 
     pub fn update_last_saved_duration(&self, duration: Duration) {
-        self.last_saved_duration
-            .store(duration.as_secs(), std::sync::atomic::Ordering::SeqCst);
+        self.last_saved_duration.store(
+            duration.as_millis() as u64,
+            std::sync::atomic::Ordering::SeqCst,
+        );
     }
 
     pub fn get_last_saved_duration(&self) -> Duration {
@@ -33,7 +35,7 @@ impl TopicDataMetrics {
             .last_saved_duration
             .load(std::sync::atomic::Ordering::SeqCst);
 
-        return Duration::from_secs(result);
+        return Duration::from_millis(result);
     }
 
     pub fn update_last_saved_moment(&self, moment: DateTimeAsMicroseconds) {

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
-use crate::app::AppContext;
+use crate::{app::AppContext, utils::StopWatch};
 
 pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
     let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
@@ -39,6 +39,8 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
                 crate::message_pages::MessagesPageData::Uncompressed(uncompressed_page) => {
                     let messages_to_save = uncompressed_page.get_messages_to_save();
 
+                    let mut sw = StopWatch::new();
+                    sw.start();
                     super::save_to_blob(
                         &mut uncompressed_page.blob,
                         data_by_topic.as_ref(),
@@ -46,9 +48,12 @@ async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufMode
                         page.page_id,
                     )
                     .await;
-
+                    sw.pause();
                     uncompressed_page.commit_saved(&messages_to_save);
                     write_access.update_metrics(&page.metrics);
+                    data_by_topic
+                        .metrics
+                        .update_last_saved_duration(sw.duration());
                 }
                 _ => {
                     app.logs
