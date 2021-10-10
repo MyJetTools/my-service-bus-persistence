@@ -1,4 +1,3 @@
-use my_azure_page_blob::MyPageBlob;
 use my_azure_page_blob_append::PageBlobAppendError;
 
 use crate::{

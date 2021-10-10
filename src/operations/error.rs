@@ -10,7 +10,6 @@ pub enum OperationError {
     ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
     ReadCompressedPageError(ReadCompressedPageError),
-    Other(String),
 }
 
 impl From<ReadCompressedPageError> for OperationError {
