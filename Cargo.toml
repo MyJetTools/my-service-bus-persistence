@@ -12,9 +12,7 @@ my-azure-page-blob = { branch = "main", git = "https://github.com/MyJetTools/my-
 my-azure-page-blob-append = { branch = "main", git = "https://github.com/MyJetTools/my-azure-page-blob-append.git" }
 my-service-bus-shared = { branch = "main", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
 
-
 tonic = { version = "0.5.0", features = ["tls", "tls-roots", "prost"] }
-
 hyper = { version = "0.14.7", features = ["full"] }
 tokio = { version = "*", features = ["full"] }
 tokio-util = "*"
@@ -38,7 +36,7 @@ tokio-signal = "*"
 signal-hook = "*"
 rand = "*"
 sysinfo = "*"
-prometheus = "0.12.0"
+prometheus = "0.13.0"
 
 [build-dependencies]
 tonic-build = { version = "0.5.0", features = ["prost"] }
