@@ -35,7 +35,7 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
 
             for topic_snapshot in &result.snapshot.data {
                 let grpc_contract =
-                    super::topic_snapshot_mappers::to_topic_snapshot_grpc_model(topic_snapshot);
+                    super::topic_snapshot_mappers::to_grpc::to_topic_snapshot(topic_snapshot);
                 tx.send(Ok(grpc_contract)).await.unwrap();
             }
         });
@@ -52,7 +52,7 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
         contracts::check_flags(self.app.as_ref())?;
 
         let grpc_contract = request.into_inner();
-        let snapshot = super::topic_snapshot_mappers::to_topics_data_protobuf_model(&grpc_contract);
+        let snapshot = super::topic_snapshot_mappers::to_domain::to_topics_data(&grpc_contract);
 
         self.app.topics_snapshot.update(snapshot).await;
 

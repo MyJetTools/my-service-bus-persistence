@@ -112,6 +112,7 @@ message GetMessagesPageGrpcRequest {
   int64 PageNo = 2;
   int64 FromMessageId = 3;
   int64 ToMessageId = 4;
+  int32 Version = 5;
 }
 
 message DeleteTopicRequest{

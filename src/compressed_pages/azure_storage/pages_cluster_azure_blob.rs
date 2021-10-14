@@ -3,7 +3,7 @@ use my_azure_page_blob_append::page_blob_utils::get_pages_amount_by_size;
 use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
 
 use crate::{
-    compressed_pages::{ClusterPageId, ReadCompressedPageError},
+    compressed_pages::{ClusterPageId, RestoreCompressedPageError},
     message_pages::MessagePageId,
 };
 
@@ -27,7 +27,7 @@ impl<T: MyPageBlob> PagesClusterAzureBlob<T> {
     pub async fn read(
         &mut self,
         page_id: &MessagePageId,
-    ) -> Result<ReadPageResult, ReadCompressedPageError> {
+    ) -> Result<ReadPageResult, RestoreCompressedPageError> {
         let toc_index = self
             .toc
             .get_page_alocation_index(&mut self.page_blob, page_id)

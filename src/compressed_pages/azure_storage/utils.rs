@@ -3,11 +3,11 @@ use std::io::Cursor;
 use my_service_bus_shared::protobuf_models::{MessageProtobufModel, MessagesProtobufModel};
 use zip::result::ZipError;
 
-use super::super::ReadCompressedPageError;
+use super::super::RestoreCompressedPageError;
 
 pub fn decompress_v1(
     payload: &[u8],
-) -> Result<Option<Vec<MessageProtobufModel>>, ReadCompressedPageError> {
+) -> Result<Option<Vec<MessageProtobufModel>>, RestoreCompressedPageError> {
     let unzipped = my_service_bus_shared::page_compressor::zip::decompress_payload(payload)?;
     let protobuf_messages = MessagesProtobufModel::parse(unzipped.as_slice())?;
     Ok(Some(protobuf_messages.messages))

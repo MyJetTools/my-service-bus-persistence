@@ -40,9 +40,9 @@ impl UncompressedPage {
         }
     }
 
-    pub fn get_and_clone_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
+    pub fn get(&self, message_id: MessageId) -> Option<&MessageProtobufModel> {
         let result = self.messages.get(&message_id)?;
-        Some(result.clone())
+        Some(result)
     }
 
     pub fn commit_saved(&mut self, messages: &[MessageProtobufModel]) {
@@ -83,6 +83,16 @@ impl UncompressedPage {
             }
             None => self.max_message_id = Some(id),
         }
+    }
+
+    pub fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+        let mut result = Vec::new();
+
+        for msg in self.messages.values() {
+            result.push(msg.clone());
+        }
+
+        result
     }
 }
 

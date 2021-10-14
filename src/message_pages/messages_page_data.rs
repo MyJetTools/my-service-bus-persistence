@@ -56,9 +56,17 @@ impl MessagesPageData {
         match self {
             MessagesPageData::NotInitialized(_) => Err(PageOperationError::NotInitialized),
             MessagesPageData::Uncompressed(page) => {
-                return Ok(page.get_and_clone_message(message_id));
+                let message = page.get(message_id);
+
+                match message {
+                    Some(msg) => Ok(Some(msg.clone())),
+                    None => Ok(None),
+                }
             }
-            MessagesPageData::Compressed(page) => Ok(page.get(message_id)?),
+            MessagesPageData::Compressed(page) => {
+                let result = page.get(message_id)?;
+                Ok(result)
+            }
             MessagesPageData::Blank(_) => Ok(None),
         }
     }

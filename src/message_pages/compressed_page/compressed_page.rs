@@ -3,9 +3,11 @@ use std::io::{Cursor, Read};
 use my_service_bus_shared::{
     date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel, MessageId,
 };
-use zip::result::ZipError;
+use zip::read::ZipFile;
 
-use super::MessagePageId;
+use crate::message_pages::MessagePageId;
+
+use super::error::ReadCompressedPageError;
 
 pub struct CompressedPage {
     pub zip_data: Vec<u8>,
@@ -30,35 +32,68 @@ impl CompressedPage {
         Some(result)
     }
 
-    pub fn get(&self, message_id: MessageId) -> Result<Option<MessageProtobufModel>, ZipError> {
+    pub fn get(
+        &self,
+        message_id: MessageId,
+    ) -> Result<Option<MessageProtobufModel>, ReadCompressedPageError> {
         let c = Cursor::new(self.zip_data.as_slice());
         let mut zip = zip::ZipArchive::new(c).unwrap();
 
-        let mut unzipped: Vec<u8> = Vec::new();
+        let mut zip_file = zip.by_name(format!("{}", message_id).as_str())?;
 
-        let mut zip_file = zip.by_name(format!("{}", message_id).as_str());
+        let unzipped = extract_file_content(&mut zip_file)?;
 
-        if zip_file.is_err() {
-            return Ok(None);
-        }
-
-        let zip_file = zip_file.as_mut().unwrap();
-
-        let mut buffer = [0u8; 1024 * 1024];
-
-        loop {
-            let read_size = zip_file.read(&mut buffer[..])?;
-            if read_size == 0 {
-                break;
-            }
-
-            unzipped.extend(&buffer[..read_size]);
-        }
-
-        let result = prost::Message::decode(unzipped.as_slice()).unwrap();
+        let result: MessageProtobufModel = prost::Message::decode(unzipped.as_slice()).unwrap();
 
         Ok(Some(result))
     }
+
+    pub fn get_grpc_v0_snapshot<'s>(
+        &self,
+    ) -> Result<Vec<MessageProtobufModel>, ReadCompressedPageError> {
+        let c = Cursor::new(&self.zip_data);
+        let mut zip = zip::ZipArchive::new(c).unwrap();
+
+        let mut result = Vec::new();
+
+        for index in 0..zip.len() {
+            let mut zip_file = zip.by_index(index)?;
+
+            let unzipped = extract_file_content(&mut zip_file)?;
+
+            match prost::Message::decode(unzipped.as_slice()) {
+                Ok(content) => {
+                    result.push(content);
+                }
+                Err(err) => {
+                    println!("Skipping content since protobuf error: {:?}", err);
+                }
+            }
+        }
+
+        Ok(result)
+    }
+}
+
+fn extract_file_content(zip_file: &mut ZipFile) -> Result<Vec<u8>, ReadCompressedPageError> {
+    let mut buffer = [0u8; 1024 * 1024];
+
+    let mut unzipped = Vec::new();
+
+    loop {
+        match zip_file.read(&mut buffer[..]) {
+            Ok(read_size) => {
+                if read_size == 0 {
+                    break;
+                }
+
+                unzipped.extend(&buffer[..read_size]);
+            }
+            Err(err) => return Err(ReadCompressedPageError::Other(format!("{:?}", err))),
+        }
+    }
+
+    Ok(unzipped)
 }
 
 fn get_max_msg_id(page_id: MessagePageId, zip_data: &[u8]) -> Option<(usize, Option<i64>)> {

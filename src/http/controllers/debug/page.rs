@@ -26,7 +26,7 @@ pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, Htt
 
     let page = page.unwrap();
 
-    let data = page.data.lock().await;
+    let data = page.data.read().await;
 
     return Ok(format!("{}", data.get_page_type()).into());
 }

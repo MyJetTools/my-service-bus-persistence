@@ -1,9 +1,9 @@
 use my_azure_page_blob::MyAzurePageBlob;
 use my_azure_storage_sdk::AzureConnection;
 
-use crate::message_pages::MessagePageId;
+use crate::{compressed_pages::RestoreCompressedPageError, message_pages::MessagePageId};
 
-use super::{super::ClusterPageId, super::ReadCompressedPageError, PagesClusterAzureBlob};
+use super::{super::ClusterPageId, PagesClusterAzureBlob};
 
 pub struct PagesClusterBlobRw {
     pub topic_id: String,
@@ -33,7 +33,7 @@ impl PagesClusterBlobRw {
     pub async fn read(
         &mut self,
         page_id: MessagePageId,
-    ) -> Result<Option<Vec<u8>>, ReadCompressedPageError> {
+    ) -> Result<Option<Vec<u8>>, RestoreCompressedPageError> {
         let zip = self.blob_data.read(&page_id).await?;
 
         let zip_archive = recompress_if_needed(zip.get_result())?;
@@ -48,7 +48,7 @@ impl PagesClusterBlobRw {
         &mut self,
         page_id: MessagePageId,
         zip: &[u8],
-    ) -> Result<(), ReadCompressedPageError> {
+    ) -> Result<(), RestoreCompressedPageError> {
         self.blob_data.write(page_id, zip).await?;
         Ok(())
     }
@@ -56,7 +56,7 @@ impl PagesClusterBlobRw {
 
 fn recompress_if_needed<'s>(
     zip_data: &'s [u8],
-) -> Result<Option<Vec<u8>>, ReadCompressedPageError> {
+) -> Result<Option<Vec<u8>>, RestoreCompressedPageError> {
     if super::utils::check_zip_v2(zip_data)? {
         return Ok(Some(zip_data.to_vec()));
     }
