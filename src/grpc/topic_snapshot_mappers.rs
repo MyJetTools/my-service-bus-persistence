@@ -34,7 +34,7 @@ pub fn to_index_range_grpc_models_vec(
 pub fn to_queue_snapshot_grpc_model(src: &QueueSnapshotProtobufModel) -> QueueSnapshotGrpcModel {
     QueueSnapshotGrpcModel {
         queue_id: src.queue_id.to_string(),
-        queue_type: 0, //TODO - посмотреть как эт используется в C#
+        queue_type: src.queue_type,
         ranges: to_index_range_grpc_models_vec(&src.ranges),
     }
 }
@@ -91,6 +91,7 @@ pub fn to_queue_snapshot_protobuf_model(
     QueueSnapshotProtobufModel {
         queue_id: src.queue_id.to_string(),
         ranges: to_queue_range_protobuf_models_vec(&src.ranges),
+        queue_type: src.queue_type() as i32,
     }
 }
 
