@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::{
-    compressed_pages::{ClusterPageId, PagesClusterBlobRw, ReadCompressedPageError},
+    compressed_pages::{ClusterPageId, PagesClusterBlobRw, RestoreCompressedPageError},
     message_pages::MessagePageId,
 };
 
@@ -28,7 +28,7 @@ impl CurrentPagesCluster {
         &self,
         page_id: MessagePageId,
         payload: &[u8],
-    ) -> Result<(), ReadCompressedPageError> {
+    ) -> Result<(), RestoreCompressedPageError> {
         self.update_current_cluster(page_id).await;
 
         let mut page_cluster = self.data.lock().await;
@@ -43,7 +43,7 @@ impl CurrentPagesCluster {
     pub async fn read(
         &self,
         page_id: MessagePageId,
-    ) -> Result<Option<Vec<u8>>, ReadCompressedPageError> {
+    ) -> Result<Option<Vec<u8>>, RestoreCompressedPageError> {
         self.update_current_cluster(page_id).await;
 
         let mut page_cluster = self.data.lock().await;

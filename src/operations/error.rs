@@ -1,6 +1,9 @@
 use zip::result::ZipError;
 
-use crate::{compressed_pages::ReadCompressedPageError, message_pages::PageOperationError};
+use crate::{
+    compressed_pages::RestoreCompressedPageError,
+    message_pages::{PageOperationError, ReadCompressedPageError},
+};
 
 #[derive(Debug)]
 pub enum OperationError {
@@ -9,7 +12,14 @@ pub enum OperationError {
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
+    RestoreCompressedPageError(RestoreCompressedPageError),
     ReadCompressedPageError(ReadCompressedPageError),
+}
+
+impl From<RestoreCompressedPageError> for OperationError {
+    fn from(src: RestoreCompressedPageError) -> Self {
+        Self::RestoreCompressedPageError(src)
+    }
 }
 
 impl From<ReadCompressedPageError> for OperationError {

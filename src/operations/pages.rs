@@ -14,7 +14,7 @@ pub async fn get_or_restore(
     let page = topic_data.try_get_or_create_uninitialized(page_id).await;
 
     {
-        let mut page_write_access = page.data.lock().await;
+        let mut page_write_access = page.data.write().await;
 
         if page_write_access.is_initialized() {
             return page.clone();

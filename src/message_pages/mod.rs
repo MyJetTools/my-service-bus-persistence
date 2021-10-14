@@ -9,7 +9,7 @@ mod uncompressed_page;
 
 pub mod utils;
 
-pub use compressed_page::CompressedPage;
+pub use compressed_page::{CompressedPage, ReadCompressedPageError};
 pub use messages_page::MessagesPage;
 pub use messages_page_data::MessagesPageData;
 pub use page_id::MessagePageId;

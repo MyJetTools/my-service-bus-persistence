@@ -23,7 +23,7 @@ pub async fn gc_if_needed(
     for page_to_gc in pages_to_gc.drain(..) {
         let removed_page = topic_data.remove_page(page_to_gc).await;
         if let Some(page) = removed_page {
-            let mut write_access = page.data.lock().await;
+            let mut write_access = page.data.write().await;
             super::page_compression::execute(topic_data.clone(), &mut *write_access, app).await?;
         }
 

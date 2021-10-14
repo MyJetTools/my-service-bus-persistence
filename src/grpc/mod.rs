@@ -1,6 +1,7 @@
+mod compressed_page_compiler;
 mod contracts;
+mod messages_mappers;
 mod messages_persistence_grpc;
-mod messages_persistence_mappers;
 pub mod server;
 mod topic_snapshot_grpc;
 mod topic_snapshot_mappers;

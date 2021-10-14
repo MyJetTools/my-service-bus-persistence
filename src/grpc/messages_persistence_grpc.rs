@@ -1,4 +1,4 @@
-use crate::grpc::messages_persistence_mappers::MsgRange;
+use crate::grpc::compressed_page_compiler::MsgRange;
 use crate::message_pages::MessagePageId;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
@@ -31,7 +31,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let topic_data = self.app.topics_data_list.get(&req.topic_id).await;
 
         if topic_data.is_none() {
-            let result = super::messages_persistence_mappers::get_none_message();
+            let result = super::compressed_page_compiler::get_none_message();
             return Ok(tonic::Response::new(result));
         }
 
@@ -42,24 +42,22 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let messages_page = topic_data.as_ref().get(page_id).await;
 
         if messages_page.is_none() {
-            let result = super::messages_persistence_mappers::get_none_message();
+            let result = super::compressed_page_compiler::get_none_message();
             return Ok(tonic::Response::new(result));
         }
 
         let messages_page = messages_page.unwrap();
 
-        let read_access = messages_page.data.lock().await;
+        let read_access = messages_page.data.read().await;
 
         let message = read_access.get_message(req.message_id).unwrap();
 
         if message.is_none() {
-            let result = super::messages_persistence_mappers::get_none_message();
+            let result = super::compressed_page_compiler::get_none_message();
             return Ok(tonic::Response::new(result));
         }
 
-        let result = super::messages_persistence_mappers::to_message_grpc_contract(
-            message.as_ref().unwrap(),
-        );
+        let result = super::messages_mappers::to_grpc::to_message(message.as_ref().unwrap());
         return Ok(tonic::Response::new(result));
     }
 
@@ -110,16 +108,22 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let max_payload_size = app.get_max_payload_size();
 
-            let mut compressed_data = super::messages_persistence_mappers::get_compressed_page_v2(
-                topic_data.topic_id.as_str(),
-                page.as_ref(),
-                max_payload_size,
-                range,
-            )
-            .await
-            .unwrap();
+            let zip_payload = if req.version == 1 {
+                super::compressed_page_compiler::get_v1(
+                    topic_data.topic_id.as_str(),
+                    page.as_ref(),
+                    max_payload_size,
+                    range,
+                )
+                .await
+                .unwrap()
+            } else {
+                super::compressed_page_compiler::get_v0(page.as_ref(), max_payload_size)
+                    .await
+                    .unwrap()
+            };
 
-            for chunk in compressed_data.drain(..) {
+            for chunk in zip_payload {
                 let grpc_contract = CompressedMessageChunkModel { chunk };
                 tx.send(Ok(grpc_contract)).await.unwrap();
             }

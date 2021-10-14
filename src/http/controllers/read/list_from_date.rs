@@ -55,7 +55,7 @@ pub async fn get(ctx: HttpContext, app: &AppContext) -> Result<HttpOkResult, Htt
 
     let page = page.unwrap();
 
-    let read_access = page.data.lock().await;
+    let read_access = page.data.read().await;
 
     while let Some(message) = read_access.get_message(message_id).unwrap() {
         messages.push(message);
