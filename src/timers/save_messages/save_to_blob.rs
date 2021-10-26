@@ -3,8 +3,8 @@ use my_service_bus_shared::{
 };
 
 use crate::{
-    app::TopicData, azure_storage::messages_page_blob::MessagesPageBlob,
-    message_pages::MessagePageId, utils::StopWatch,
+    app::TopicData, message_pages::MessagePageId,
+    uncompressed_messages::messages_page_blob::MessagesPageBlob, utils::StopWatch,
 };
 
 pub async fn save_to_blob(

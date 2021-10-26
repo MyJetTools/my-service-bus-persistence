@@ -1,8 +1,8 @@
 use my_azure_page_blob_append::PageBlobAppendError;
 
 use crate::{
-    azure_storage::messages_page_blob::MessagesPageBlob,
     message_pages::{MessagePageId, MessagesPageData},
+    uncompressed_messages::messages_page_blob::MessagesPageBlob,
 };
 
 pub async fn load(

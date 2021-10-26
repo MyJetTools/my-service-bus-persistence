@@ -4,7 +4,9 @@ use my_service_bus_shared::{
     protobuf_models::MessageProtobufModel, queue_with_intervals::QueueWithIntervals, MessageId,
 };
 
-use crate::{azure_storage::messages_page_blob::MessagesPageBlob, message_pages::MessagePageId};
+use crate::{
+    message_pages::MessagePageId, uncompressed_messages::messages_page_blob::MessagesPageBlob,
+};
 
 pub struct UncompressedPage {
     pub page_id: MessagePageId,

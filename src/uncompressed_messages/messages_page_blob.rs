@@ -11,8 +11,9 @@ use crate::{
     app::{AppContext, AppError},
     azure_storage::consts::generate_blob_name,
     message_pages::MessagePageId,
-    operations::MessagesStream,
 };
+
+use super::{MessagesStream, ReadingUncompressedMessagesError};
 
 const BLOB_AUTO_RESSIZE_IN_PAGES: usize = 16384;
 
@@ -73,37 +74,30 @@ impl MessagesPageBlob {
     async fn handle_load_error(
         &mut self,
         blob_is_current: bool,
+        err: ReadingUncompressedMessagesError,
+    ) -> Result<(), PageBlobAppendError> {
+        match err {
+            ReadingUncompressedMessagesError::CorruptedContent { reason, pos } => {
+                return self.handle_corrupted(pos, reason).await;
+            }
+            ReadingUncompressedMessagesError::PageBlobAppendError(err) => {
+                return self
+                    .handle_page_blob_append_error(blob_is_current, err)
+                    .await;
+            }
+        }
+    }
+
+    async fn handle_page_blob_append_error(
+        &mut self,
+        blob_is_current: bool,
         err: PageBlobAppendError,
     ) -> Result<(), PageBlobAppendError> {
         match err {
-            PageBlobAppendError::Corrupted(corrupted_reason) => {
-                println!(
-                    "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
-                    self.topic_id, self.page_id.value,
-                    corrupted_reason.broken_pos,
-                    corrupted_reason.msg
-                );
-
-                let now = DateTimeAsMicroseconds::now();
-                let conn_string = AzureConnection::from_conn_string(
-                    self.app.settings.messages_connection_string.as_str(),
-                );
-                let mut backup_blob = MyAzurePageBlob::new(
-                    conn_string,
-                    self.topic_id.to_string(),
-                    format!(
-                        "{}.{}",
-                        generate_blob_name(&self.page_id),
-                        &now.to_rfc3339()[0..23]
-                    ),
-                );
-
-                self.init(&mut backup_blob).await?;
-
-                return Ok(());
-            }
             PageBlobAppendError::NotInitialized => return Err(err),
-
+            PageBlobAppendError::Corrupted(err) => {
+                return self.handle_corrupted(err.broken_pos, err.msg).await;
+            }
             PageBlobAppendError::AzureStorageError(azure_error) => match azure_error {
                 my_azure_storage_sdk::AzureStorageError::ContainerNotFound => {
                     if blob_is_current {
@@ -138,6 +132,37 @@ impl MessagesPageBlob {
                 return Err(err);
             }
         }
+    }
+
+    async fn handle_corrupted(
+        &mut self,
+        pos: usize,
+        reason: String,
+    ) -> Result<(), PageBlobAppendError> {
+        println!(
+            "Can not load from uncompressed page {}/{}. Blob is corrupted. We start writing at the position {}. Reason: {:?}",
+            self.topic_id, self.page_id.value,
+            pos,
+            reason
+        );
+
+        let now = DateTimeAsMicroseconds::now();
+        let conn_string = AzureConnection::from_conn_string(
+            self.app.settings.messages_connection_string.as_str(),
+        );
+        let mut backup_blob = MyAzurePageBlob::new(
+            conn_string,
+            self.topic_id.to_string(),
+            format!(
+                "{}.{}",
+                generate_blob_name(&self.page_id),
+                &now.to_rfc3339()[0..23]
+            ),
+        );
+
+        self.init(&mut backup_blob).await?;
+
+        return Ok(());
     }
 
     pub async fn save_messages(

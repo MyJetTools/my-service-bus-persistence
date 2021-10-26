@@ -2,6 +2,8 @@ use my_azure_page_blob::*;
 use my_azure_page_blob_append::{PageBlobAppend, PageBlobAppendError};
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
+use super::ReadingUncompressedMessagesError;
+
 pub struct MessagesStream<TMyPageBlob: MyPageBlob> {
     pub page_blob_append: PageBlobAppend<TMyPageBlob>,
 }
@@ -27,7 +29,7 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
 
     pub async fn get_next_message(
         &mut self,
-    ) -> Result<Option<MessageProtobufModel>, PageBlobAppendError> {
+    ) -> Result<Option<MessageProtobufModel>, ReadingUncompressedMessagesError> {
         loop {
             let pos = self.page_blob_append.get_blob_position();
             let getting_payload_result = self.page_blob_append.get_next_payload().await?;
@@ -45,11 +47,15 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
                         }
                         Err(err) => {
                             let page_blob = self.page_blob_append.get_page_blob();
-                            println!(
-                                "[{}/{}]Can not decode message at position: {} with size {}. Skipping it Err: {:?}",
-                                page_blob.get_container_name(),
-                                page_blob.get_blob_name(),
-                                pos, payload_size, err
+
+                            return Err(ReadingUncompressedMessagesError::CorruptedContent{
+                                pos,
+                                reason:format!(
+                                    "[{}/{}]Can not decode message at position: {} with size {}. Skipping it Err: {:?}",
+                                    page_blob.get_container_name(),
+                                    page_blob.get_blob_name(),
+                                    pos, payload_size, err)
+                             },
                             );
                         }
                     };
