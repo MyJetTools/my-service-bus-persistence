@@ -1,7 +1,7 @@
 use std::{collections::HashMap, usize};
 
 use chrono::{Datelike, Timelike};
-use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use super::MsgData;
 
@@ -136,7 +136,7 @@ impl IndexByMinuteUtils {
 #[cfg(test)]
 mod tests {
 
-    use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+    use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use super::IndexByMinuteUtils;
 

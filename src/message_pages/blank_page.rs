@@ -1,4 +1,4 @@
-use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 pub struct BlankPage {
     pub last_access: DateTimeAsMicroseconds,

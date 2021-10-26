@@ -3,9 +3,8 @@ use std::sync::Arc;
 use my_azure_page_blob::MyAzurePageBlob;
 use my_azure_page_blob_append::PageBlobAppendError;
 use my_azure_storage_sdk::AzureConnection;
-use my_service_bus_shared::{
-    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel,
-};
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{
     app::{AppContext, AppError},
