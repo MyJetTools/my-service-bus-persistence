@@ -1,8 +1,7 @@
 use std::io::{Cursor, Read};
 
-use my_service_bus_shared::{
-    date_time::DateTimeAsMicroseconds, protobuf_models::MessageProtobufModel, MessageId,
-};
+use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 use zip::read::ZipFile;
 
 use crate::message_pages::MessagePageId;

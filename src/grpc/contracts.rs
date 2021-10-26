@@ -1,6 +1,7 @@
 use crate::app::AppContext;
 
 use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessagesProtobufContract {
@@ -24,9 +25,7 @@ impl BclToUnixMicroseconds for crate::persistence_grpc::DateTime {
         )
     }
 
-    fn to_date_time(
-        &self,
-    ) -> Result<my_service_bus_shared::date_time::DateTimeAsMicroseconds, String> {
+    fn to_date_time(&self) -> Result<DateTimeAsMicroseconds, String> {
         my_service_bus_shared::bcl::bcl_date_time_utils::to_date_time(self)
     }
 

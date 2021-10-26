@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize};
 
-use my_service_bus_shared::date_time::DateTimeAsMicroseconds;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 pub struct PageMetrics {
     last_access: AtomicI64,

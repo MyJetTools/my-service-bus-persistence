@@ -2,8 +2,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     app::{AppContext, TopicData},
-    azure_storage::messages_page_blob::MessagesPageBlob,
     message_pages::{MessagePageId, MessagesPageData},
+    uncompressed_messages::messages_page_blob::MessagesPageBlob,
 };
 
 pub async fn load_page(

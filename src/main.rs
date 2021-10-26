@@ -11,6 +11,7 @@ mod operations;
 mod settings;
 mod timers;
 mod toipics_snapshot;
+mod uncompressed_messages;
 mod utils;
 use toipics_snapshot::current_snapshot::TopicsSnapshotData;
 

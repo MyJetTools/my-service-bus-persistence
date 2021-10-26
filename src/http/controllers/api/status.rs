@@ -5,10 +5,10 @@ use crate::{
     http::{HttpFailResult, HttpOkResult},
     utils::duration_to_string,
 };
-use my_service_bus_shared::{
-    date_time::DateTimeAsMicroseconds,
-    protobuf_models::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
+use my_service_bus_shared::protobuf_models::{
+    QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
 };
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 use serde::{Deserialize, Serialize};
 
 use sysinfo::SystemExt;

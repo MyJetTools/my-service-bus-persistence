@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
-use crate::azure_storage::messages_page_blob::MessagesPageBlob;
+use crate::uncompressed_messages::messages_page_blob::MessagesPageBlob;
 
 use super::{
     BlankPage, CompressedPage, MessagePageId, PageMetrics, PageOperationError, UncompressedPage,
