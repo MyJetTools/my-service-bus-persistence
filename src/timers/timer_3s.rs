@@ -11,6 +11,10 @@ pub fn start(app: Arc<AppContext>) -> JoinHandle<()> {
 pub async fn three_sec_loop(app: Arc<AppContext>) {
     let duration = Duration::from_secs(3);
 
+    while !app.is_initialized() {
+        tokio::time::sleep(duration).await;
+    }
+
     loop {
         let topics = app.topics_snapshot.get().await;
 

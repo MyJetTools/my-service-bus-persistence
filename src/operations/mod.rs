@@ -1,3 +1,4 @@
+pub mod data_initializer;
 mod error;
 pub mod gc;
 mod get_active_pages;
