@@ -13,7 +13,7 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
         page_blob: TMyPageBlob,
         cache_capacity_in_pages: usize,
         blob_auto_resize_in_pages: usize,
-        max_payload_size_protection: i32,
+        max_payload_size_protection: u32,
     ) -> Self {
         let settings = my_azure_page_blob_append::AppendPageBlobSettings {
             blob_auto_resize_in_pages,
@@ -30,25 +30,24 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
     pub async fn get_next_message(
         &mut self,
     ) -> Result<Option<MessageProtobufModel>, ReadingUncompressedMessagesError> {
-        loop {
-            let pos = self.page_blob_append.get_blob_position();
-            let getting_payload_result = self.page_blob_append.get_next_payload().await?;
+        let pos = self.page_blob_append.get_blob_position();
+        let getting_payload_result = self.page_blob_append.get_next_payload().await?;
 
-            match getting_payload_result {
-                Some(payload) => {
-                    let payload_size = payload.len();
+        match getting_payload_result {
+            Some(payload) => {
+                let payload_size = payload.len();
 
-                    let result: Result<MessageProtobufModel, prost::DecodeError> =
-                        prost::Message::decode(payload.as_slice());
+                let result: Result<MessageProtobufModel, prost::DecodeError> =
+                    prost::Message::decode(payload.as_slice());
 
-                    match result {
-                        Ok(model) => {
-                            return Ok(Some(model));
-                        }
-                        Err(err) => {
-                            let page_blob = self.page_blob_append.get_page_blob();
+                match result {
+                    Ok(model) => {
+                        return Ok(Some(model));
+                    }
+                    Err(err) => {
+                        let page_blob = self.page_blob_append.get_page_blob();
 
-                            return Err(ReadingUncompressedMessagesError::CorruptedContent{
+                        return Err(ReadingUncompressedMessagesError::CorruptedContent{
                                 pos,
                                 reason:format!(
                                     "[{}/{}]Can not decode message at position: {} with size {}. Skipping it Err: {:?}",
@@ -57,13 +56,12 @@ impl<TMyPageBlob: MyPageBlob> MessagesStream<TMyPageBlob> {
                                     pos, payload_size, err)
                              },
                             );
-                        }
-                    };
-                }
+                    }
+                };
+            }
 
-                None => return Ok(None),
-            };
-        }
+            None => return Ok(None),
+        };
     }
 
     pub async fn append(

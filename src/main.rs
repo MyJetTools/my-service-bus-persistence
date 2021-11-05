@@ -56,7 +56,7 @@ async fn main() {
 }
 
 async fn run_app(app: Arc<AppContext>) {
-    let init_handler = tokio::spawn(azure_storage::data_initializer::init(app.clone()));
+    let init_handler = tokio::spawn(operations::data_initializer::init(app.clone()));
 
     timers::timer_3s::start(app.clone());
 
