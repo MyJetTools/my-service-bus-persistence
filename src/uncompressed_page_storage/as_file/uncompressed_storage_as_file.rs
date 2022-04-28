@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, io::SeekFrom};
 
+use my_service_bus_shared::MessageId;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
@@ -86,6 +87,14 @@ impl UncompressedPageStorageAsFile {
         Ok(result)
     }
 
+    pub async fn get_payloads(
+        &self,
+        message_from: MessageId,
+        message_to: MessageId,
+    ) -> BTreeMap<usize, Vec<u8>> {
+        todo!("Implement");
+    }
+
     pub async fn upload_payload(
         &mut self,
         payload_to_upload: PayloadsToUploadContainer,
@@ -105,6 +114,7 @@ impl UncompressedPageStorageAsFile {
             pages_to_update.insert(page_no, ());
         }
 
+        /////
         Ok(())
     }
 }

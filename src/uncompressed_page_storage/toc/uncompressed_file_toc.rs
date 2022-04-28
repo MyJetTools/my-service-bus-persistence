@@ -36,7 +36,7 @@ impl UncompressedFileToc {
     }
 
     fn init_write_position(&mut self) {
-        for file_no in 0..100_001 {
+        for file_no in 0..100_000 {
             let pos = self.get_position(file_no);
             let last_position = pos.last_position();
 

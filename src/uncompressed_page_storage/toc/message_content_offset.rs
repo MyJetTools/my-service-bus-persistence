@@ -5,8 +5,8 @@ pub struct MessageContentOffset {
 
 impl MessageContentOffset {
     pub fn serialize(&self, dest: &mut [u8]) {
-        serialize_value(self.offset as u32, dest);
-        serialize_value(self.size as u32, dest);
+        serialize_value(self.offset as u32, &mut dest[0..4]);
+        serialize_value(self.size as u32, &mut dest[4..8]);
     }
 
     pub fn deserialize(src: &[u8]) -> Self {
