@@ -4,8 +4,7 @@ use my_service_bus_shared::page_id::PageId;
 use rust_extensions::StopWatch;
 
 use crate::{
-    app::AppContext,
-    azure_storage::consts::SYSTEM_BLOB_NAME,
+    app::{file_name_generators::SYSTEM_FILE_NAME, AppContext},
     message_pages::{utils::get_active_pages, MessagePageId},
 };
 
@@ -17,7 +16,7 @@ pub async fn init(app: Arc<AppContext>) {
     sw.start();
 
     for topic_snapshot in &topics_snapshots.snapshot.data {
-        if topic_snapshot.topic_id == SYSTEM_BLOB_NAME {
+        if topic_snapshot.topic_id == SYSTEM_FILE_NAME {
             continue;
         }
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use my_service_bus_shared::{page_id::PageId, MessageId};
 
@@ -60,7 +60,7 @@ impl YearlyIndexByMinute {
         None
     }
 
-    pub async fn flush_to_storage(&mut self, page_id: PageBlobPageId) {
+    pub async fn flush_to_storage(&mut self) {
         while let Some((page_id, content)) = self.get_page_content_to_sync_if_needed() {
             self.storage.save(content, &page_id).await;
             self.pages_to_save.remove(&page_id.value);

@@ -105,7 +105,7 @@ impl AppContext {
         page_id: PageId,
     ) -> Result<UncompressedPageStorage, UncompressedStorageError> {
         if self.settings.messages_connection_string.starts_with("/") {
-            let blob_name = crate::azure_storage::consts::generate_uncompressed_blob_name(&page_id);
+            let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
             let file_name = if self.settings.messages_connection_string.ends_with('/') {
                 format!("{}", self.settings.messages_connection_string)
             } else {

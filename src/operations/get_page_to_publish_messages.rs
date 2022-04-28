@@ -7,7 +7,7 @@ use crate::{
     uncompressed_page_storage::UncompressedPageStorage,
 };
 
-pub async fn get_or_restore_page(
+pub async fn get_page_to_publish_messages(
     app: &AppContext,
     topic_data: &TopicData,
     page_id: PageId,

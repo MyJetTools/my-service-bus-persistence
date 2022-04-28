@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rust_extensions::{MyTimerTick, StopWatch};
 
-use crate::app::AppContext;
+use crate::{app::AppContext, topic_data::TopicData};
 
 const MAX_PERSIST_SIZE: usize = 1024 * 1024 * 4;
 
@@ -35,6 +35,8 @@ impl MyTimerTick for SaveMessagesTimer {
             }
 
             let topic_data = topic_data.unwrap();
+
+            flush_minute_index_data(topic_data.as_ref()).await;
 
             let pages_with_data_to_save = topic_data.pages_list.get_pages_with_data_to_save().await;
 
@@ -87,5 +89,13 @@ impl MyTimerTick for SaveMessagesTimer {
                 topic_data.metrics.update_last_saved_duration(duration);
             }
         }
+    }
+}
+
+async fn flush_minute_index_data(topic_data: &TopicData) {
+    let mut index_by_minute = topic_data.yearly_index_by_minute.lock().await;
+
+    for item in index_by_minute.values_mut() {
+        item.flush_to_storage().await;
     }
 }

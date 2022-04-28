@@ -91,7 +91,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 .await
                 .unwrap();
 
-            let page = crate::operations::get_or_restore_page(
+            let page = crate::operations::get_page_to_publish_messages(
                 app.as_ref(),
                 topic_data.as_ref(),
                 page_id.value,
@@ -146,7 +146,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let grpc_contract =
             super::messages_mappers::unzip_and_deserialize(&mut request.into_inner()).await?;
 
-        let topic_data = crate::operations::get_or_create_topic_data(
+        let topic_data = crate::operations::get_topic_data_to_publish_messages(
             self.app.as_ref(),
             grpc_contract.topic_id.as_str(),
         )
@@ -169,8 +169,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         &self,
         _: tonic::Request<DeleteTopicRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
-        todo!("Not Implemented");
-
+        todo!("Not Implemented yet");
         //   return Ok(tonic::Response::new(()));
     }
 }
