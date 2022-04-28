@@ -1,126 +1,85 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::atomic::AtomicBool};
 
-use my_service_bus_shared::{
-    protobuf_models::MessageProtobufModel, queue_with_intervals::QueueWithIntervals, MessageId,
-};
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
+use tokio::sync::{Mutex, RwLock};
 
-use crate::{
-    message_pages::MessagePageId, uncompressed_messages::messages_page_blob::MessagesPageBlob,
-};
+use crate::uncompressed_page_storage::UncompressedPageStorage;
 
-pub struct UncompressedPage {
-    pub page_id: MessagePageId,
-    pub messages: BTreeMap<i64, MessageProtobufModel>,
-    pub queue_to_save: QueueWithIntervals,
-    pub min_message_id: Option<i64>,
-    pub max_message_id: Option<i64>,
-    pub blob: MessagesPageBlob,
+use super::{MessagesPageData, PageMetrics};
+
+pub struct UncompressedMessagesPage {
+    pub pages: RwLock<MessagesPageData>,
+    pub page_id: PageId,
+    pub metrics: PageMetrics,
+
+    pub initialized: AtomicBool,
 }
 
-impl UncompressedPage {
-    pub fn new(
-        page_id: MessagePageId,
-        messages: BTreeMap<i64, MessageProtobufModel>,
-        blob: MessagesPageBlob,
-    ) -> Self {
-        let min_max = get_min_max(&&messages);
+impl UncompressedMessagesPage {
+    pub fn brand_new(page_id: PageId) -> Self {
         Self {
+            pages: RwLock::new(MessagesPageData::new(page_id, BTreeMap::new())),
             page_id,
-            messages: messages,
-            queue_to_save: QueueWithIntervals::new(),
-            max_message_id: min_max.0,
-            min_message_id: min_max.1,
-            blob,
+            metrics: PageMetrics::new(),
+            initialized: AtomicBool::new(false),
         }
     }
 
-    pub fn add(&mut self, messages: Vec<MessageProtobufModel>) {
-        for msg in messages {
-            self.queue_to_save.enqueue(msg.message_id);
-            self.update_min_max(msg.message_id);
-            self.messages.insert(msg.message_id, msg);
-        }
+    pub fn has_messages_to_save(&self) -> bool {
+        self.metrics.get_messages_amount_to_save() > 0
     }
 
-    pub fn get(&self, message_id: MessageId) -> Option<&MessageProtobufModel> {
-        let result = self.messages.get(&message_id)?;
-        Some(result)
+    pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
+        let messages_to_save = {
+            let mut write_access = self.pages.write().await;
+
+            write_access.add(messages);
+
+            write_access.queue_to_save.len() as usize
+        };
+
+        self.metrics
+            .update_messages_amount_to_save(messages_to_save);
+
+        self.metrics.update_last_access_to_now();
     }
 
-    pub fn commit_saved(&mut self, messages: &[MessageProtobufModel]) {
-        for msg in messages {
-            self.queue_to_save.remove(msg.message_id);
-        }
+    pub async fn get_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
+        let read_access = self.pages.read().await;
+        let result = read_access.get(message_id)?;
+        return result.clone().into();
     }
 
-    pub fn get_messages_to_save(&self) -> Vec<MessageProtobufModel> {
+    pub async fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+        let read_access = self.pages.read().await;
+
+        return read_access.get_grpc_v0_snapshot();
+    }
+
+    pub async fn get_messages_to_persist(&self, max_size: usize) -> Vec<MessageProtobufModel> {
+        let read_access = self.pages.read().await;
+
         let mut result = Vec::new();
 
-        for msg_id in &self.queue_to_save {
-            let msg = self.messages.get(&msg_id);
+        let mut messages_size = 0;
 
-            if let Some(msg) = msg {
-                result.push(msg.clone());
+        for msg_id in &read_access.queue_to_save {
+            if let Some(msg) = read_access.get(msg_id) {
+                if result.len() == 0 || messages_size + msg.data.len() <= max_size {
+                    messages_size += msg.data.len();
+                    result.push(msg.clone());
+                }
             }
         }
 
         result
     }
 
-    pub fn update_min_max(&mut self, id: i64) {
-        match self.min_message_id {
-            Some(value) => {
-                if value > id {
-                    self.min_message_id = Some(id)
-                }
-            }
-            None => self.min_message_id = Some(id),
-        }
+    pub async fn confirm_persisted(&self, messages: &[MessageProtobufModel]) {
+        let mut write_access = self.pages.write().await;
 
-        match self.max_message_id {
-            Some(value) => {
-                if value < id {
-                    self.max_message_id = Some(id)
-                }
-            }
-            None => self.max_message_id = Some(id),
+        for message in messages {
+            write_access.queue_to_save.remove(message.message_id);
         }
     }
-
-    pub fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
-        let mut result = Vec::new();
-
-        for msg in self.messages.values() {
-            result.push(msg.clone());
-        }
-
-        result
-    }
-}
-
-pub fn get_min_max(messages: &BTreeMap<i64, MessageProtobufModel>) -> (Option<i64>, Option<i64>) {
-    let mut min: Option<i64> = None;
-    let mut max: Option<i64> = None;
-
-    for id in messages.keys() {
-        match min {
-            Some(value) => {
-                if value < *id {
-                    min = Some(*id)
-                }
-            }
-            None => min = Some(*id),
-        }
-
-        match max {
-            Some(value) => {
-                if value > *id {
-                    max = Some(*id)
-                }
-            }
-            None => max = Some(*id),
-        }
-    }
-
-    (min, max)
 }

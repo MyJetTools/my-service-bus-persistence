@@ -1,9 +1,8 @@
 mod api;
 mod debug;
-mod files;
 mod metrics;
-mod read;
+mod prometheus_controller;
+mod read_controller;
 pub mod router;
 mod static_content;
-mod swagger;
-mod topic;
+mod topic_controller;

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use my_azure_storage_sdk::AzureConnection;
+use my_azure_storage_sdk::AzureStorageConnection;
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 use tokio::sync::Mutex;
 
@@ -11,11 +11,11 @@ use super::IndexByMinuteHandler;
 pub struct IndexesByMinute {
     pub handlers: Mutex<HashMap<String, Arc<IndexByMinuteHandler>>>,
     logs: Arc<Logs>,
-    azure_connection: AzureConnection,
+    azure_connection: Arc<AzureStorageConnection>,
 }
 
 impl IndexesByMinute {
-    pub fn new(azure_connection: AzureConnection, logs: Arc<Logs>) -> Self {
+    pub fn new(azure_connection: Arc<AzureStorageConnection>, logs: Arc<Logs>) -> Self {
         Self {
             handlers: Mutex::new(HashMap::new()),
             logs,

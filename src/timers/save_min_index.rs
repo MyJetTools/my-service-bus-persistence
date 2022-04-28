@@ -1,23 +1,32 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
+use rust_extensions::MyTimerTick;
 
 use crate::app::AppContext;
 
-pub async fn execute(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
-    let timer_result = tokio::spawn(timer_tick(app.clone(), topics)).await;
+pub struct SaveMinIndexTimer {
+    app: Arc<AppContext>,
+}
 
-    if let Err(err) = timer_result {
-        app.logs.add_fatal_error("save_min_index_timer", err).await;
+impl SaveMinIndexTimer {
+    pub fn new(app: Arc<AppContext>) -> Self {
+        Self { app }
     }
 }
 
-async fn timer_tick(app: Arc<AppContext>, topics: Arc<TopicsSnapshotProtobufModel>) {
-    for topic in &topics.data {
-        let index_handler = app.index_by_minute.get(topic.topic_id.as_str()).await;
+#[async_trait::async_trait]
+impl MyTimerTick for SaveMinIndexTimer {
+    async fn tick(&self) {
+        todo!("Uncomment");
+        /*
+        let topics_snapshot = self.app.topics_snapshot.get().await;
+        for topic in &topics_snapshot.snapshot.data {
+            let index_handler = self.app.index_by_minute.get(topic.topic_id.as_str()).await;
 
-        index_handler
-            .save_to_storage(&app.index_by_minute_utils)
-            .await;
+            index_handler
+                .save_to_storage(&self.app.index_by_minute_utils)
+                .await;
+        }
+         */
     }
 }

@@ -1,13 +1,12 @@
+use super::contracts;
+use super::server::MyServicePersistenceGrpc;
 use crate::persistence_grpc::my_service_bus_queue_persistence_grpc_service_server::MyServiceBusQueuePersistenceGrpcService;
 use crate::persistence_grpc::*;
-use anyhow::*;
+
 use futures_core::Stream;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tonic::{Response, Status};
-
-use super::contracts;
-use super::server::MyServicePersistenceGrpc;
 
 #[tonic::async_trait]
 impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
@@ -56,6 +55,6 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
 
         self.app.topics_snapshot.update(snapshot).await;
 
-        return Ok(tonic::Response::new(()));
+        Ok(tonic::Response::new(()))
     }
 }

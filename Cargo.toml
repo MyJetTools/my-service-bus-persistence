@@ -2,33 +2,39 @@
 name = "my-sb-persistence"
 version = "1.1.6"
 authors = ["Andrey <amigin@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-my-azure-storage-sdk = { branch = "main", git = "https://github.com/MyJetTools/my-azure-storage.git" }
-my-azure-page-blob = { branch = "main", git = "https://github.com/MyJetTools/my-azure-page-blob.git" }
-my-azure-page-blob-append = { branch = "main", git = "https://github.com/MyJetTools/my-azure-page-blob-append.git" }
-my-service-bus-shared = { branch = "main", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
+my-azure-storage-sdk = { branch = "0.1.1", git = "https://github.com/MyJetTools/my-azure-storage.git" }
+my-azure-page-blob = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-azure-page-blob.git" }
+my-azure-page-blob-append = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-azure-page-blob-append.git" }
+my-service-bus-shared = { branch = "0.1.1", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
+my-azure-page-blob-random-access = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-page-blob-random-access.git" }
+
+my-http-server = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server.git" }
+my-http-server-swagger = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server-swagger.git" }
+my-http-server-controllers = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server-controllers.git" }
+
 rust-extensions = { branch = "main", git = "https://github.com/MyJetTools/rust-extensions.git" }
-tonic = { version = "0.5.0", features = ["tls", "tls-roots", "prost"] }
-hyper = { version = "0.14.7", features = ["full"] }
+tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
+hyper = { version = "*", features = ["full"] }
 tokio = { version = "*", features = ["full"] }
 tokio-util = "*"
-chrono = "0.4.19"
+chrono = "*"
 lazy_static = "*"
 serde = { version = "*", features = ["derive"] }
-serde_json = "1.0"
-serde_derive = "1.0"
+serde_json = "*"
+serde_derive = "*"
 serde_yaml = "*"
 base64 = "*"
 zip = "*"
 md5 = "*"
-anyhow = "1.0.40"
+anyhow = "*"
 futures-core = "*"
-prost = "0.8.0"
-prost-types = "0.8.0"
+prost = "*"
+prost-types = "*"
 tokio-stream = "*"
 async-trait = "*"
 futures-util = "*"
@@ -36,7 +42,7 @@ tokio-signal = "*"
 signal-hook = "*"
 rand = "*"
 sysinfo = "*"
-prometheus = "0.13.0"
+prometheus = "*"
 
 [build-dependencies]
-tonic-build = { version = "0.5.0", features = ["prost"] }
+tonic-build = { version = "*", features = ["prost"] }

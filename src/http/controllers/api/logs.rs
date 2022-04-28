@@ -1,6 +1,7 @@
+use my_http_server::{HttpFailResult, HttpOkResult};
+
 use crate::{
     app::AppContext,
-    http::{HttpFailResult, HttpOkResult},
     utils::{StopWatch, StringBuilder},
 };
 

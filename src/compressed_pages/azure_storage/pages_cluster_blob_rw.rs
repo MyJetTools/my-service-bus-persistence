@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use my_azure_page_blob::MyAzurePageBlob;
-use my_azure_storage_sdk::AzureConnection;
+use my_azure_storage_sdk::AzureStorageConnection;
 
 use crate::{compressed_pages::RestoreCompressedPageError, message_pages::MessagePageId};
 
@@ -13,7 +15,7 @@ pub struct PagesClusterBlobRw {
 
 impl PagesClusterBlobRw {
     pub fn new(
-        connection: AzureConnection,
+        connection: Arc<AzureStorageConnection>,
         topic_id: &str,
         cluster_page_id: ClusterPageId,
     ) -> Self {

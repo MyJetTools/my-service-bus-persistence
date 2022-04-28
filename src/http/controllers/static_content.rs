@@ -1,4 +1,3 @@
-use crate::http::{HttpFailResult, HttpOkResult};
 use rand::Rng;
 
 pub fn get_index_page_content() -> Result<HttpOkResult, HttpFailResult> {

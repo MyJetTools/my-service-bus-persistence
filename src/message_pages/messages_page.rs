@@ -1,85 +1,78 @@
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
-use tokio::sync::RwLock;
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
-use super::{BlankPage, MessagePageId, MessagesPageData, PageMetrics, PageOperationError};
+use super::UncompressedMessagesPage;
 
-pub struct MessagesPage {
-    pub data: RwLock<MessagesPageData>,
-    pub page_id: MessagePageId,
-    pub metrics: PageMetrics,
+pub enum MessagesPage {
+    Uncompressed(UncompressedMessagesPage),
+    Compressed { page_id: PageId, content: Vec<u8> },
+    Empty(PageId),
 }
 
 impl MessagesPage {
-    pub fn brand_new(page_id: MessagePageId) -> Self {
-        Self {
-            data: RwLock::new(MessagesPageData::NotInitialized(BlankPage::new())),
-            page_id,
-            metrics: PageMetrics::new(),
-        }
+    pub fn create_as_empty(page_id: PageId) -> Self {
+        Self::Empty(page_id)
+    }
+    pub fn create_uncompressed(page_id: PageId) -> Self {
+        Self::Uncompressed(UncompressedMessagesPage::brand_new(page_id))
     }
 
     pub fn has_messages_to_save(&self) -> bool {
-        self.metrics.get_messages_amount_to_save() > 0
+        match self {
+            MessagesPage::Uncompressed(page) => page.has_messages_to_save(),
+            MessagesPage::Compressed {
+                page_id: _,
+                content: _,
+            } => false,
+            MessagesPage::Empty(_) => false,
+        }
+    }
+
+    pub fn get_messages_amount_to_save(&self) -> usize {
+        match self {
+            MessagesPage::Uncompressed(page) => page.metrics.get_messages_amount_to_save(),
+            MessagesPage::Compressed {
+                page_id: _,
+                content: _,
+            } => 0,
+            MessagesPage::Empty(_) => 0,
+        }
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
-        {
-            let mut write_access = self.data.write().await;
+        let uncompressed_messages = self.unwrap_as_uncompressed_page();
 
-            if let MessagesPageData::Uncompressed(page) = &mut *write_access {
-                page.add(messages);
-            } else {
-                panic!(
-                    "Can not add {} message[s] to the page {}. The type of the page is {}",
-                    messages.len(),
-                    self.page_id.value,
-                    write_access.get_page_type()
-                );
-            }
+        let mut write_access = uncompressed_messages.pages.write().await;
 
-            self.metrics
-                .update_messages_amount_to_save(write_access.get_messages_to_save_amount())
-        }
-
-        self.metrics.update_last_access_to_now();
+        write_access.add(messages);
     }
 
-    pub async fn get_message(
-        &self,
-        message_id: MessageId,
-    ) -> Result<Option<MessageProtobufModel>, PageOperationError> {
-        match &*self.data.read().await {
-            MessagesPageData::NotInitialized(_) => Err(PageOperationError::NotInitialized),
-            MessagesPageData::Uncompressed(state) => {
-                let result = state.get(message_id);
-
-                match result {
-                    Some(msg) => Ok(Some(msg.clone())),
-                    None => Ok(None),
-                }
+    pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedMessagesPage {
+        match self {
+            MessagesPage::Uncompressed(result) => result,
+            MessagesPage::Compressed {
+                page_id: _,
+                content: _,
+            } => {
+                panic!("Can not get message as uncompressed. It's compressed");
             }
-            MessagesPageData::Compressed(state) => {
-                let result = state.get(message_id)?;
-                Ok(result)
+            MessagesPage::Empty(_) => {
+                panic!("Can not get message as uncompressed. It's empty");
             }
-            MessagesPageData::Blank(_) => Ok(None),
         }
     }
 
-    pub async fn get_grpc_v0_snapshot(
-        &self,
-    ) -> Result<Vec<MessageProtobufModel>, PageOperationError> {
-        match &*self.data.read().await {
-            MessagesPageData::NotInitialized(_) => Err(PageOperationError::NotInitialized),
-            MessagesPageData::Uncompressed(state) => {
-                let result = state.get_grpc_v0_snapshot();
-                Ok(result)
-            }
-            MessagesPageData::Compressed(state) => {
-                let result = state.get_grpc_v0_snapshot()?;
-                Ok(result)
-            }
-            MessagesPageData::Blank(_) => Ok(Vec::new()),
+    pub fn is_initialized(&self) -> bool {
+        todo!("Implement")
+    }
+
+    pub fn get_page_id(&self) -> PageId {
+        match self {
+            MessagesPage::Uncompressed(page) => page.page_id,
+            MessagesPage::Compressed {
+                page_id,
+                content: _,
+            } => *page_id,
+            MessagesPage::Empty(page_id) => *page_id,
         }
     }
 }

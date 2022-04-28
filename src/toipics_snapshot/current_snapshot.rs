@@ -48,8 +48,17 @@ impl CurrentTopicsSnapshot {
         write_access.update(snapshot);
     }
 
-    pub async fn update_snapshot_id(&self, saved_id: i64) {
+    pub async fn update_snapshot_id_as_saved(&self, saved_id: i64) {
         let mut write_access = self.data.write().await;
         write_access.update_snapshot_id(saved_id);
+    }
+
+    pub async fn get_snapshot_if_there_are_chages(&self) -> Option<TopicsSnapshotData> {
+        let read_access = self.data.read().await;
+        if read_access.snapshot_id == read_access.last_saved_snapshot_id {
+            return None;
+        }
+
+        return Some(read_access.clone());
     }
 }

@@ -1,9 +1,9 @@
-use crate::message_pages::MessagePageId;
+use my_service_bus_shared::page_id::PageId;
 
 pub const SYSTEM_BLOB_NAME: &str = "system";
 
-pub fn generate_blob_name(page_id: &MessagePageId) -> String {
-    return format!("{:019}", page_id.value);
+pub fn generate_uncompressed_blob_name(page_id: &PageId) -> String {
+    return format!("{:019}.uncompressed", page_id);
 }
 #[cfg(test)]
 mod tests {
@@ -11,16 +11,16 @@ mod tests {
 
     #[test]
     fn test_blob_name() {
-        let page_id = MessagePageId { value: 1 };
+        let page_id = 1;
 
-        let blob_name = generate_blob_name(&page_id);
+        let blob_name = generate_uncompressed_blob_name(&page_id);
 
-        assert_eq!("0000000000000000001", blob_name);
+        assert_eq!("0000000000000000001.uncompressed", blob_name);
 
-        let page_id = MessagePageId { value: 154 };
+        let page_id = 154;
 
-        let blob_name = generate_blob_name(&page_id);
+        let blob_name = generate_uncompressed_blob_name(&page_id);
 
-        assert_eq!("0000000000000000154", blob_name);
+        assert_eq!("0000000000000000154.uncompressed", blob_name);
     }
 }

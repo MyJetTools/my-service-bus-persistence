@@ -1,12 +1,21 @@
-use std::time::SystemTime;
+use std::{sync::Arc, time::SystemTime};
 
-use crate::{
-    app::AppContext,
-    http::{HttpFailResult, HttpOkResult},
-};
+use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput};
 use serde::{Deserialize, Serialize};
 
-pub fn get(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
+use crate::app::AppContext;
+
+pub struct IsAliveAction {
+    app: Arc<AppContext>,
+}
+
+impl IsAliveAction {
+    pub fn new(app: Arc<AppContext>) -> Self {
+        Self { app }
+    }
+}
+
+pub fn handle_request(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
     let version = env!("CARGO_PKG_VERSION");
 
     let time = SystemTime::now()
@@ -21,7 +30,9 @@ pub fn get(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
         env_info: app.get_env_info(),
     };
 
-    return Ok(HttpOkResult::create_json_response(model));
+    let result = HttpOutput::as_json(model).into_ok_result(true);
+
+    return Ok(result);
 }
 
 #[derive(Serialize, Deserialize, Debug)]

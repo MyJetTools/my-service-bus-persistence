@@ -1,21 +1,30 @@
 use std::{sync::Arc, time::Duration};
-
 mod app;
 mod azure_storage;
-mod compressed_pages;
+//mod compressed_pages;
 mod grpc;
-mod http;
-mod index_by_minute;
+//mod http;
+//mod index_by_minute;
 mod message_pages;
+mod messages_in_blob;
 mod operations;
 mod settings;
 mod timers;
 mod toipics_snapshot;
-mod uncompressed_messages;
+mod topic_data;
 mod utils;
+use rust_extensions::MyTimer;
 use toipics_snapshot::current_snapshot::TopicsSnapshotData;
+mod uncompressed_page_storage;
 
-use crate::{app::AppContext, settings::SettingsModel};
+use crate::{
+    app::AppContext,
+    settings::SettingsModel,
+    timers::{
+        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
+        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer,
+    },
+};
 
 use tokio::signal;
 
@@ -38,6 +47,30 @@ async fn main() {
 
     let app = Arc::new(app);
 
+    let mut timer_3s = MyTimer::new(Duration::from_secs(3));
+    timer_3s.register_timer(
+        "SaveMessagesTimer",
+        Arc::new(SaveMessagesTimer::new(app.clone())),
+    );
+
+    /*
+        todo!("Restore");
+       timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
+       timer_3s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
+       timer_3s.register_timer(
+           "SaveMinIndexTimer",
+           Arc::new(SaveMinIndexTimer::new(app.clone())),
+       );
+
+       timer_3s.register_timer(
+           "TopicsSnapshotSaver",
+           Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
+       );
+
+
+    */
+    timer_3s.start(app.clone(), app.clone());
+
     signal_hook::flag::register(signal_hook::consts::SIGTERM, app.shutting_down.clone()).unwrap();
 
     tokio::spawn(run_app(app.clone()));
@@ -58,13 +91,8 @@ async fn main() {
 async fn run_app(app: Arc<AppContext>) {
     let init_handler = tokio::spawn(operations::data_initializer::init(app.clone()));
 
-    timers::timer_3s::start(app.clone());
-
-    let http_server_task = tokio::spawn(http::http_server::start(app.clone(), 7123));
-
     let grpc_server_task = tokio::spawn(grpc::server::start(app.clone(), 7124));
 
-    http_server_task.await.unwrap();
     grpc_server_task.await.unwrap().unwrap();
     init_handler.await.unwrap();
 }
@@ -102,7 +130,7 @@ async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData)
     loop {
         let mut has_data_to_sync = None;
         for topic in &snapshot.snapshot.data {
-            let topic_data = app.topics_data_list.get(&topic.topic_id).await;
+            let topic_data = app.topics_list.get(&topic.topic_id).await;
 
             if topic_data.is_none() {
                 continue;
@@ -110,7 +138,7 @@ async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData)
 
             let topic_data = topic_data.unwrap();
 
-            if topic_data.has_messages_to_save().await {
+            if topic_data.pages_list.has_messages_to_save().await {
                 has_data_to_sync = Some(topic_data.as_ref().topic_id.to_string());
             }
         }

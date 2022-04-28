@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use my_service_bus_shared::{
+    page_id::PageId,
     protobuf_models::{MessageProtobufModel, TopicSnapshotProtobufModel},
     MessageId,
 };
@@ -9,16 +10,16 @@ use crate::message_pages::MessagePageId;
 
 pub const MESSAGES_PER_PAGE: i64 = 100_000;
 
-pub fn get_active_pages(snapshot: &TopicSnapshotProtobufModel) -> HashMap<i64, MessagePageId> {
-    let mut result: HashMap<i64, MessagePageId> = HashMap::new();
+pub fn get_active_pages(snapshot: &TopicSnapshotProtobufModel) -> HashMap<i64, PageId> {
+    let mut result: HashMap<i64, PageId> = HashMap::new();
 
     let page_id = MessagePageId::from_message_id(snapshot.message_id);
-    result.insert(page_id.value, page_id);
+    result.insert(page_id.value, page_id.value);
 
     for topic_queue in &snapshot.queues {
         for range in &topic_queue.ranges {
             let page_id = MessagePageId::from_message_id(range.from_id);
-            result.insert(page_id.value, page_id);
+            result.insert(page_id.value, page_id.value);
         }
     }
 

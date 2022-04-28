@@ -6,6 +6,8 @@ use my_service_bus_shared::{
 use crate::persistence_grpc::*;
 
 pub fn to_message(src: &MessageProtobufModel) -> MessageContentGrpcModel {
+    todo!("Implement to_message");
+    /*
     let created: Option<DateTime> = match src.created {
         Some(created) => Some(created.into()),
         None => None,
@@ -21,6 +23,7 @@ pub fn to_message(src: &MessageProtobufModel) -> MessageContentGrpcModel {
             .map(|itm| to_message_metadata(itm))
             .collect(),
     }
+     */
 }
 
 pub fn to_message_metadata(src: &MessageMetaDataProtobufModel) -> MessageContentMetaDataItem {

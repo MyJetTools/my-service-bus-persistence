@@ -111,7 +111,7 @@ impl TocIndex {
         let page_to_write = &self.toc[page_offset..page_offset + BLOB_PAGE_SIZE];
 
         page_blob
-            .save_pages(start_page_no, 8000, page_to_write.to_vec())
+            .save_pages(start_page_no, page_to_write.to_vec())
             .await?;
 
         Ok(())

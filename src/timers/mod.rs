@@ -1,6 +1,7 @@
 pub mod metrics_updater;
 pub mod pages_gc;
-mod save_messages;
+mod save_messages_timer;
+
 pub mod save_min_index;
-pub mod timer_3s;
 pub mod topics_snapshot_saver;
+pub use save_messages_timer::SaveMessagesTimer;

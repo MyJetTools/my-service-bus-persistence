@@ -28,19 +28,13 @@ pub async fn route_requests(
         }
 
         (&Method::GET, "/debug/page") => {
-            return super::debug::page::get(ctx, app.as_ref()).await;
-        }
-
-        (&Method::DELETE, "/topic") => {
-            return super::topic::delete::delete_topic(ctx, app.as_ref()).await;
+            return super::debug::get_page_http_action::get(ctx, app.as_ref()).await;
         }
 
         _ => {}
     }
 
-    if path.starts_with("/swagger") {
-        return super::swagger::handle(ctx).await;
-    }
+
 
     if path.starts_with("/logs") {
         return super::api::logs::get(app.as_ref()).await;
@@ -48,14 +42,6 @@ pub async fn route_requests(
 
     if path.starts_with("/logs/topic") {
         return super::api::logs::get_by_topic(path, app.as_ref()).await;
-    }
-
-    if path.starts_with("/css") {
-        return super::files::get_content_from_file(path, Some(WebContentType::Css)).await;
-    }
-
-    if path.starts_with("/js") || path.starts_with("/lib") {
-        return super::files::get_content_from_file(path, Some(WebContentType::JavaScript)).await;
     }
 
     if !app.is_initialized() {
@@ -67,12 +53,8 @@ pub async fn route_requests(
             return super::api::is_alive::get(app.as_ref());
         }
 
-        (&Method::GET, "/read/byid") => {
-            return super::read::by_id::get(ctx, app.clone()).await;
-        }
-
         (&Method::GET, "/read/listfromdate") => {
-            return super::read::list_from_date::get(ctx, app.as_ref()).await;
+            return super::read_controller::list_from_date_action::get(ctx, app.as_ref()).await;
         }
 
         _ => {}

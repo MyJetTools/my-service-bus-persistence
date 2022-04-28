@@ -1,10 +1,7 @@
 use std::usize;
 
-use crate::{
-    app::{AppContext, TopicData},
-    http::{HttpFailResult, HttpOkResult},
-    utils::duration_to_string,
-};
+use crate::{app::AppContext, topic_data::TopicData, utils::duration_to_string};
+use my_http_server::{HttpFailResult, HttpOkResult};
 use my_service_bus_shared::protobuf_models::{
     QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
 };
@@ -183,7 +180,7 @@ async fn get_model(app: &AppContext) -> StatusModel {
     let now = DateTimeAsMicroseconds::now();
 
     for snapshot in &topics_snapshot.snapshot.data {
-        let data_by_topic = app.topics_data_list.get(snapshot.topic_id.as_str()).await;
+        let data_by_topic = app.topics_list.get(snapshot.topic_id.as_str()).await;
 
         if data_by_topic.is_none() {
             continue;

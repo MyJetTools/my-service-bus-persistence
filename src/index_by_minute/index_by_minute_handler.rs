@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use chrono::Datelike;
-use my_azure_storage_sdk::{AzureConnection, AzureStorageError};
+use my_azure_storage_sdk::{AzureStorageConnection, AzureStorageError};
 use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use tokio::sync::Mutex;
@@ -24,13 +24,17 @@ pub struct IndexByMinuteHandler {
 }
 
 impl IndexByMinuteHandler {
-    pub fn new(topic_id: &str, azure_connection: AzureConnection, logs: Arc<Logs>) -> Self {
+    pub fn new(
+        topic_id: &str,
+        azure_connection: Arc<AzureStorageConnection>,
+        logs: Arc<Logs>,
+    ) -> Self {
         let topic_id = topic_id.to_string();
         Self {
             queue: Mutex::new(HashMap::new()),
             azure_blob: Mutex::new(IndexByMinuteAzurePageBlob::new(
                 topic_id.as_str(),
-                &azure_connection,
+                azure_connection,
             )),
             logs,
             topic_id,
@@ -116,14 +120,12 @@ impl IndexByMinuteHandler {
             let mut result = self.try_to_save(&next, utils).await;
 
             while let Err(err) = result {
-                self.logs
-                    .add_error(
-                        Some(self.topic_id.as_str()),
-                        "start_min_index_to_storage",
-                        "Can not save. Awaiting and Retrying",
-                        format!("Err: {:?}", err),
-                    )
-                    .await;
+                self.logs.add_error(
+                    Some(self.topic_id.as_str()),
+                    "start_min_index_to_storage",
+                    "Can not save. Awaiting and Retrying",
+                    format!("Err: {:?}", err),
+                );
 
                 tokio::time::sleep(duration).await;
 

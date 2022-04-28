@@ -1,7 +1,11 @@
-use std::{collections::HashMap, usize};
+use std::{collections::HashMap, sync::Arc, usize};
 
-use my_azure_page_blob_append::{page_blob_utils::get_pages_amount_by_size, PageBlobRandomAccess};
-use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureConnection, AzureStorageError};
+use my_azure_page_blob::MyAzurePageBlob;
+use my_azure_page_blob_append::page_blob_utils::get_pages_amount_by_size;
+use my_azure_page_blob_random_access::{PageBlobRandomAccess, PageBlobRandomAccessError};
+use my_azure_storage_sdk::{
+    page_blob::consts::BLOB_PAGE_SIZE, AzureStorageConnection, AzureStorageError,
+};
 
 use crate::index_by_minute::utils::{INDEX_STEP, MINUTE_INDEX_BLOB_SIZE};
 
@@ -9,19 +13,19 @@ use super::utils::MinuteWithinYear;
 
 pub struct IndexByMinuteAzurePageBlob {
     pub topic_id: String,
-    page_access: HashMap<i32, PageBlobRandomAccess>,
-    connection: AzureConnection,
+    page_access: HashMap<i32, PageBlobRandomAccess<MyAzurePageBlob>>,
+    connection: Arc<AzureStorageConnection>,
 }
 
 impl IndexByMinuteAzurePageBlob {
-    pub fn new(topic_id: &str, connection: &AzureConnection) -> Self {
+    pub fn new(topic_id: &str, connection: Arc<AzureStorageConnection>) -> Self {
         Self {
             topic_id: topic_id.to_string(),
             page_access: HashMap::new(),
-            connection: connection.clone(),
+            connection: connection,
         }
     }
-    fn get_page_access_by_year(&mut self, year: i32) -> &mut PageBlobRandomAccess {
+    fn get_page_access_by_year(&mut self, year: i32) -> &mut PageBlobRandomAccess<MyAzurePageBlob> {
         if self.page_access.contains_key(&year) {
             return self.page_access.get_mut(&year).unwrap();
         }
@@ -29,9 +33,13 @@ impl IndexByMinuteAzurePageBlob {
         self.page_access.insert(
             year,
             PageBlobRandomAccess::new(
-                &self.connection,
-                self.topic_id.as_str(),
-                &get_blob_name(year),
+                MyAzurePageBlob::new(
+                    self.connection.clone(),
+                    self.topic_id.to_string(),
+                    get_blob_name(year),
+                ),
+                false,
+                4000,
             ),
         );
 
@@ -59,12 +67,17 @@ impl IndexByMinuteAzurePageBlob {
 
             if let Err(err) = result {
                 match err {
-                    AzureStorageError::BlobNotFound => {
-                        let pages =
-                            get_pages_amount_by_size(MINUTE_INDEX_BLOB_SIZE, BLOB_PAGE_SIZE);
-                        page_access.create_new(pages).await?;
+                    PageBlobRandomAccessError::IndexRangeViolation(err) => {
+                        panic!("Index range violation error: {}", err);
                     }
-                    _ => return Err(err),
+                    PageBlobRandomAccessError::AzureStorageError(err) => match err {
+                        AzureStorageError::BlobNotFound => {
+                            let pages =
+                                get_pages_amount_by_size(MINUTE_INDEX_BLOB_SIZE, BLOB_PAGE_SIZE);
+                            page_access.create_new(pages).await?;
+                        }
+                        _ => return Err(err),
+                    },
                 }
             }
         }

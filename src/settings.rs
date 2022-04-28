@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use my_azure_page_blob::MyAzurePageBlob;
-use my_azure_storage_sdk::AzureConnection;
+use my_azure_storage_sdk::AzureStorageConnection;
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
@@ -19,12 +21,20 @@ pub struct SettingsModel {
     pub max_response_records_amount: usize,
     #[serde(rename = "DeleteTopicSecretKey")]
     pub delete_topic_secret_key: String,
+
+    #[serde(rename = "MaxMessageSize")]
+    pub max_message_size: usize,
 }
 
 impl SettingsModel {
     pub fn get_topics_snapshot_page_blob(&self) -> MyAzurePageBlob {
-        let connection = AzureConnection::from_conn_string(self.queues_connection_string.as_str());
-        MyAzurePageBlob::new(connection, "topics".to_string(), "topicsdata".to_string())
+        let connection =
+            AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
+        MyAzurePageBlob::new(
+            Arc::new(connection),
+            "topics".to_string(),
+            "topicsdata".to_string(),
+        )
     }
 
     pub async fn read() -> Self {
@@ -55,6 +65,14 @@ impl SettingsModel {
             }
         }
 
-        serde_yaml::from_slice(file_content.as_slice()).unwrap()
+        let mut result: SettingsModel = serde_yaml::from_slice(file_content.as_slice()).unwrap();
+
+        if result.messages_connection_string.starts_with('~') {
+            let home = std::env::var("HOME").unwrap();
+            result.messages_connection_string =
+                result.messages_connection_string.replace("~", &home);
+        }
+
+        result
     }
 }

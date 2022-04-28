@@ -3,7 +3,6 @@ use std::usize;
 use my_azure_page_blob::MyPageBlob;
 use my_azure_storage_sdk::AzureStorageError;
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
-use prost::Message;
 
 pub async fn read_from_blob<TMyPageBlob: MyPageBlob>(
     my_page_blob: &mut TMyPageBlob,
@@ -37,7 +36,8 @@ fn deserialize_model(content: &[u8]) -> TopicsSnapshotProtobufModel {
 
     let data = &content[4..data_size + 4];
 
-    let result = TopicsSnapshotProtobufModel::decode(data);
+    let result: Result<TopicsSnapshotProtobufModel, prost::DecodeError> =
+        prost::Message::decode(data);
 
     match result {
         Ok(msg) => {
@@ -78,9 +78,7 @@ pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(
 
     &data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
-    my_page_blob
-        .auto_ressize_and_save_pages(0, 8000, data, 1)
-        .await?;
+    my_page_blob.save_pages(0, data).await?;
 
     Ok(())
 }

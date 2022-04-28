@@ -1,7 +1,3 @@
-use my_service_bus_shared::{
-    page_compressor::CompressedPageBuilder, protobuf_models::MessagesProtobufModel,
-};
-
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
 pub fn get_none_message() -> MessageContentGrpcModel {
@@ -22,7 +18,9 @@ pub async fn get_v0(
     page: &MessagesPage,
     max_payload_size: usize,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    let messages = page.get_grpc_v0_snapshot().await?;
+    todo!("Implement");
+    /*
+    let messages = page.get_grpc_v0_snapshot().await;
 
     let messages = MessagesProtobufModel { messages };
 
@@ -34,6 +32,7 @@ pub async fn get_v0(
 
     let result = split(compressed.as_slice(), max_payload_size);
     return Ok(result);
+     */
 }
 
 pub async fn get_v1(
@@ -42,11 +41,10 @@ pub async fn get_v1(
     max_payload_size: usize,
     range: Option<MsgRange>,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    match &*page.data.read().await {
-        crate::message_pages::MessagesPageData::NotInitialized(_) => {
-            panic!("Can not get data from not initialized page"); //ToDo - Initialize it here
-        }
-        crate::message_pages::MessagesPageData::Uncompressed(uncompressed_page) => {
+    todo!("Implement");
+    /*
+    match page {
+        MessagesPage::Uncompressed(uncompressed_page) => {
             let mut zip_builder = CompressedPageBuilder::new();
 
             let mut messages = 0;
@@ -75,7 +73,7 @@ pub async fn get_v1(
             println!(
                 "Sending zip_2 for topic {}/{}. Size {}. Messages: {}. Filtered: {}",
                 topic_id,
-                page.page_id.value,
+                page.page_id,
                 zip_payload.len(),
                 messages,
                 used_messages
@@ -110,6 +108,7 @@ pub async fn get_v1(
             return Ok(Vec::new());
         }
     }
+     */
 }
 
 fn split(src: &[u8], max_payload_size: usize) -> Vec<Vec<u8>> {

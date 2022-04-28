@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use rust_extensions::date_time::DateTimeAsMicroseconds;
-use tokio::{sync::RwLock, task::JoinError};
+use tokio::sync::RwLock;
 
 use super::LogsCluster;
 
@@ -9,33 +11,38 @@ pub enum LogLevel {
     Error,
     FatalError,
 }
+
+impl LogLevel {
+    fn as_str(&self) -> &str {
+        match self {
+            LogLevel::Info => "Info",
+            LogLevel::Error => "Error",
+            LogLevel::FatalError => "FalalError",
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct LogItem {
     pub date: DateTimeAsMicroseconds,
-
     pub topic_id: Option<String>,
-
     pub level: LogLevel,
-
     pub process: String,
-
     pub message: String,
-
     pub err_ctx: Option<String>,
 }
 
 pub struct Logs {
-    items: RwLock<LogsCluster>,
+    items: Arc<RwLock<LogsCluster>>,
 }
 
 impl Logs {
     pub fn new() -> Self {
         Self {
-            items: RwLock::new(LogsCluster::new()),
+            items: Arc::new(RwLock::new(LogsCluster::new())),
         }
     }
 
-    pub async fn add_info(&self, topic_id: Option<&str>, process: &str, message: String) {
+    pub fn add_info(&self, topic_id: Option<&str>, process: &str, message: String) {
         let date = DateTimeAsMicroseconds::now();
         let item = LogItem {
             topic_id: topic_id_to_string(topic_id),
@@ -46,22 +53,10 @@ impl Logs {
             err_ctx: None,
         };
 
-        let mut wirte_access = self.items.write().await;
-        if let Some(topic_id) = topic_id {
-            println!(
-                "{}: INFO Topic: {}. Message: {}",
-                date.to_rfc3339(),
-                topic_id,
-                item.message
-            );
-        } else {
-            println!("{}: INFO {}", date.to_rfc3339(), item.message);
-        }
-
-        wirte_access.push(item);
+        tokio::spawn(write(self.items.clone(), item));
     }
 
-    pub async fn add_info_string(&self, topic_id: Option<&str>, process: &str, message: String) {
+    pub fn add_info_string(&self, topic_id: Option<&str>, process: &str, message: String) {
         let date = DateTimeAsMicroseconds::now();
         let item = LogItem {
             topic_id: topic_id_to_string(topic_id),
@@ -72,27 +67,14 @@ impl Logs {
             err_ctx: None,
         };
 
-        let mut wirte_access = self.items.write().await;
-
-        if let Some(topic_id) = topic_id {
-            println!(
-                "{}: INFO Topic: {}. Message: {}",
-                date.to_rfc3339(),
-                topic_id,
-                item.message
-            );
-        } else {
-            println!("{}: INFO {}", date.to_rfc3339(), item.message);
-        }
-
-        wirte_access.push(item);
+        tokio::spawn(write(self.items.clone(), item));
     }
 
-    pub async fn add_error(
+    pub fn add_error(
         &self,
         topic_id: Option<&str>,
         process: &str,
-        message: &str,
+        message: String,
         err_ctx: String,
     ) {
         let date = DateTimeAsMicroseconds::now();
@@ -102,27 +84,14 @@ impl Logs {
             date,
             level: LogLevel::Error,
             process: process.to_string(),
-            message: message.to_string(),
+            message,
             err_ctx: Some(err_ctx),
         };
 
-        let mut wirte_access = self.items.write().await;
-
-        if let Some(topic_id) = topic_id {
-            println!(
-                "{}: ERR Topic: {}. Message: {}",
-                date.to_rfc3339(),
-                topic_id,
-                item.message
-            );
-        } else {
-            println!("{}: ERR {}", date.to_rfc3339(), item.message);
-        }
-
-        wirte_access.push(item);
+        tokio::spawn(write(self.items.clone(), item));
     }
 
-    pub async fn add_fatal_error(&self, process: &str, err: JoinError) {
+    pub fn add_fatal_error(&self, process: &str, err: String) {
         let date = DateTimeAsMicroseconds::now();
 
         let item = LogItem {
@@ -134,14 +103,10 @@ impl Logs {
             err_ctx: None,
         };
 
-        let mut wirte_access = self.items.write().await;
-
-        println!("{}: FATAL_ERR {}", date.to_rfc3339(), item.message);
-
-        wirte_access.push(item);
+        tokio::spawn(write(self.items.clone(), item));
     }
 
-    pub async fn add_error_str(
+    pub fn add_error_str(
         &self,
         topic_id: Option<&str>,
         process: &str,
@@ -158,21 +123,7 @@ impl Logs {
             message: message,
             err_ctx: Some(err_ctx),
         };
-
-        let mut wirte_access = self.items.write().await;
-
-        if let Some(topic_id) = topic_id {
-            println!(
-                "{}: ERR Topic: {}. Message: {}",
-                date.to_rfc3339(),
-                topic_id,
-                item.message
-            );
-        } else {
-            println!("{}: ERR {}", date.to_rfc3339(), item.message);
-        }
-
-        wirte_access.push(item);
+        tokio::spawn(write(self.items.clone(), item));
     }
 
     pub async fn get(&self) -> Vec<LogItem> {
@@ -190,4 +141,26 @@ impl Logs {
 fn topic_id_to_string(topic_id: Option<&str>) -> Option<String> {
     let result = topic_id?;
     return Some(result.to_string());
+}
+
+async fn write(logs: Arc<RwLock<LogsCluster>>, item: LogItem) {
+    let mut wirte_access = logs.write().await;
+
+    if let Some(topic_id) = &item.topic_id {
+        println!(
+            "{dt}: {level} Topic: {topic_id}. Message: {msg}",
+            dt = item.date.to_rfc3339(),
+            level = item.level.as_str(),
+            msg = item.message
+        );
+    } else {
+        println!(
+            "{dt}: {level} Message: {msg}",
+            dt = item.date.to_rfc3339(),
+            level = item.level.as_str(),
+            msg = item.message
+        );
+    }
+
+    wirte_access.push(item);
 }

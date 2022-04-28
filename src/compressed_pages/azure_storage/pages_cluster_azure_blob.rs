@@ -96,7 +96,7 @@ impl<T: MyPageBlob> PagesClusterAzureBlob<T> {
             .await?;
 
         self.page_blob
-            .auto_ressize_and_save_pages(page_size, 8000, zip.to_vec(), 1)
+            .auto_ressize_and_save_pages(page_size, zip.to_vec(), 1)
             .await?;
 
         Ok(())
