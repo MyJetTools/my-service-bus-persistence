@@ -1,6 +1,8 @@
 use std::{sync::Arc, time::Duration};
 mod app;
 
+mod file_random_access;
+
 //mod compressed_pages;
 mod grpc;
 mod page_blob_utils;

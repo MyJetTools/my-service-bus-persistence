@@ -1,27 +1,20 @@
-use std::{collections::BTreeMap, io::SeekFrom};
+use std::collections::BTreeMap;
 
-use my_service_bus_shared::MessageId;
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
-};
-
-use crate::uncompressed_page_storage::{
-    load_trait::LoadFromStorage, toc::UncompressedFileToc, PayloadsToUploadContainer,
+use crate::{
+    file_random_access::FileRandomAccess,
+    uncompressed_page_storage::{
+        load_trait::LoadFromStorage, toc::UncompressedFileToc, PayloadsToUploadContainer,
+    },
 };
 
 pub struct UncompressedPageStorageAsFile {
     toc: UncompressedFileToc,
-    file: File,
+    file: FileRandomAccess,
 }
 
 impl UncompressedPageStorageAsFile {
     pub async fn opend_or_append(file_name: &str) -> std::io::Result<Self> {
-        let file = tokio::fs::OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open(file_name)
-            .await?;
+        let file = FileRandomAccess::opend_and_append_as_file(file_name).await?;
 
         let result = Self {
             file,
@@ -36,10 +29,7 @@ impl UncompressedPageStorageAsFile {
     }
 
     pub async fn create_new(file_name: &str) -> std::io::Result<Self> {
-        let file = tokio::fs::OpenOptions::new()
-            .create_new(true)
-            .open(file_name)
-            .await?;
+        let file = FileRandomAccess::create_new_file(file_name).await?;
 
         let mut result = Self {
             file,
@@ -52,47 +42,17 @@ impl UncompressedPageStorageAsFile {
     }
 
     pub async fn reset_as_new(&mut self) -> std::io::Result<()> {
-        self.reset_file(0).await?;
+        self.file.reduce_size(0).await?;
 
         let toc_content = self.toc.reset_as_new();
-        self.file.write_all(toc_content).await?;
+        self.file.write_to_file(toc_content).await?;
 
         Ok(())
     }
 
-    pub async fn read_payload(&mut self, buf: &mut [u8]) -> std::io::Result<bool> {
-        let read_size = self.file.read(buf).await?;
-        Ok(read_size == buf.len())
-    }
-
-    pub async fn append_payload(&mut self, file_no: usize, payload: &[u8]) -> std::io::Result<()> {
-        self.file.write_all(payload).await?;
-
+    pub async fn read_payload(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        self.file.read_from_file(buf).await?;
         Ok(())
-    }
-
-    pub async fn get_next_payload(&mut self) -> std::io::Result<Vec<u8>> {
-        let mut len_as_array = [0u8; 4];
-        self.file.read(len_as_array.as_mut()).await?;
-
-        let len = u32::from_be_bytes(len_as_array) as usize;
-
-        let mut result = Vec::with_capacity(len);
-
-        unsafe {
-            result.set_len(len);
-        }
-
-        self.file.read(&mut result).await?;
-        Ok(result)
-    }
-
-    pub async fn get_payloads(
-        &self,
-        message_from: MessageId,
-        message_to: MessageId,
-    ) -> BTreeMap<usize, Vec<u8>> {
-        todo!("Implement");
     }
 
     pub async fn upload_payload(
@@ -100,11 +60,11 @@ impl UncompressedPageStorageAsFile {
         payload_to_upload: PayloadsToUploadContainer,
     ) -> std::io::Result<()> {
         self.file
-            .seek(SeekFrom::Start(payload_to_upload.write_position as u64))
+            .set_position(payload_to_upload.write_position)
             .await?;
 
         self.file
-            .write_all(payload_to_upload.payload.as_slice())
+            .write_to_file(payload_to_upload.payload.as_slice())
             .await?;
 
         let mut pages_to_update = BTreeMap::new();
