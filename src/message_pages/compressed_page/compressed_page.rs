@@ -1,10 +1,8 @@
 use std::io::{Cursor, Read};
 
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use zip::read::ZipFile;
-
-use crate::message_pages::MessagePageId;
 
 use super::error::ReadCompressedPageError;
 
@@ -13,11 +11,11 @@ pub struct CompressedPage {
     pub last_access: DateTimeAsMicroseconds,
     pub len: usize,
     pub max_message_id: Option<i64>,
-    pub page_id: MessagePageId,
+    pub page_id: PageId,
 }
 
 impl CompressedPage {
-    pub fn new(page_id: MessagePageId, zip_data: Vec<u8>) -> Option<Self> {
+    pub fn new(page_id: PageId, zip_data: Vec<u8>) -> Option<Self> {
         let max_message_id = get_max_msg_id(page_id, zip_data.as_slice())?;
 
         let result = Self {
@@ -95,15 +93,12 @@ fn extract_file_content(zip_file: &mut ZipFile) -> Result<Vec<u8>, ReadCompresse
     Ok(unzipped)
 }
 
-fn get_max_msg_id(page_id: MessagePageId, zip_data: &[u8]) -> Option<(usize, Option<i64>)> {
+fn get_max_msg_id(page_id: PageId, zip_data: &[u8]) -> Option<(usize, Option<i64>)> {
     let c = Cursor::new(zip_data);
     let zip = zip::ZipArchive::new(c);
 
     if let Err(err) = zip {
-        println!(
-            "Can not open zip for page_id {}. Err: {:?}",
-            page_id.value, err
-        );
+        println!("Can not open zip for page_id {}. Err: {:?}", page_id, err);
         return None;
     }
 

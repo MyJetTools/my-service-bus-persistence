@@ -8,6 +8,7 @@ use my_service_bus_shared::{page_id::PageId, protobuf_models::TopicsSnapshotProt
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
+    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
     message_pages::MessagePageId,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
@@ -30,6 +31,7 @@ pub struct AppContext {
     pub shutting_down: Arc<AtomicBool>,
     pub initialized: AtomicBool,
     pub metrics_keeper: PrometheusMetrics,
+    pub index_by_minute_utils: IndexByMinuteUtils,
 }
 
 impl AppContext {
@@ -56,6 +58,7 @@ impl AppContext {
             shutting_down: Arc::new(AtomicBool::new(false)),
             initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
+            index_by_minute_utils: IndexByMinuteUtils::new(),
         }
     }
 
@@ -124,6 +127,10 @@ impl AppContext {
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
+        todo!("Implement");
+    }
+
+    pub async fn create_index_storage(&self, topic_id: &str, year: u32) -> IndexByMinuteStorage {
         todo!("Implement");
     }
 }

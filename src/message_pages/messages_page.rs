@@ -1,16 +1,16 @@
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
-use super::UncompressedMessagesPage;
+use super::{BlankPage, CompressedPage, UncompressedMessagesPage};
 
 pub enum MessagesPage {
     Uncompressed(UncompressedMessagesPage),
-    Compressed { page_id: PageId, content: Vec<u8> },
-    Empty(PageId),
+    Compressed(CompressedPage),
+    Empty(BlankPage),
 }
 
 impl MessagesPage {
     pub fn create_as_empty(page_id: PageId) -> Self {
-        Self::Empty(page_id)
+        Self::Empty(BlankPage::new(page_id))
     }
     pub fn create_uncompressed(page_id: PageId) -> Self {
         Self::Uncompressed(UncompressedMessagesPage::brand_new(page_id))
@@ -19,10 +19,7 @@ impl MessagesPage {
     pub fn has_messages_to_save(&self) -> bool {
         match self {
             MessagesPage::Uncompressed(page) => page.has_messages_to_save(),
-            MessagesPage::Compressed {
-                page_id: _,
-                content: _,
-            } => false,
+            MessagesPage::Compressed(_) => false,
             MessagesPage::Empty(_) => false,
         }
     }
@@ -30,10 +27,7 @@ impl MessagesPage {
     pub fn get_messages_amount_to_save(&self) -> usize {
         match self {
             MessagesPage::Uncompressed(page) => page.metrics.get_messages_amount_to_save(),
-            MessagesPage::Compressed {
-                page_id: _,
-                content: _,
-            } => 0,
+            MessagesPage::Compressed(_) => 0,
             MessagesPage::Empty(_) => 0,
         }
     }
@@ -49,10 +43,7 @@ impl MessagesPage {
     pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedMessagesPage {
         match self {
             MessagesPage::Uncompressed(result) => result,
-            MessagesPage::Compressed {
-                page_id: _,
-                content: _,
-            } => {
+            MessagesPage::Compressed(_) => {
                 panic!("Can not get message as uncompressed. It's compressed");
             }
             MessagesPage::Empty(_) => {
@@ -61,18 +52,11 @@ impl MessagesPage {
         }
     }
 
-    pub fn is_initialized(&self) -> bool {
-        todo!("Implement")
-    }
-
     pub fn get_page_id(&self) -> PageId {
         match self {
             MessagesPage::Uncompressed(page) => page.page_id,
-            MessagesPage::Compressed {
-                page_id,
-                content: _,
-            } => *page_id,
-            MessagesPage::Empty(page_id) => *page_id,
+            MessagesPage::Compressed(page) => page.page_id,
+            MessagesPage::Empty(page) => page.page_id,
         }
     }
 }

@@ -1,9 +1,7 @@
 use std::{collections::BTreeMap, sync::atomic::AtomicBool};
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
-use tokio::sync::{Mutex, RwLock};
-
-use crate::uncompressed_page_storage::UncompressedPageStorage;
+use tokio::sync::RwLock;
 
 use super::{MessagesPageData, PageMetrics};
 

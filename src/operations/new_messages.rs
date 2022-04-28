@@ -13,11 +13,7 @@ pub async fn new_messages(
         .get_or_create_uncompressed(page_id)
         .await;
 
-    crate::operations::index_by_minute::new_messages(
-        app,
-        topic_data.topic_id.as_str(),
-        messages.as_slice(),
-    );
+    crate::operations::index_by_minute::new_messages(app, topic_data, messages.as_slice());
 
     page.new_messages(messages).await;
 }

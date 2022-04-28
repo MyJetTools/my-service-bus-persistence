@@ -16,10 +16,6 @@ pub async fn get_or_restore_page(
         let page = topic_data.pages_list.get(page_id).await;
 
         if let Some(page) = page {
-            if page.is_initialized() {
-                return page;
-            }
-
             let uncompressed_page = page.unwrap_as_uncompressed_page();
 
             let mut storage = topic_data.storages.lock().await;

@@ -1,10 +1,10 @@
-mod azure_page_blob;
-mod index_by_minute_handler;
-mod indexes_by_minute;
-mod utils;
-
-pub use azure_page_blob::IndexByMinuteAzurePageBlob;
-pub use index_by_minute_handler::IndexByMinuteHandler;
-pub use index_by_minute_handler::MsgData;
-pub use indexes_by_minute::IndexesByMinute;
+mod index_by_minute_storage;
+mod message_index_builder_data;
+pub mod utils;
+mod yearly_index_by_minute;
+pub use message_index_builder_data::MessageIndexBuilderData;
 pub use utils::IndexByMinuteUtils;
+pub use yearly_index_by_minute::YearlyIndexByMinute;
+mod minute_within_year;
+pub use index_by_minute_storage::IndexByMinuteStorage;
+pub use minute_within_year::MinuteWithinYear;
