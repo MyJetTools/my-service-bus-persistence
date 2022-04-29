@@ -1,7 +1,6 @@
 use std::usize;
 
 use crate::{app::AppContext, topic_data::TopicData, utils::duration_to_string};
-use my_http_server::{HttpFailResult, HttpOkResult};
 use my_service_bus_shared::protobuf_models::{
     QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
 };
@@ -9,11 +8,6 @@ use rust_extensions::date_time::DateTimeAsMicroseconds;
 use serde::{Deserialize, Serialize};
 
 use sysinfo::SystemExt;
-
-pub async fn get(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
-    let model = get_model(app).await;
-    return Ok(HttpOkResult::create_json_response(model));
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemStatusModel {
@@ -111,7 +105,7 @@ struct LoadedPageModel {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct StatusModel {
+pub struct StatusModel {
     #[serde(rename = "queuesSnapshotId")]
     queues_snapshot_id: i64,
     #[serde(rename = "activeOperations")]
@@ -125,7 +119,53 @@ struct StatusModel {
     initialing: Option<bool>,
 }
 
+impl StatusModel {
+    pub async fn new(app: &AppContext) -> StatusModel {
+        let topics_snapshot = app.topics_snapshot.get().await;
+
+        let mut topics = Vec::new();
+        let now = DateTimeAsMicroseconds::now();
+
+        for snapshot in &topics_snapshot.snapshot.data {
+            let data_by_topic = app.topics_list.get(snapshot.topic_id.as_str()).await;
+
+            if data_by_topic.is_none() {
+                continue;
+            }
+
+            let data_by_topic = data_by_topic.unwrap();
+
+            let topic_info_model = get_topics_model(snapshot, data_by_topic.as_ref(), now).await;
+
+            topics.push(topic_info_model)
+        }
+
+        let mut sys_info = sysinfo::System::new_all();
+
+        // First we update all information of our system struct.
+        sys_info.refresh_all();
+
+        let model = StatusModel {
+            initialing: match app.is_initialized() {
+                true => None,
+                false => Some(true),
+            },
+            queues_snapshot_id: topics_snapshot.snapshot_id,
+            active_operations: Vec::new(),
+            awaiting_operations: Vec::new(),
+            topics,
+            system: SystemStatusModel {
+                totalmem: sys_info.total_memory(),
+                usedmem: sys_info.used_memory(),
+            },
+        };
+
+        return model;
+    }
+}
 async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
+    todo!("Uncomment");
+    /*
     let mut result: Vec<LoadedPageModel> = Vec::new();
 
     for page in topic_data.get_all().await {
@@ -146,6 +186,7 @@ async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
     });
 
     result
+     */
 }
 
 async fn get_topics_model(
@@ -157,7 +198,7 @@ async fn get_topics_model(
 
     let last_save_moment_since = now.duration_since(cache_by_topic.metrics.get_last_saved_moment());
 
-    let queue_size = cache_by_topic.get_messages_amount_to_save().await;
+    let queue_size = cache_by_topic.get_messages_amount_to_save();
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
@@ -171,47 +212,4 @@ async fn get_topics_model(
         saved_message_id: cache_by_topic.metrics.get_last_saved_message_id(),
         queue_size,
     }
-}
-
-async fn get_model(app: &AppContext) -> StatusModel {
-    let topics_snapshot = app.topics_snapshot.get().await;
-
-    let mut topics = Vec::new();
-    let now = DateTimeAsMicroseconds::now();
-
-    for snapshot in &topics_snapshot.snapshot.data {
-        let data_by_topic = app.topics_list.get(snapshot.topic_id.as_str()).await;
-
-        if data_by_topic.is_none() {
-            continue;
-        }
-
-        let data_by_topic = data_by_topic.unwrap();
-
-        let topic_info_model = get_topics_model(snapshot, data_by_topic.as_ref(), now).await;
-
-        topics.push(topic_info_model)
-    }
-
-    let mut sys_info = sysinfo::System::new_all();
-
-    // First we update all information of our system struct.
-    sys_info.refresh_all();
-
-    let model = StatusModel {
-        initialing: match app.is_initialized() {
-            true => None,
-            false => Some(true),
-        },
-        queues_snapshot_id: topics_snapshot.snapshot_id,
-        active_operations: Vec::new(),
-        awaiting_operations: Vec::new(),
-        topics,
-        system: SystemStatusModel {
-            totalmem: sys_info.total_memory(),
-            usedmem: sys_info.used_memory(),
-        },
-    };
-
-    return model;
 }

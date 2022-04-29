@@ -93,6 +93,9 @@ mod test {
         let message_id = index_by_year.get_message_id(&minute);
 
         assert_eq!(message_id, 15);
+
+        //Check that page to persist has changes
+        assert_eq!(index_by_year.pages_to_save.contains_key(&0), true);
     }
 
     #[tokio::test]
@@ -105,10 +108,14 @@ mod test {
         let minute = MinuteWithinYear::new(5);
         index_by_year.update_minute_index_if_new(&minute, 15);
 
+        //Like we did it from timer
         index_by_year.flush_to_storage().await;
 
         let as_mem = index_by_year.storage.unwrap_as_file().unwrap_as_mem();
 
         assert_eq!(as_mem.content[40], 15);
+        assert_eq!(as_mem.content[41], 0);
+        assert_eq!(as_mem.content[42], 0);
+        assert_eq!(as_mem.content[43], 0);
     }
 }

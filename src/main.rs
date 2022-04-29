@@ -5,12 +5,12 @@ mod file_random_access;
 
 //mod compressed_pages;
 mod grpc;
-mod page_blob_utils;
-//mod http;
+mod http;
 mod index_by_minute;
 mod message_pages;
 mod messages_in_blob;
 mod operations;
+mod page_blob_utils;
 mod settings;
 mod timers;
 mod toipics_snapshot;
@@ -73,6 +73,8 @@ async fn main() {
 
     */
     timer_3s.start(app.clone(), app.clone());
+
+    crate::http::start_up::setup_server(&app, 7123);
 
     signal_hook::flag::register(signal_hook::consts::SIGTERM, app.shutting_down.clone()).unwrap();
 

@@ -1,8 +1,3 @@
-mod api;
-mod debug;
-mod metrics;
-mod prometheus_controller;
-mod read_controller;
-pub mod router;
-mod static_content;
+pub mod api_controller;
+pub mod logs_controller;
 mod topic_controller;

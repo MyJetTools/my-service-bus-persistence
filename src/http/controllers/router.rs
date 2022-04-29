@@ -23,9 +23,6 @@ pub async fn route_requests(
             return super::metrics::index::get(app.as_ref()).await;
         }
 
-        (&Method::GET, "/api/status") => {
-            return super::api::status::get(app.as_ref()).await;
-        }
 
         (&Method::GET, "/debug/page") => {
             return super::debug::get_page_http_action::get(ctx, app.as_ref()).await;

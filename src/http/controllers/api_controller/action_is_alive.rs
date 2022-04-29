@@ -1,10 +1,11 @@
 use std::{sync::Arc, time::SystemTime};
 
-use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput};
+use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
 use serde::{Deserialize, Serialize};
 
 use crate::app::AppContext;
 
+#[my_http_server_swagger::http_route(method: "GET", route: "/api/is_alive")]
 pub struct IsAliveAction {
     app: Arc<AppContext>,
 }
@@ -14,8 +15,10 @@ impl IsAliveAction {
         Self { app }
     }
 }
-
-pub fn handle_request(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> {
+pub async fn handle_request(
+    action: &IsAliveAction,
+    _ctx: &HttpContext,
+) -> Result<HttpOkResult, HttpFailResult> {
     let version = env!("CARGO_PKG_VERSION");
 
     let time = SystemTime::now()
@@ -27,7 +30,7 @@ pub fn handle_request(app: &AppContext) -> Result<HttpOkResult, HttpFailResult> 
         name: "MyServiceBus.Persistence".to_string(),
         time: time,
         version: version.to_string(),
-        env_info: app.get_env_info(),
+        env_info: action.app.get_env_info(),
     };
 
     let result = HttpOutput::as_json(model).into_ok_result(true);
