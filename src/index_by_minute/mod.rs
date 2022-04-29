@@ -1,3 +1,4 @@
+mod as_file;
 mod index_by_minute_storage;
 mod message_index_builder_data;
 pub mod utils;

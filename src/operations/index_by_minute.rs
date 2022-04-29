@@ -30,7 +30,7 @@ pub async fn new_messages(
             index_by_minute
                 .get_mut(&year)
                 .unwrap()
-                .update_minute_index_if_new(minute_within_year, msg.message_id);
+                .update_minute_index_if_new(&minute_within_year, msg.message_id);
         }
     }
 }

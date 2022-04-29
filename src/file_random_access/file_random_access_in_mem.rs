@@ -1,6 +1,6 @@
 pub struct FileRandomAccessInMem {
-    content: Vec<u8>,
-    pos: usize,
+    pub content: Vec<u8>,
+    pub pos: usize,
 }
 
 impl FileRandomAccessInMem {
@@ -49,6 +49,11 @@ impl FileRandomAccessInMem {
 
         self.pos = position;
         Ok(())
+    }
+
+    pub fn get_file_size(&self) -> std::io::Result<usize> {
+        let result = self.content.len();
+        Ok(result)
     }
 
     pub fn reduce_size(&mut self, len: usize) -> Result<(), std::io::Error> {

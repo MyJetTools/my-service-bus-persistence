@@ -10,7 +10,7 @@ pub const INDEX_STEP: usize = 8;
 
 const LAST_DAY_OF_YEAR: usize = 527039;
 
-pub const MINUTE_INDEX_BLOB_SIZE: usize = (LAST_DAY_OF_YEAR + 1) * INDEX_STEP;
+pub const MINUTE_INDEX_FILE_SIZE: usize = (LAST_DAY_OF_YEAR + 1) * INDEX_STEP;
 
 pub struct IndexByMinuteUtils {
     day_no_in_year: Vec<u32>,

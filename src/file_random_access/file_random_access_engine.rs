@@ -33,6 +33,11 @@ impl FileRandomAccessEngine {
         Ok(())
     }
 
+    pub async fn get_file_size(&self) -> std::io::Result<usize> {
+        let metadata = self.file.metadata().await?;
+        Ok(metadata.len() as usize)
+    }
+
     pub async fn write_to_file(&mut self, content: &[u8]) -> std::io::Result<()> {
         self.file.write_all(content).await?;
 

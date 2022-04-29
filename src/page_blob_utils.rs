@@ -15,6 +15,10 @@ impl PageBlobPageId {
             value: blob_position / BLOB_PAGE_SIZE,
         }
     }
+
+    pub fn get_absolute_position(&self) -> usize {
+        self.value * BLOB_PAGE_SIZE
+    }
 }
 
 pub fn get_page_content(src: &[u8], page_id: usize) -> &[u8] {

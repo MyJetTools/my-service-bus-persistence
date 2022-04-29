@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use my_service_bus_shared::{page_id::PageId, MessageId};
+use my_service_bus_shared::MessageId;
 
 use crate::page_blob_utils::PageBlobPageId;
 
@@ -14,7 +14,7 @@ pub struct YearlyIndexByMinute {
 }
 
 impl YearlyIndexByMinute {
-    pub async fn new(year: u32, storage: IndexByMinuteStorage) -> Self {
+    pub async fn new(year: u32, mut storage: IndexByMinuteStorage) -> Self {
         Self {
             year,
             index_data: storage.load().await,
@@ -25,16 +25,16 @@ impl YearlyIndexByMinute {
 
     pub fn update_minute_index_if_new(
         &mut self,
-        minute_witin_year: MinuteWithinYear,
+        minute_witin_year: &MinuteWithinYear,
         message_id: MessageId,
     ) {
         let position_in_file = minute_witin_year.get_position_in_file();
 
-        if self.get_page_id_from_position(position_in_file) != 0 {
+        if self.get_message_id_from_position(position_in_file) != 0 {
             return;
         }
 
-        let dest = &mut self.index_data[position_in_file..8];
+        let dest = &mut self.index_data[position_in_file..position_in_file + 8];
 
         dest.copy_from_slice(message_id.to_le_bytes().as_slice());
 
@@ -43,27 +43,72 @@ impl YearlyIndexByMinute {
         self.pages_to_save.insert(page_id.value, ());
     }
 
-    fn get_page_id_from_position(&self, position_in_file: usize) -> PageId {
+    fn get_message_id_from_position(&self, position_in_file: usize) -> MessageId {
         let mut page_id_in_file = [0u8; 8];
-        page_id_in_file.copy_from_slice(&self.index_data[position_in_file..8]);
+        page_id_in_file.copy_from_slice(&self.index_data[position_in_file..position_in_file + 8]);
 
-        PageId::from_be_bytes(page_id_in_file)
+        MessageId::from_le_bytes(page_id_in_file)
     }
 
-    fn get_page_content_to_sync_if_needed(&self) -> Option<(PageBlobPageId, &[u8])> {
+    fn get_page_content_to_sync_if_needed(&self) -> Option<(PageBlobPageId, Vec<u8>)> {
         for page_to_save in self.pages_to_save.keys() {
             let content =
                 crate::page_blob_utils::get_page_content(self.index_data.as_slice(), *page_to_save);
-            return Some((PageBlobPageId::new(*page_to_save), content));
+            return Some((PageBlobPageId::new(*page_to_save), content.to_vec()));
         }
 
         None
     }
 
+    pub fn get_message_id(&self, minute_witin_year: &MinuteWithinYear) -> MessageId {
+        let position_in_file = minute_witin_year.get_position_in_file();
+        return self.get_message_id_from_position(position_in_file);
+    }
+
     pub async fn flush_to_storage(&mut self) {
         while let Some((page_id, content)) = self.get_page_content_to_sync_if_needed() {
-            self.storage.save(content, &page_id).await;
+            self.storage.save(content.as_slice(), &page_id).await;
             self.pages_to_save.remove(&page_id.value);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::file_random_access::*;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_that_second_time_is_not_updated() {
+        let random_file_access = FileRandomAccess::create_as_in_mem();
+
+        let storage = IndexByMinuteStorage::as_file(random_file_access);
+        let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
+
+        let minute = MinuteWithinYear::new(5);
+        index_by_year.update_minute_index_if_new(&minute, 15);
+        index_by_year.update_minute_index_if_new(&minute, 16);
+
+        let message_id = index_by_year.get_message_id(&minute);
+
+        assert_eq!(message_id, 15);
+    }
+
+    #[tokio::test]
+    async fn test_we_flushed_to_storage() {
+        let random_file_access = FileRandomAccess::create_as_in_mem();
+
+        let storage = IndexByMinuteStorage::as_file(random_file_access);
+        let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
+
+        let minute = MinuteWithinYear::new(5);
+        index_by_year.update_minute_index_if_new(&minute, 15);
+
+        index_by_year.flush_to_storage().await;
+
+        let as_mem = index_by_year.storage.unwrap_as_file().unwrap_as_mem();
+
+        assert_eq!(as_mem.content[40], 15);
     }
 }

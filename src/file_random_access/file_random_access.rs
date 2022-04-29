@@ -47,4 +47,21 @@ impl FileRandomAccess {
             FileRandomAccess::InMem(as_mem) => as_mem.set_position(position),
         }
     }
+
+    pub async fn get_file_size(&mut self) -> std::io::Result<usize> {
+        match self {
+            FileRandomAccess::AsFile(as_file) => as_file.get_file_size().await,
+            FileRandomAccess::InMem(as_mem) => as_mem.get_file_size(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn unwrap_as_mem(&self) -> &FileRandomAccessInMem {
+        match self {
+            FileRandomAccess::AsFile(_) => {
+                panic!("File is created as read file")
+            }
+            FileRandomAccess::InMem(as_mem) => &as_mem,
+        }
+    }
 }
