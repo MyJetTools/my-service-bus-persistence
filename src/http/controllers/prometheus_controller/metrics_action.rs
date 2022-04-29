@@ -19,12 +19,12 @@ async fn handle_request(
     action: &MetricsAction,
     _ctx: &mut HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
-    let result = action.app.prometheus.build();
+    let result = action.app.metrics_keeper.build_prometheus_content();
 
     HttpOutput::Content {
         headers: None,
         content_type: None,
-        content: result,
+        content: result.into_bytes(),
     }
     .into_ok_result(true)
     .into()

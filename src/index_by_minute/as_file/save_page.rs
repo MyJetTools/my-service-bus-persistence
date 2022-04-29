@@ -1,4 +1,4 @@
-use crate::{file_random_access::FileRandomAccess, page_blob_utils::PageBlobPageId};
+use crate::{file_random_access::FileRandomAccess, page_blob_random_access::PageBlobPageId};
 
 pub async fn save_page(as_file: &mut FileRandomAccess, page_no: &PageBlobPageId, content: &[u8]) {
     let pos = page_no.get_absolute_position();

@@ -24,22 +24,9 @@ pub async fn route_requests(
         }
 
 
-        (&Method::GET, "/debug/page") => {
-            return super::debug::get_page_http_action::get(ctx, app.as_ref()).await;
-        }
-
         _ => {}
     }
 
-
-
-    if path.starts_with("/logs") {
-        return super::api::logs::get(app.as_ref()).await;
-    }
-
-    if path.starts_with("/logs/topic") {
-        return super::api::logs::get_by_topic(path, app.as_ref()).await;
-    }
 
     if !app.is_initialized() {
         return Err(HttpFailResult::not_initialized());

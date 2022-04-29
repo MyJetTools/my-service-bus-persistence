@@ -34,27 +34,4 @@ impl TopicsDataList {
         write_access.insert(topic_id.to_string(), topic_data.clone());
         return Some(topic_data);
     }
-
-    pub async fn get_or_create_data_by_topic(&self, topic_id: &str) -> Arc<TopicData> {
-        let data_by_topic = self.get(topic_id).await;
-        if data_by_topic.is_some() {
-            return data_by_topic.unwrap();
-        }
-
-        let mut write_access = self.data.write().await;
-
-        let result = write_access.get(topic_id);
-
-        if result.is_some() {
-            return result.unwrap().clone();
-        }
-
-        let result = TopicData::new(topic_id);
-
-        let result = Arc::new(result);
-
-        write_access.insert(topic_id.to_string(), result.clone());
-
-        result
-    }
 }

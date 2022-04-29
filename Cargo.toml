@@ -9,9 +9,7 @@ edition = "2021"
 [dependencies]
 my-azure-storage-sdk = { branch = "0.1.1", git = "https://github.com/MyJetTools/my-azure-storage.git" }
 my-azure-page-blob = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-azure-page-blob.git" }
-my-azure-page-blob-append = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-azure-page-blob-append.git" }
 my-service-bus-shared = { branch = "0.1.1", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
-my-azure-page-blob-random-access = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-page-blob-random-access.git" }
 
 my-http-server = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server.git" }
 my-http-server-swagger = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server-swagger.git" }

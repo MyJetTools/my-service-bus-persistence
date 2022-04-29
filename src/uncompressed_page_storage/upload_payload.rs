@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
 use super::toc::MessageContentOffset;
 

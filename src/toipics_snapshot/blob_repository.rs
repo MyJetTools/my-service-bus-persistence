@@ -76,7 +76,7 @@ pub async fn write_to_blob<TMyPageBlob: MyPageBlob>(
 
     let len_as_bytes = len.to_le_bytes();
 
-    &data[0..4].copy_from_slice(&len_as_bytes[0..4]);
+    data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
     my_page_blob.save_pages(0, data).await?;
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use my_service_bus_shared::MessageId;
 
-use crate::page_blob_utils::PageBlobPageId;
+use crate::page_blob_random_access::*;
 
 use super::{IndexByMinuteStorage, MinuteWithinYear};
 
@@ -52,8 +52,10 @@ impl YearlyIndexByMinute {
 
     fn get_page_content_to_sync_if_needed(&self) -> Option<(PageBlobPageId, Vec<u8>)> {
         for page_to_save in self.pages_to_save.keys() {
-            let content =
-                crate::page_blob_utils::get_page_content(self.index_data.as_slice(), *page_to_save);
+            let content = crate::page_blob_random_access::utils::get_page_content(
+                self.index_data.as_slice(),
+                *page_to_save,
+            );
             return Some((PageBlobPageId::new(*page_to_save), content.to_vec()));
         }
 

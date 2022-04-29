@@ -1,3 +1,4 @@
 pub mod api_controller;
 pub mod logs_controller;
-mod topic_controller;
+pub mod prometheus_controller;
+pub mod topic_controller;

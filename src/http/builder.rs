@@ -22,5 +22,13 @@ pub fn build(app: &Arc<AppContext>) -> ControllersMiddleware {
         super::controllers::logs_controller::ActionLogsByTopic::new(app.clone()),
     ));
 
+    result.register_delete_action(Arc::new(
+        super::controllers::topic_controller::DeleteTopicAction::new(app.clone()),
+    ));
+
+    result.register_get_action(Arc::new(
+        super::controllers::prometheus_controller::MetricsAction::new(app.clone()),
+    ));
+
     result
 }

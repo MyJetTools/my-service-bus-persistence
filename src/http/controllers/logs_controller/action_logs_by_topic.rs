@@ -9,7 +9,7 @@ use super::contracts::*;
 
 #[my_http_server_swagger::http_route(
     method: "GET", 
-    route: "/logs/{topicId}",
+    route: "/logs/topic/{topicId}",
     input_data: "GetLogsByTopicHttpInput",
 )]
 pub struct ActionLogsByTopic {
@@ -25,7 +25,7 @@ impl ActionLogsByTopic {
 async fn handle_request(
     action: &ActionLogsByTopic,
     http_input: GetLogsByTopicHttpInput,
-    ctx: &HttpContext,
+    _ctx: &HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     let mut sw = StopWatch::new();
     sw.start();
