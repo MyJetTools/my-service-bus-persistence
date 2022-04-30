@@ -30,5 +30,9 @@ pub fn build(app: &Arc<AppContext>) -> ControllersMiddleware {
         super::controllers::prometheus_controller::MetricsAction::new(app.clone()),
     ));
 
+    result.register_get_action(Arc::new(
+        super::controllers::home_controller::IndexAction::new(),
+    ));
+
     result
 }

@@ -3,7 +3,6 @@ mod app;
 
 mod file_random_access;
 
-//mod compressed_pages;
 mod grpc;
 mod http;
 mod index_by_minute;
@@ -22,7 +21,10 @@ mod uncompressed_page_storage;
 use crate::{
     app::AppContext,
     settings::SettingsModel,
-    timers::{topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer},
+    timers::{
+        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
+        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer,
+    },
 };
 
 use tokio::signal;
@@ -50,15 +52,13 @@ async fn main() {
         Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
     );
 
-    /*
-        todo!("Restore");
-       timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
-       timer_3s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
-       timer_3s.register_timer(
-           "SaveMinIndexTimer",
-           Arc::new(SaveMinIndexTimer::new(app.clone())),
-       );
-    */
+    timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
+    timer_3s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
+    timer_3s.register_timer(
+        "SaveMinIndexTimer",
+        Arc::new(SaveMinIndexTimer::new(app.clone())),
+    );
+
     timer_3s.start(app.clone(), app.clone());
 
     crate::http::start_up::setup_server(&app, 7123);

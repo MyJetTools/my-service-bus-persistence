@@ -22,36 +22,17 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         &self,
         request: tonic::Request<GetMessageGrpcRequest>,
     ) -> Result<tonic::Response<MessageContentGrpcModel>, tonic::Status> {
-        todo!("Implement");
-        /*
         contracts::check_flags(self.app.as_ref())?;
-
 
         let req = request.into_inner();
 
-        let topic_data = self.app.topics_list.get(&req.topic_id).await;
-
-        if topic_data.is_none() {
-            let result = super::compressed_page_compiler::get_none_message();
-            return Ok(tonic::Response::new(result));
-        }
-
-        let topic_data = topic_data.unwrap();
-
-        let page_id = MessagePageId::from_message_id(req.message_id);
-
-        let messages_page = topic_data.as_ref().get(page_id).await;
-
-        if messages_page.is_none() {
-            let result = super::compressed_page_compiler::get_none_message();
-            return Ok(tonic::Response::new(result));
-        }
-
-        let messages_page = messages_page.unwrap();
-
-        let read_access = messages_page.data.read().await;
-
-        let message = read_access.get_message(req.message_id).unwrap();
+        let message = crate::operations::get_message_by_id(
+            self.app.as_ref(),
+            req.topic_id.as_ref(),
+            req.message_id,
+        )
+        .await
+        .unwrap();
 
         if message.is_none() {
             let result = super::compressed_page_compiler::get_none_message();
@@ -60,7 +41,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let result = super::messages_mappers::to_grpc::to_message(message.as_ref().unwrap());
         return Ok(tonic::Response::new(result));
-         */
     }
 
     async fn get_page_compressed(

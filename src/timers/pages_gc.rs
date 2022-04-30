@@ -22,7 +22,9 @@ impl PagesGcTimer {
 impl MyTimerTick for PagesGcTimer {
     async fn tick(&self) {
         let topics_snapshot = self.app.topics_snapshot.get().await;
-        gc_pages(self.app.clone(), topics_snapshot.snapshot);
+        gc_pages(self.app.clone(), topics_snapshot.snapshot)
+            .await
+            .unwrap();
     }
 }
 

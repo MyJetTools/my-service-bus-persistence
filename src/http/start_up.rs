@@ -13,7 +13,7 @@ pub fn setup_server(app: &Arc<AppContext>, port: u16) {
 
     let swagger_middleware = SwaggerMiddleware::new(
         controllers.clone(),
-        "MyNoSqlServer".to_string(),
+        "MyServiceBusPersistence".to_string(),
         crate::app::APP_VERSION.to_string(),
     );
 
