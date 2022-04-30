@@ -23,15 +23,15 @@ impl TopicsDataList {
         return Some(result.clone());
     }
 
-    pub async fn create_topic_data(&self, topic_id: &str) -> Option<Arc<TopicData>> {
+    pub async fn create_topic_data(&self, topic_id: &str) -> bool {
         let mut write_access = self.data.write().await;
 
         if write_access.contains_key(topic_id) {
-            return None;
+            return false;
         }
 
         let topic_data = Arc::new(TopicData::new(topic_id));
-        write_access.insert(topic_id.to_string(), topic_data.clone());
-        return Some(topic_data);
+        write_access.insert(topic_id.to_string(), topic_data);
+        return true;
     }
 }

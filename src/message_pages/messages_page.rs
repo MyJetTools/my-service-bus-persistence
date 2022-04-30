@@ -1,6 +1,6 @@
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
-use crate::uncompressed_page_storage::toc::UncompressedFileToc;
+use crate::uncompressed_page_storage::UncompressedPageStorage;
 
 use super::{BlankPage, UncompressedPage};
 
@@ -13,8 +13,8 @@ impl MessagesPage {
     pub fn create_as_empty(page_id: PageId) -> Self {
         Self::Empty(BlankPage::new(page_id))
     }
-    pub fn create_uncompressed(page_id: PageId, toc: UncompressedFileToc) -> Self {
-        Self::Uncompressed(UncompressedPage::new(page_id, toc))
+    pub async fn create_uncompressed(page_id: PageId, storage: UncompressedPageStorage) -> Self {
+        Self::Uncompressed(UncompressedPage::new(page_id, storage).await)
     }
 
     pub fn has_messages_to_save(&self) -> bool {
@@ -40,9 +40,8 @@ impl MessagesPage {
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let uncompressed_messages = self.unwrap_as_uncompressed_page();
-        let mut write_access = uncompressed_messages.page_data.write().await;
 
-        write_access.add(messages);
+        uncompressed_messages.new_messages(messages);
     }
 
     pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedPage {

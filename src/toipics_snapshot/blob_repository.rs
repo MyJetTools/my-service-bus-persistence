@@ -1,6 +1,6 @@
 use std::usize;
 
-use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
+use my_azure_storage_sdk::AzureStorageError;
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
 use crate::page_blob_random_access::PageBlobRandomAccess;

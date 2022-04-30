@@ -39,28 +39,14 @@ pub async fn read_message_from_blob(
     page: &UncompressedPage,
     message_id: MessageId,
 ) -> Result<Option<MessageProtobufModel>, OperationError> {
-    let offset = page.get_message_offset(message_id).await;
+    let content = page.read_content(message_id).await;
 
-    if !offset.has_data() {
+    if content.is_none() {
         return Ok(None);
     }
 
-    let mut storages = topic_data.storages.lock().await;
-
-    let storage = crate::operations::init_page_storage::init(
-        app,
-        topic_data.topic_id.as_ref(),
-        &page,
-        &mut storages,
-        false,
-    )
-    .await
-    .unwrap();
-
-    let content = storage.read_content(&offset).await;
-
-    match prost::Message::decode(content.as_slice()) {
-        Ok(message) => Ok(Some(message)),
+    let message = match prost::Message::decode(content.unwrap().as_slice()) {
+        Ok(message) => message,
         Err(err) => {
             app.logs.add_error(
                 Some(topic_data.topic_id.as_str()),
@@ -70,5 +56,9 @@ pub async fn read_message_from_blob(
             );
             return Err(OperationError::ProtobufDecodeError(err));
         }
-    }
+    };
+
+    let result = page.restore_message(message).await;
+
+    Ok(Some(result))
 }

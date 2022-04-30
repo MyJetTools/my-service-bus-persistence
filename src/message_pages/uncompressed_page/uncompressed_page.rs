@@ -1,26 +1,42 @@
+use std::time::Duration;
+
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
-use tokio::sync::RwLock;
+use rust_extensions::StopWatch;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     message_pages::{PageMetrics, MESSAGES_PER_PAGE},
-    uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc},
+    page_blob_random_access::RandomAccessData,
+    uncompressed_page_storage::{
+        toc::MessageContentOffset, PayloadsToUploadContainer, UncompressedPageStorage,
+    },
 };
 
 use super::UncompressedPageData;
 
 pub struct UncompressedPage {
-    pub page_data: RwLock<UncompressedPageData>,
+    page_data: RwLock<UncompressedPageData>,
     pub page_id: PageId,
     pub metrics: PageMetrics,
+    storage: Mutex<UncompressedPageStorage>,
 }
 
 impl UncompressedPage {
-    pub fn new(page_id: PageId, toc: UncompressedFileToc) -> Self {
+    pub async fn new(page_id: PageId, mut storage: UncompressedPageStorage) -> Self {
+        let toc = storage.read_toc().await;
         Self {
             page_data: RwLock::new(UncompressedPageData::new(page_id, toc)),
             page_id,
             metrics: PageMetrics::new(),
+            storage: Mutex::new(storage),
         }
+    }
+
+    pub async fn restore_message(&self, message: MessageProtobufModel) -> MessageProtobufModel {
+        let result = message.clone();
+        let mut write_access = self.page_data.write().await;
+        write_access.restore_message(message);
+        result
     }
 
     pub async fn get_message_offset(&self, message_id: MessageId) -> MessageContentOffset {
@@ -40,9 +56,7 @@ impl UncompressedPage {
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let messages_to_save = {
             let mut write_access = self.page_data.write().await;
-
             write_access.add(messages);
-
             write_access.queue_to_save.len() as usize
         };
 
@@ -89,5 +103,49 @@ impl UncompressedPage {
         for message in messages {
             write_access.queue_to_save.remove(message.message_id);
         }
+    }
+
+    pub async fn read_content(&self, message_id: MessageId) -> Option<RandomAccessData> {
+        let offset = self.get_message_offset(message_id).await;
+
+        if !offset.has_data() {
+            return None;
+        }
+
+        let mut storage = self.storage.lock().await;
+
+        let content = storage.read_content(&offset).await;
+
+        Some(content)
+    }
+
+    pub async fn flush_to_storage(&self, max_persist_size: usize) -> Duration {
+        let mut sw = StopWatch::new();
+        sw.start();
+
+        let messages_to_persist = self.get_messages_to_persist(max_persist_size).await;
+
+        if messages_to_persist.len() == 0 {
+            sw.pause();
+            return sw.duration();
+        }
+
+        let mut storage = self.storage.lock().await;
+
+        let write_position = self.get_write_position().await;
+
+        let mut upload_container = PayloadsToUploadContainer::new(write_position);
+
+        for msg_to_persist in &messages_to_persist {
+            upload_container.append(self.page_id, msg_to_persist);
+        }
+
+        storage.append_payload(upload_container).await.unwrap();
+
+        self.confirm_persisted(messages_to_persist.as_slice()).await;
+
+        sw.pause();
+
+        sw.duration()
     }
 }

@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use rust_extensions::{MyTimerTick, StopWatch};
+use rust_extensions::MyTimerTick;
 
-use crate::{
-    app::AppContext, topic_data::TopicData, uncompressed_page_storage::PayloadsToUploadContainer,
-};
+use crate::{app::AppContext, topic_data::TopicData};
 
 const MAX_PERSIST_SIZE: usize = 1024 * 1024 * 4;
 
@@ -45,48 +43,7 @@ impl MyTimerTick for SaveMessagesTimer {
             for page in pages_with_data_to_save {
                 let uncompressed_page = page.unwrap_as_uncompressed_page();
 
-                let messages_to_persist = uncompressed_page
-                    .get_messages_to_persist(MAX_PERSIST_SIZE)
-                    .await;
-
-                let duration = {
-                    let mut storages = topic_data.storages.lock().await;
-
-                    crate::operations::init_page_storage::init(
-                        self.app.as_ref(),
-                        topic.topic_id.as_str(),
-                        uncompressed_page,
-                        &mut storages,
-                        true,
-                    )
-                    .await
-                    .unwrap();
-
-                    let write_position = uncompressed_page.get_write_position().await;
-
-                    let storage = storages.get_mut(&uncompressed_page.page_id).unwrap();
-
-                    let mut sw = StopWatch::new();
-                    sw.start();
-
-                    let mut upload_container = PayloadsToUploadContainer::new(write_position);
-
-                    let page_id = page.get_page_id();
-
-                    for msg_to_persist in &messages_to_persist {
-                        upload_container.append(page_id, msg_to_persist);
-                    }
-
-                    storage.append_payload(upload_container).await.unwrap();
-
-                    uncompressed_page
-                        .confirm_persisted(messages_to_persist.as_slice())
-                        .await;
-
-                    sw.pause();
-
-                    sw.duration()
-                };
+                let duration = uncompressed_page.flush_to_storage(MAX_PERSIST_SIZE).await;
 
                 //TODO - Uncomment
                 //page.update_metrics(&page.metrics).await;

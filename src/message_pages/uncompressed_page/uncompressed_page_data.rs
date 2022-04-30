@@ -70,9 +70,13 @@ impl UncompressedPageData {
 
     pub fn restore(&mut self, messages: Vec<MessageProtobufModel>) {
         for msg in messages {
-            self.update_min_max(msg.message_id);
-            self.messages.insert(msg.message_id, msg);
+            self.restore_message(msg)
         }
+    }
+
+    pub fn restore_message(&mut self, msg: MessageProtobufModel) {
+        self.update_min_max(msg.message_id);
+        self.messages.insert(msg.message_id, msg);
     }
 
     pub fn get(&self, message_id: MessageId) -> Option<&MessageProtobufModel> {

@@ -24,18 +24,15 @@ pub async fn get_page_to_read(
             .open_uncompressed_page_storage_if_exists(topic_data.topic_id.as_str(), &page_id.value)
             .await;
 
-        let mut storages = topic_data.storages.lock().await;
-
-        let page = if let Some(mut storage) = page {
-            let toc = storage.read_toc().await;
-
-            let messages_page = MessagesPage::create_uncompressed(page_id.value, toc);
-
-            storages.insert(page_id.value, storage);
-
-            messages_page
+        let page = if let Some(storage) = page {
+            MessagesPage::create_uncompressed(page_id.value, storage).await
         } else {
             MessagesPage::create_as_empty(page_id.value)
         };
+
+        topic_data
+            .pages_list
+            .add(page_id.value, Arc::new(page))
+            .await;
     }
 }

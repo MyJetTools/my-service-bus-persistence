@@ -13,9 +13,9 @@ pub mod init_page_storage;
 mod new_messages;
 mod restore_page_error;
 mod topics;
+
 pub use error::OperationError;
 pub use get_active_pages::get_active_pages;
-
 pub use get_message_by_id::get_message_by_id;
 pub use get_messages_from_date::get_messages_from_date;
 pub use get_page_to_publish_messages::get_page_to_publish_messages;
