@@ -2,11 +2,10 @@ use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufMod
 
 use crate::uncompressed_page_storage::toc::UncompressedFileToc;
 
-use super::{BlankPage, CompressedPage, UncompressedPage};
+use super::{BlankPage, UncompressedPage};
 
 pub enum MessagesPage {
     Uncompressed(UncompressedPage),
-    Compressed(CompressedPage),
     Empty(BlankPage),
 }
 
@@ -21,7 +20,6 @@ impl MessagesPage {
     pub fn has_messages_to_save(&self) -> bool {
         match self {
             MessagesPage::Uncompressed(page) => page.has_messages_to_save(),
-            MessagesPage::Compressed(_) => false,
             MessagesPage::Empty(_) => false,
         }
     }
@@ -29,15 +27,13 @@ impl MessagesPage {
     pub fn get_messages_amount_to_save(&self) -> usize {
         match self {
             MessagesPage::Uncompressed(page) => page.metrics.get_messages_amount_to_save(),
-            MessagesPage::Compressed(_) => 0,
             MessagesPage::Empty(_) => 0,
         }
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let uncompressed_messages = self.unwrap_as_uncompressed_page();
-
-        let mut write_access = uncompressed_messages.pages.write().await;
+        let mut write_access = uncompressed_messages.page_data.write().await;
 
         write_access.add(messages);
     }
@@ -45,9 +41,6 @@ impl MessagesPage {
     pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedPage {
         match self {
             MessagesPage::Uncompressed(result) => result,
-            MessagesPage::Compressed(_) => {
-                panic!("Can not get message as uncompressed. It's compressed");
-            }
             MessagesPage::Empty(_) => {
                 panic!("Can not get message as uncompressed. It's empty");
             }
@@ -57,7 +50,6 @@ impl MessagesPage {
     pub fn get_page_id(&self) -> PageId {
         match self {
             MessagesPage::Uncompressed(page) => page.page_id,
-            MessagesPage::Compressed(page) => page.page_id,
             MessagesPage::Empty(page) => page.page_id,
         }
     }

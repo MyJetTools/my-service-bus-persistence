@@ -1,5 +1,4 @@
 mod blank_page;
-mod compressed_page;
 mod error;
 mod messages_page;
 
@@ -10,7 +9,6 @@ mod uncompressed_page;
 
 pub mod utils;
 
-pub use compressed_page::{CompressedPage, ReadCompressedPageError};
 pub use messages_page::MessagesPage;
 
 pub use page_id::MessagePageId;

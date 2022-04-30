@@ -3,7 +3,9 @@ use std::sync::{
     Arc,
 };
 
-use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+use my_azure_storage_sdk::{
+    blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
+};
 use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
@@ -14,7 +16,7 @@ use crate::{
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     topic_data::TopicsDataList,
-    uncompressed_page_storage::{UncompressedPageStorage, UncompressedStorageError},
+    uncompressed_page_storage::UncompressedPageStorage,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
@@ -33,6 +35,8 @@ pub struct AppContext {
     pub initialized: AtomicBool,
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
+
+    messages_conn_string: Arc<AzureStorageConnection>,
 }
 
 impl AppContext {
@@ -47,6 +51,9 @@ impl AppContext {
 
         let topics_repo = settings.get_topics_snapshot_repository().await;
 
+        let messages_conn_string =
+            AzureStorageConnection::from_conn_string(settings.messages_connection_string.as_str());
+
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
             logs: logs.clone(),
@@ -59,6 +66,7 @@ impl AppContext {
             initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
+            messages_conn_string: Arc::new(messages_conn_string),
         }
     }
 
@@ -99,44 +107,64 @@ impl AppContext {
         self.initialized.load(Ordering::SeqCst)
     }
 
-    pub async fn open_uncompressed_page_storage(
+    pub async fn open_uncompressed_page_storage_if_exists(
         &self,
         topic_id: &str,
-        page_id: PageId,
-        create_if_not_exists: bool,
+        page_id: &PageId,
     ) -> Option<UncompressedPageStorage> {
-        let connection = AzureStorageConnection::from_conn_string(
-            self.settings.messages_connection_string.as_str(),
-        );
-
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
-        let azure_storage =
-            AzurePageBlobStorage::new(Arc::new(connection), topic_id.to_string(), blob_name).await;
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
 
-        let blob = if create_if_not_exists {
-            Some(PageBlobRandomAccess::open_or_create(azure_storage).await)
-        } else {
-            PageBlobRandomAccess::open_if_exists(azure_storage).await
-        }?;
+        let page_blob = PageBlobRandomAccess::open_if_exists(azure_storage).await?;
 
-        Some(UncompressedPageStorage::new(blob))
+        Some(UncompressedPageStorage::new(page_blob))
     }
 
-    pub async fn create_uncompressed_page_storage(
+    pub async fn open_or_create_uncompressed_page_storage(
         &self,
         topic_id: &str,
-        page_id: PageId,
-    ) -> Result<UncompressedPageStorage, UncompressedStorageError> {
-        todo!("Implement")
+        page_id: &PageId,
+    ) -> UncompressedPageStorage {
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob = PageBlobRandomAccess::open_or_create(azure_storage).await;
+
+        UncompressedPageStorage::new(page_blob)
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
-        todo!("Implement");
+        self.messages_conn_string
+            .create_container_if_not_exist(topic_folder)
+            .await
+            .unwrap();
     }
 
     pub async fn create_index_storage(&self, topic_id: &str, year: u32) -> IndexByMinuteStorage {
-        todo!("Implement");
+        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob_random_access = PageBlobRandomAccess::open_or_create(azure_storage).await;
+
+        IndexByMinuteStorage::new(page_blob_random_access)
     }
 }
 

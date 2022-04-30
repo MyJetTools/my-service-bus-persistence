@@ -74,7 +74,7 @@ impl UncompressedFileToc {
         toc_pos / 512
     }
 
-    fn get_position(&self, file_no: usize) -> MessageContentOffset {
+    pub fn get_position(&self, file_no: usize) -> MessageContentOffset {
         let toc_pos = file_no * 8;
         MessageContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
     }

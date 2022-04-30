@@ -1,6 +1,10 @@
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
-use crate::{app::AppContext, message_pages::MessagePageId};
+use crate::{
+    app::AppContext,
+    message_pages::{MessagePageId, MessagesPage, UncompressedPage},
+    topic_data::TopicData,
+};
 
 use super::OperationError;
 
@@ -15,5 +19,62 @@ pub async fn get_message_by_id(
 
     let page = super::get_page_to_read(app, topic_data.as_ref(), &page_id).await?;
 
-    todo!("Implement");
+    if page.is_none() {
+        return Ok(None);
+    }
+
+    let page = page.unwrap();
+
+    let page = page.as_ref();
+    match page {
+        MessagesPage::Uncompressed(page) => {
+            if let Some(content) = page.get_message(message_id).await {
+                return Ok(Some(content));
+            }
+
+            let result = read_message_from_blob(app, topic_data.as_ref(), page, message_id).await?;
+            return Ok(result);
+        }
+        MessagesPage::Empty(_) => return Ok(None),
+    }
+}
+
+pub async fn read_message_from_blob(
+    app: &AppContext,
+    topic_data: &TopicData,
+    page: &UncompressedPage,
+    message_id: MessageId,
+) -> Result<Option<MessageProtobufModel>, OperationError> {
+    let offset = page.get_message_offset(message_id).await;
+
+    if !offset.has_data() {
+        return Ok(None);
+    }
+
+    let mut storages = topic_data.storages.lock().await;
+
+    let storage = crate::operations::init_page_storage::init(
+        app,
+        topic_data.topic_id.as_ref(),
+        &page,
+        &mut storages,
+        false,
+    )
+    .await
+    .unwrap();
+
+    let content = storage.read_content(&offset).await;
+
+    match prost::Message::decode(content.as_slice()) {
+        Ok(message) => Ok(Some(message)),
+        Err(err) => {
+            app.logs.add_error(
+                Some(topic_data.topic_id.as_str()),
+                "read_message_from_blob",
+                format!("Can not decode message from blob: {:?}", err),
+                format!("MessageId: {}", message_id),
+            );
+            return Err(OperationError::ProtobufDecodeError(err));
+        }
+    }
 }

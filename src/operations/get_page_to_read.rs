@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::messages_page::MessagesPage;
-
-use crate::{app::AppContext, message_pages::MessagePageId, topic_data::TopicData};
+use crate::{
+    app::AppContext,
+    message_pages::{MessagePageId, MessagesPage},
+    topic_data::TopicData,
+};
 
 use super::OperationError;
 

@@ -15,6 +15,10 @@ impl MessageContentOffset {
 
         Self { offset, size }
     }
+
+    pub fn has_data(&self) -> bool {
+        self.offset > 0
+    }
 }
 
 fn serialize_value(value: u32, dest: &mut [u8]) {

@@ -1,10 +1,10 @@
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
-use crate::page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess};
+use crate::page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess, RandomAccessData};
 
 use super::{
     load_trait::LoadFromStorage,
-    toc::{UncompressedFileToc, TOC_SIZE, TOC_SIZE_IN_PAGES},
+    toc::{MessageContentOffset, UncompressedFileToc, TOC_SIZE, TOC_SIZE_IN_PAGES},
     upload_payload::PayloadsToUploadContainer,
     UncompressedStorageError,
 };
@@ -34,6 +34,12 @@ impl UncompressedPageStorage {
             .await;
 
         UncompressedFileToc::new(content)
+    }
+
+    pub async fn read_content(&mut self, offset: &MessageContentOffset) -> RandomAccessData {
+        self.page_blob
+            .read_randomly(offset.offset, offset.size)
+            .await
     }
 
     pub async fn append_payload(

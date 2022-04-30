@@ -6,6 +6,10 @@ pub fn generate_uncompressed_blob_name(page_id: &PageId) -> String {
     return format!("{:019}.uncompressed", page_id);
 }
 
+pub fn generate_year_index_blob_name(year: u32) -> String {
+    return format!(".{}.yearindex", year);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
