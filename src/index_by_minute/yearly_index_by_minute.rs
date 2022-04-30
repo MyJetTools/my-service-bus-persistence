@@ -77,15 +77,26 @@ impl YearlyIndexByMinute {
 
 #[cfg(test)]
 mod test {
-    use crate::file_random_access::*;
+
+    use std::sync::Arc;
+
+    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 
     use super::*;
 
     #[tokio::test]
     async fn test_that_second_time_is_not_updated() {
-        let random_file_access = FileRandomAccess::create_as_in_mem();
+        let azure_conn_string = AzureStorageConnection::new_in_memory();
+        let page_blob = AzurePageBlobStorage::new(
+            Arc::new(azure_conn_string),
+            "test".to_string(),
+            "test".to_string(),
+        )
+        .await;
 
-        let storage = IndexByMinuteStorage::as_file(random_file_access);
+        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+
+        let storage = IndexByMinuteStorage::new(random_file_access);
         let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
 
         let minute = MinuteWithinYear::new(5);
@@ -102,9 +113,17 @@ mod test {
 
     #[tokio::test]
     async fn test_we_flushed_to_storage() {
-        let random_file_access = FileRandomAccess::create_as_in_mem();
+        let azure_conn_string = AzureStorageConnection::new_in_memory();
+        let page_blob = AzurePageBlobStorage::new(
+            Arc::new(azure_conn_string),
+            "test".to_string(),
+            "test".to_string(),
+        )
+        .await;
 
-        let storage = IndexByMinuteStorage::as_file(random_file_access);
+        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+
+        let storage = IndexByMinuteStorage::new(random_file_access);
         let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
 
         let minute = MinuteWithinYear::new(5);
@@ -113,11 +132,11 @@ mod test {
         //Like we did it from timer
         index_by_year.flush_to_storage().await;
 
-        let as_mem = index_by_year.storage.unwrap_as_file().unwrap_as_mem();
+        let result = index_by_year.storage.load().await;
 
-        assert_eq!(as_mem.content[40], 15);
-        assert_eq!(as_mem.content[41], 0);
-        assert_eq!(as_mem.content[42], 0);
-        assert_eq!(as_mem.content[43], 0);
+        assert_eq!(result[40], 15);
+        assert_eq!(result[41], 0);
+        assert_eq!(result[42], 0);
+        assert_eq!(result[43], 0);
     }
 }

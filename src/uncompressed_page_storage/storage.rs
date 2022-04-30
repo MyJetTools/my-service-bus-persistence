@@ -1,36 +1,39 @@
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
+use crate::page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess};
+
 use super::{
-    as_file::UncompressedPageStorageAsFile, load_trait::LoadFromStorage,
-    upload_payload::PayloadsToUploadContainer, UncompressedStorageError,
+    load_trait::LoadFromStorage,
+    toc::{UncompressedFileToc, TOC_SIZE, TOC_SIZE_IN_PAGES},
+    upload_payload::PayloadsToUploadContainer,
+    UncompressedStorageError,
 };
 
-pub enum UncompressedPageStorage {
-    AsFile(UncompressedPageStorageAsFile),
+pub struct UncompressedPageStorage {
+    page_blob: PageBlobRandomAccess,
 }
 
 impl UncompressedPageStorage {
-    pub async fn open_or_append_as_file(path: &str) -> Result<Self, UncompressedStorageError> {
-        let result = UncompressedPageStorageAsFile::opend_or_append(path).await?;
-        Ok(Self::AsFile(result))
+    pub fn new(page_blob: PageBlobRandomAccess) -> Self {
+        Self { page_blob }
     }
-    pub async fn init_and_load_messages(
-        &mut self,
-        max_message_size: usize,
-    ) -> Result<Vec<MessageProtobufModel>, UncompressedStorageError> {
-        match self {
-            UncompressedPageStorage::AsFile(as_file) => {
-                load_messages_from_storage(as_file, max_message_size).await
-            }
-        }
-    }
+    pub async fn read_toc(&mut self) -> UncompressedFileToc {
+        let size = self.page_blob.get_blob_size(Some(TOC_SIZE_IN_PAGES)).await;
 
-    pub fn issue_payloads_to_upload_container(&self) -> PayloadsToUploadContainer {
-        match self {
-            UncompressedPageStorage::AsFile(as_file) => {
-                PayloadsToUploadContainer::new(as_file.get_write_position())
-            }
+        if size < TOC_SIZE {
+            self.page_blob.resize_blob(TOC_SIZE_IN_PAGES).await;
         }
+
+        let content = self
+            .page_blob
+            .load_pages(
+                &PageBlobPageId::new(0),
+                TOC_SIZE_IN_PAGES,
+                Some(TOC_SIZE_IN_PAGES),
+            )
+            .await;
+
+        UncompressedFileToc::new(content)
     }
 
     pub async fn append_payload(

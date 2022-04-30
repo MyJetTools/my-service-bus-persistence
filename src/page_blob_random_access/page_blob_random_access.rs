@@ -9,10 +9,19 @@ pub struct PageBlobRandomAccess {
 }
 
 impl PageBlobRandomAccess {
-    pub async fn new(page_blob: AzurePageBlobStorage, auto_create_container: bool) -> Self {
-        if auto_create_container {
-            page_blob.create_container_if_not_exist().await.unwrap();
+    pub async fn open_if_exists(page_blob: AzurePageBlobStorage) -> Option<Self> {
+        let blob_size = super::with_retries::get_blob_properties(&page_blob).await?;
+
+        Self {
+            page_blob,
+            blob_size: Some(blob_size),
+            last_known_page_cache: LastKnownPageCache::new(),
         }
+        .into()
+    }
+
+    pub async fn open_or_create(page_blob: AzurePageBlobStorage) -> Self {
+        page_blob.create_container_if_not_exist().await.unwrap();
 
         Self {
             page_blob,
@@ -21,11 +30,16 @@ impl PageBlobRandomAccess {
         }
     }
 
-    pub async fn get_blob_size(&mut self, create_if_not_exists_init_size: Option<usize>) -> usize {
+    pub async fn get_blob_size(
+        &mut self,
+        create_if_not_exists_init_size_in_pages: Option<usize>,
+    ) -> usize {
         if self.blob_size.is_none() {
-            let result =
-                super::with_retries::get_blob_size(&self.page_blob, create_if_not_exists_init_size)
-                    .await;
+            let result = super::with_retries::get_blob_size(
+                &self.page_blob,
+                create_if_not_exists_init_size_in_pages,
+            )
+            .await;
             self.blob_size = Some(result);
         }
 
@@ -159,7 +173,8 @@ mod tests {
         let azure_page_blob =
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
-        let mut page_blob_random_access = PageBlobRandomAccess::new(azure_page_blob, true).await;
+        let mut page_blob_random_access =
+            PageBlobRandomAccess::open_or_create(azure_page_blob).await;
 
         let mut start_pos = 0;
         let mut end_pos = 2;

@@ -3,13 +3,14 @@ use std::sync::{
     Arc,
 };
 
-use my_azure_storage_sdk::AzureStorageConnection;
+use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
     index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
     message_pages::MessagePageId,
+    page_blob_random_access::PageBlobRandomAccess,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     topic_data::TopicsDataList,
@@ -102,19 +103,24 @@ impl AppContext {
         &self,
         topic_id: &str,
         page_id: PageId,
-    ) -> Result<UncompressedPageStorage, UncompressedStorageError> {
-        if self.settings.messages_connection_string.starts_with("/") {
-            let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
-            let file_name = if self.settings.messages_connection_string.ends_with('/') {
-                format!("{}", self.settings.messages_connection_string)
-            } else {
-                format!("{}/", self.settings.messages_connection_string)
-            };
+        create_if_not_exists: bool,
+    ) -> Option<UncompressedPageStorage> {
+        let connection = AzureStorageConnection::from_conn_string(
+            self.settings.messages_connection_string.as_str(),
+        );
 
-            return UncompressedPageStorage::open_or_append_as_file(&file_name).await;
-        }
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
-        panic!("Page blobs not supported for a while");
+        let azure_storage =
+            AzurePageBlobStorage::new(Arc::new(connection), topic_id.to_string(), blob_name).await;
+
+        let blob = if create_if_not_exists {
+            Some(PageBlobRandomAccess::open_or_create(azure_storage).await)
+        } else {
+            PageBlobRandomAccess::open_if_exists(azure_storage).await
+        }?;
+
+        Some(UncompressedPageStorage::new(blob))
     }
 
     pub async fn create_uncompressed_page_storage(

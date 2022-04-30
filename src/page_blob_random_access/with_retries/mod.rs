@@ -1,4 +1,5 @@
 mod download;
+mod get_blob_properties;
 mod get_blob_size;
 mod read_error_handler;
 mod read_pages;
@@ -6,6 +7,7 @@ mod resize;
 mod save_pages;
 mod write_error_handler;
 pub use download::download;
+pub use get_blob_properties::get_blob_properties;
 pub use get_blob_size::get_blob_size;
 pub use read_pages::read_pages;
 pub use resize::resize;

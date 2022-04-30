@@ -5,17 +5,17 @@ use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
 pub enum RetryResult {
     Retry,
     RetryWithDelay(Duration),
-    PanicIt,
+    ErrorIt,
 }
 
 pub async fn is_error_retrieable(
     page_blob: &AzurePageBlobStorage,
-    err: &AzureStorageError,
+    err: AzureStorageError,
     create_if_not_exists_init_pages_amount: Option<usize>,
     process: &str,
     attempt_no: usize,
-) {
-    let result = match err {
+) -> Result<(), AzureStorageError> {
+    let result = match &err {
         AzureStorageError::ContainerNotFound => {
             if let Some(init_pages_amount) = create_if_not_exists_init_pages_amount {
                 page_blob.create_container_if_not_exist().await.unwrap();
@@ -25,7 +25,7 @@ pub async fn is_error_retrieable(
                     .unwrap();
                 RetryResult::Retry
             } else {
-                RetryResult::PanicIt
+                RetryResult::ErrorIt
             }
         }
         AzureStorageError::BlobNotFound => {
@@ -36,35 +36,39 @@ pub async fn is_error_retrieable(
                     .unwrap();
                 RetryResult::Retry
             } else {
-                RetryResult::PanicIt
+                RetryResult::ErrorIt
             }
         }
-        AzureStorageError::BlobAlreadyExists => RetryResult::PanicIt,
+        AzureStorageError::BlobAlreadyExists => RetryResult::ErrorIt,
         AzureStorageError::ContainerBeingDeleted => {
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
-        AzureStorageError::ContainerAlreadyExists => RetryResult::PanicIt,
+        AzureStorageError::ContainerAlreadyExists => RetryResult::ErrorIt,
         AzureStorageError::InvalidPageRange => RetryResult::RetryWithDelay(Duration::from_secs(1)),
-        AzureStorageError::RequestBodyTooLarge => RetryResult::PanicIt,
-        AzureStorageError::UnknownError { msg: _ } => RetryResult::PanicIt,
+        AzureStorageError::RequestBodyTooLarge => RetryResult::ErrorIt,
+        AzureStorageError::UnknownError { msg: _ } => RetryResult::ErrorIt,
         AzureStorageError::HyperError(_) => RetryResult::RetryWithDelay(Duration::from_secs(1)),
         AzureStorageError::IoError(_) => RetryResult::RetryWithDelay(Duration::from_secs(1)),
     };
 
-    let panic_it = match result {
-        RetryResult::Retry => attempt_no > 5,
-        RetryResult::RetryWithDelay(duration) => {
+    match result {
+        RetryResult::Retry => {
             if attempt_no > 5 {
-                true
+                return Err(err);
             } else {
-                tokio::time::sleep(duration).await;
-                false
+                return Ok(());
             }
         }
-        RetryResult::PanicIt => true,
+        RetryResult::RetryWithDelay(duration) => {
+            if attempt_no > 5 {
+                return Err(err);
+            } else {
+                tokio::time::sleep(duration).await;
+                return Ok(());
+            }
+        }
+        RetryResult::ErrorIt => {
+            return Err(err);
+        }
     };
-
-    if panic_it {
-        panic!("[Attempt:{}] {}. Err: {:?}", attempt_no, process, err);
-    }
 }

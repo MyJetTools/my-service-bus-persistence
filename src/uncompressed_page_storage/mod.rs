@@ -1,8 +1,7 @@
-pub mod as_file;
 mod error;
 mod load_trait;
 mod storage;
-mod toc;
+pub mod toc;
 mod upload_payload;
 pub use error::UncompressedStorageError;
 pub use storage::UncompressedPageStorage;

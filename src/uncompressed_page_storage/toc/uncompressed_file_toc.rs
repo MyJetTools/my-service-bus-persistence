@@ -1,10 +1,12 @@
 use super::MessageContentOffset;
 
-pub const TOC_SIZE: usize = 1563 * 512;
+pub const TOC_SIZE_IN_PAGES: usize = 1563;
+pub const TOC_SIZE: usize = TOC_SIZE_IN_PAGES * 512;
 
 pub struct UncompressedFileToc {
-    content: Vec<u8>,
+    toc_data: Vec<u8>,
     write_position: usize,
+    messages_count: usize,
 }
 
 impl MessageContentOffset {
@@ -14,14 +16,7 @@ impl MessageContentOffset {
 }
 
 impl UncompressedFileToc {
-    pub fn new() -> Self {
-        Self {
-            content: Vec::with_capacity(TOC_SIZE),
-            write_position: 0,
-        }
-    }
-
-    pub fn init(&mut self, toc_data: &[u8]) {
+    pub fn new(toc_data: Vec<u8>) -> Self {
         if toc_data.len() != TOC_SIZE {
             panic!(
                 "TOC size is not correct. It must be {} but it is {}",
@@ -30,9 +25,15 @@ impl UncompressedFileToc {
             );
         }
 
-        self.content.extend_from_slice(toc_data);
+        let mut result = Self {
+            toc_data,
+            write_position: 0,
+            messages_count: 0,
+        };
 
-        self.init_write_position();
+        result.init_write_position();
+
+        result
     }
 
     fn init_write_position(&mut self) {
@@ -43,6 +44,10 @@ impl UncompressedFileToc {
             if last_position > self.write_position {
                 self.write_position = last_position;
             }
+
+            if pos.offset > 0 {
+                self.messages_count += 1;
+            }
         }
     }
 
@@ -51,10 +56,10 @@ impl UncompressedFileToc {
     }
 
     pub fn reset_as_new(&mut self) -> &[u8] {
-        self.content.clear();
-        self.content.extend_from_slice([0u8; TOC_SIZE].as_slice());
+        self.toc_data.clear();
+        self.toc_data.extend_from_slice([0u8; TOC_SIZE].as_slice());
 
-        self.content.as_slice()
+        self.toc_data.as_slice()
     }
 
     pub fn update_file_position(
@@ -64,13 +69,27 @@ impl UncompressedFileToc {
     ) -> usize {
         let toc_pos = no_in_page * 8;
 
-        offset.serialize(&mut self.content[toc_pos..toc_pos + 8]);
+        offset.serialize(&mut self.toc_data[toc_pos..toc_pos + 8]);
 
         toc_pos / 512
     }
 
     fn get_position(&self, file_no: usize) -> MessageContentOffset {
         let toc_pos = file_no * 8;
-        MessageContentOffset::deserialize(&self.content[toc_pos..toc_pos + 8])
+        MessageContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
     }
+
+    pub fn has_content(&self, file_no: usize) -> bool {
+        let toc_pos = file_no * 8;
+
+        get_value(&self.toc_data[toc_pos..toc_pos + 4]) != 0
+    }
+}
+
+fn get_value(src: &[u8]) -> i32 {
+    let mut result = [0u8; 4];
+
+    result.copy_from_slice(src);
+
+    i32::from_le_bytes(result)
 }

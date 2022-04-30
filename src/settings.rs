@@ -41,7 +41,7 @@ impl SettingsModel {
         )
         .await;
 
-        let blob_random_access = PageBlobRandomAccess::new(storage, true).await;
+        let blob_random_access = PageBlobRandomAccess::open_or_create(storage).await;
 
         TopicsSnapshotBlobRepository::new(blob_random_access)
     }

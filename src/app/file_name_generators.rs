@@ -5,6 +5,7 @@ pub const SYSTEM_FILE_NAME: &str = "system";
 pub fn generate_uncompressed_blob_name(page_id: &PageId) -> String {
     return format!("{:019}.uncompressed", page_id);
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

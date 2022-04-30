@@ -10,7 +10,7 @@ pub async fn resize(page_blob: &AzurePageBlobStorage, pages_amount: usize) {
             Err(err) => {
                 super::read_error_handler::is_error_retrieable(
                     page_blob,
-                    &err,
+                    err,
                     Some(pages_amount),
                     "save_pages",
                     attempt_no,

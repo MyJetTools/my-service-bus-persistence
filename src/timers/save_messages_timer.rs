@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use rust_extensions::{MyTimerTick, StopWatch};
 
-use crate::{app::AppContext, topic_data::TopicData};
+use crate::{
+    app::AppContext, topic_data::TopicData, uncompressed_page_storage::PayloadsToUploadContainer,
+};
 
 const MAX_PERSIST_SIZE: usize = 1024 * 1024 * 4;
 
@@ -60,12 +62,14 @@ impl MyTimerTick for SaveMessagesTimer {
                     .await
                     .unwrap();
 
+                    let write_position = uncompressed_page.get_write_position().await;
+
                     let storage = storages.get_mut(&uncompressed_page.page_id).unwrap();
 
                     let mut sw = StopWatch::new();
                     sw.start();
 
-                    let mut upload_container = storage.issue_payloads_to_upload_container();
+                    let mut upload_container = PayloadsToUploadContainer::new(write_position);
 
                     let page_id = page.get_page_id();
 

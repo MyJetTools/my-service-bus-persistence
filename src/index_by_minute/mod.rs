@@ -1,5 +1,3 @@
-mod as_file;
-mod as_page_blob;
 mod index_by_minute_storage;
 mod message_index_builder_data;
 pub mod utils;

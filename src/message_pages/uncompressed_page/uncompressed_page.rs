@@ -1,30 +1,31 @@
-use std::{collections::BTreeMap, sync::atomic::AtomicBool};
-
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 use tokio::sync::RwLock;
 
-use super::{MessagesPageData, PageMetrics};
+use crate::{message_pages::PageMetrics, uncompressed_page_storage::toc::UncompressedFileToc};
 
-pub struct UncompressedMessagesPage {
-    pub pages: RwLock<MessagesPageData>,
+use super::UncompressedPageData;
+
+pub struct UncompressedPage {
+    pub pages: RwLock<UncompressedPageData>,
     pub page_id: PageId,
     pub metrics: PageMetrics,
-
-    pub initialized: AtomicBool,
 }
 
-impl UncompressedMessagesPage {
-    pub fn brand_new(page_id: PageId) -> Self {
+impl UncompressedPage {
+    pub fn new(page_id: PageId, toc: UncompressedFileToc) -> Self {
         Self {
-            pages: RwLock::new(MessagesPageData::new(page_id, BTreeMap::new())),
+            pages: RwLock::new(UncompressedPageData::new(page_id, toc)),
             page_id,
             metrics: PageMetrics::new(),
-            initialized: AtomicBool::new(false),
         }
     }
 
     pub fn has_messages_to_save(&self) -> bool {
         self.metrics.get_messages_amount_to_save() > 0
+    }
+
+    pub async fn get_write_position(&self) -> usize {
+        self.pages.read().await.toc.get_write_position()
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {

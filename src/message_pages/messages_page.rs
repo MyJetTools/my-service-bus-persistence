@@ -1,9 +1,11 @@
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
-use super::{BlankPage, CompressedPage, UncompressedMessagesPage};
+use crate::uncompressed_page_storage::toc::UncompressedFileToc;
+
+use super::{BlankPage, CompressedPage, UncompressedPage};
 
 pub enum MessagesPage {
-    Uncompressed(UncompressedMessagesPage),
+    Uncompressed(UncompressedPage),
     Compressed(CompressedPage),
     Empty(BlankPage),
 }
@@ -12,8 +14,8 @@ impl MessagesPage {
     pub fn create_as_empty(page_id: PageId) -> Self {
         Self::Empty(BlankPage::new(page_id))
     }
-    pub fn create_uncompressed(page_id: PageId) -> Self {
-        Self::Uncompressed(UncompressedMessagesPage::brand_new(page_id))
+    pub fn create_uncompressed(page_id: PageId, toc: UncompressedFileToc) -> Self {
+        Self::Uncompressed(UncompressedPage::new(page_id, toc))
     }
 
     pub fn has_messages_to_save(&self) -> bool {
@@ -40,7 +42,7 @@ impl MessagesPage {
         write_access.add(messages);
     }
 
-    pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedMessagesPage {
+    pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedPage {
         match self {
             MessagesPage::Uncompressed(result) => result,
             MessagesPage::Compressed(_) => {

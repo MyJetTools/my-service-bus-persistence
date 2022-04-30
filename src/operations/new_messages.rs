@@ -8,10 +8,7 @@ pub async fn new_messages(
     page_id: PageId,
     messages: Vec<MessageProtobufModel>,
 ) {
-    let page = topic_data
-        .pages_list
-        .get_or_create_uncompressed(page_id)
-        .await;
+    let page = crate::operations::get_page_to_publish_messages(app, topic_data, page_id).await;
 
     crate::operations::index_by_minute::new_messages(app, topic_data, messages.as_slice()).await;
 

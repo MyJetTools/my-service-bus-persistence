@@ -26,17 +26,6 @@ impl PagesList {
         Some(result.clone())
     }
 
-    pub async fn get_or_create_uncompressed(&self, page_id: PageId) -> Arc<MessagesPage> {
-        let mut pages_access = self.pages.lock().await;
-
-        if !pages_access.contains_key(&page_id) {
-            let messages_page = MessagesPage::create_uncompressed(page_id);
-            pages_access.insert(page_id, Arc::new(messages_page));
-        }
-
-        return pages_access.get(&page_id).unwrap().clone();
-    }
-
     pub async fn remove_page(&self, page_id: PageId) -> Option<Arc<MessagesPage>> {
         let mut pages_access = self.pages.lock().await;
         pages_access.remove(&page_id)

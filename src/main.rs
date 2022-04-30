@@ -1,8 +1,6 @@
 use std::{sync::Arc, time::Duration};
 mod app;
 
-mod file_random_access;
-
 mod grpc;
 mod http;
 mod index_by_minute;

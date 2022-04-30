@@ -13,7 +13,7 @@ pub async fn download(
             Err(err) => {
                 super::read_error_handler::is_error_retrieable(
                     page_blob,
-                    &err,
+                    err,
                     create_if_not_exists_init_size,
                     "get_blob_size",
                     attempt_no,

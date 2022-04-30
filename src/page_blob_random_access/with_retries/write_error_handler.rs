@@ -4,20 +4,24 @@ use my_azure_storage_sdk::AzureStorageError;
 
 use super::read_error_handler::RetryResult;
 
-pub async fn is_error_retrieable(err: &AzureStorageError, process: &str, attempt_no: usize) {
-    let result = match err {
-        AzureStorageError::ContainerNotFound => RetryResult::PanicIt,
-        AzureStorageError::BlobNotFound => RetryResult::PanicIt,
+pub async fn is_error_retrieable(
+    err: AzureStorageError,
+    process: &str,
+    attempt_no: usize,
+) -> Result<(), AzureStorageError> {
+    let result = match &err {
+        AzureStorageError::ContainerNotFound => RetryResult::ErrorIt,
+        AzureStorageError::BlobNotFound => RetryResult::ErrorIt,
 
-        AzureStorageError::BlobAlreadyExists => RetryResult::PanicIt,
+        AzureStorageError::BlobAlreadyExists => RetryResult::ErrorIt,
         AzureStorageError::ContainerBeingDeleted => {
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
         my_azure_storage_sdk::AzureStorageError::ContainerAlreadyExists => {
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
-        my_azure_storage_sdk::AzureStorageError::InvalidPageRange => RetryResult::PanicIt,
-        my_azure_storage_sdk::AzureStorageError::RequestBodyTooLarge => RetryResult::PanicIt,
+        my_azure_storage_sdk::AzureStorageError::InvalidPageRange => RetryResult::ErrorIt,
+        my_azure_storage_sdk::AzureStorageError::RequestBodyTooLarge => RetryResult::ErrorIt,
         my_azure_storage_sdk::AzureStorageError::UnknownError { msg: _ } => {
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
@@ -27,20 +31,24 @@ pub async fn is_error_retrieable(err: &AzureStorageError, process: &str, attempt
         AzureStorageError::IoError(_) => RetryResult::RetryWithDelay(Duration::from_secs(1)),
     };
 
-    let panic_it = match result {
-        RetryResult::Retry => attempt_no > 5,
-        RetryResult::RetryWithDelay(duration) => {
+    match result {
+        RetryResult::Retry => {
             if attempt_no > 5 {
-                true
+                return Err(err);
             } else {
-                tokio::time::sleep(duration).await;
-                false
+                return Ok(());
             }
         }
-        RetryResult::PanicIt => true,
+        RetryResult::RetryWithDelay(duration) => {
+            if attempt_no > 5 {
+                return Err(err);
+            } else {
+                tokio::time::sleep(duration).await;
+                return Ok(());
+            }
+        }
+        RetryResult::ErrorIt => {
+            return Err(err);
+        }
     };
-
-    if panic_it {
-        panic!("[Attempt:{}] {}. Err: {:?}", attempt_no, process, err);
-    }
 }

@@ -5,25 +5,58 @@ use my_service_bus_shared::{
     queue_with_intervals::QueueWithIntervals, MessageId,
 };
 
-use super::MESSAGES_PER_PAGE;
+use crate::{
+    message_pages::MESSAGES_PER_PAGE, uncompressed_page_storage::toc::UncompressedFileToc,
+};
 
-pub struct MessagesPageData {
-    pub page_id: PageId,
-    pub messages: BTreeMap<i64, MessageProtobufModel>,
-    pub queue_to_save: QueueWithIntervals,
-    pub min_message_id: Option<i64>,
-    pub max_message_id: Option<i64>,
+pub struct MinMax {
+    pub min: MessageId,
+    pub max: MessageId,
 }
 
-impl MessagesPageData {
-    pub fn new(page_id: PageId, messages: BTreeMap<i64, MessageProtobufModel>) -> Self {
-        let min_max = get_min_max(&&messages);
+impl MinMax {
+    pub fn new(message_id: MessageId) -> Self {
+        MinMax {
+            min: message_id,
+            max: message_id,
+        }
+    }
+    pub fn update(&mut self, message_id: MessageId) {
+        if self.min > message_id {
+            self.min = message_id;
+        }
+
+        if self.max < message_id {
+            self.max = message_id;
+        }
+    }
+}
+
+pub struct UncompressedPageData {
+    pub page_id: PageId,
+    pub toc: UncompressedFileToc,
+    pub messages: BTreeMap<i64, MessageProtobufModel>,
+    pub queue_to_save: QueueWithIntervals,
+    pub min_max: Option<MinMax>,
+}
+
+impl UncompressedPageData {
+    pub fn new(page_id: PageId, toc: UncompressedFileToc) -> Self {
+        let min_max = get_min_max_from_toc(page_id, &toc);
         Self {
             page_id,
-            messages: messages,
+            messages: BTreeMap::new(),
             queue_to_save: QueueWithIntervals::new(),
-            max_message_id: min_max.0,
-            min_message_id: min_max.1,
+            min_max,
+            toc,
+        }
+    }
+
+    fn update_min_max(&mut self, message_id: MessageId) {
+        if let Some(ref mut min_max) = self.min_max {
+            min_max.update(message_id);
+        } else {
+            self.min_max = Some(MinMax::new(message_id));
         }
     }
 
@@ -67,26 +100,6 @@ impl MessagesPageData {
         result
     }
 
-    pub fn update_min_max(&mut self, id: i64) {
-        match self.min_message_id {
-            Some(value) => {
-                if value > id {
-                    self.min_message_id = Some(id)
-                }
-            }
-            None => self.min_message_id = Some(id),
-        }
-
-        match self.max_message_id {
-            Some(value) => {
-                if value < id {
-                    self.max_message_id = Some(id)
-                }
-            }
-            None => self.max_message_id = Some(id),
-        }
-    }
-
     pub fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
         let mut result = Vec::new();
 
@@ -98,7 +111,7 @@ impl MessagesPageData {
     }
 
     pub fn has_skipped_messages(&self) -> bool {
-        self.messages.len() != should_have_amount(self.page_id, self.max_message_id)
+        self.messages.len() != should_have_amount(self.page_id, self.min_max.as_ref())
     }
 }
 
@@ -129,22 +142,36 @@ pub fn get_min_max(messages: &BTreeMap<i64, MessageProtobufModel>) -> (Option<i6
     (min, max)
 }
 
-fn should_have_amount(page_id: PageId, max_message_id: Option<MessageId>) -> usize {
-    if max_message_id.is_none() {
+fn should_have_amount(page_id: PageId, min_max: Option<&MinMax>) -> usize {
+    if min_max.is_none() {
         return 0;
     }
-    let max_message_id = max_message_id.unwrap();
+    let min_max = min_max.unwrap();
 
     let first_message_id = page_id * MESSAGES_PER_PAGE;
-    let result = max_message_id - first_message_id + 1;
+    let result = min_max.max - first_message_id + 1;
 
     result as usize
 }
 
-pub fn has_skipped_messages(
-    page_id: PageId,
-    amount: usize,
-    max_message_id: Option<MessageId>,
-) -> bool {
-    amount != should_have_amount(page_id, max_message_id)
+pub fn has_skipped_messages(page_id: PageId, amount: usize, min_max: Option<&MinMax>) -> bool {
+    amount != should_have_amount(page_id, min_max)
+}
+
+pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Option<MinMax> {
+    let mut result: Option<MinMax> = None;
+
+    for file_no in 0..100_000 {
+        if toc.has_content(file_no) {
+            let message_id: MessageId = file_no as MessageId + page_id * MESSAGES_PER_PAGE;
+
+            if let Some(ref mut min_max) = result {
+                min_max.update(message_id);
+            } else {
+                result = Some(MinMax::new(message_id));
+            }
+        }
+    }
+
+    result
 }
