@@ -19,12 +19,6 @@ pub async fn get_message_by_id(
 
     let page = super::get_page_to_read(app, topic_data.as_ref(), &page_id).await?;
 
-    if page.is_none() {
-        return Ok(None);
-    }
-
-    let page = page.unwrap();
-
     let page = page.as_ref();
     match page {
         MessagesPage::Uncompressed(page) => {

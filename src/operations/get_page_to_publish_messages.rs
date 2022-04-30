@@ -16,59 +16,33 @@ pub async fn get_page_to_publish_messages(
         let page = topic_data.pages_list.get(page_id).await;
 
         if let Some(page) = page {
-            let uncompressed_page = page.unwrap_as_uncompressed_page();
-
-            let mut storage = topic_data.storages.lock().await;
-
-            crate::operations::init_page_storage::init(
-                app,
-                topic_data.topic_id.as_str(),
-                uncompressed_page,
-                &mut storage,
-                false,
-            )
-            .await
-            .unwrap();
-
-            return page;
+            if page.is_uncompressed() {
+                return page;
+            }
         };
 
         let mut storages = topic_data.storages.lock().await;
 
-        if let Some(page) =
-            try_restore_from_uncompressed(app, topic_data, page_id, &mut storages).await
-        {
-            return page;
-        }
-
-        if let Some(page) = try_restore_from_compressed(app, topic_data, page_id).await {
-            return page;
-        }
-
-        let messages_page = Arc::new(MessagesPage::create_as_empty(page_id));
-
-        topic_data
-            .pages_list
-            .add(page_id, messages_page.clone())
-            .await;
-
-        return messages_page;
+        let page = create_uncompressed(app, topic_data, page_id, &mut storages).await;
+        topic_data.pages_list.add(page_id, Arc::new(page)).await;
     }
 }
 
-async fn try_restore_from_uncompressed(
+async fn create_uncompressed(
     app: &AppContext,
     topic_data: &TopicData,
     page_id: PageId,
     uncomopressed_storages: &mut HashMap<PageId, UncompressedPageStorage>,
-) -> Option<Arc<MessagesPage>> {
-    todo!("Implement")
-}
+) -> MessagesPage {
+    let mut storage = app
+        .open_or_create_uncompressed_page_storage(topic_data.topic_id.as_str(), &page_id)
+        .await;
 
-async fn try_restore_from_compressed(
-    app: &AppContext,
-    topic_data: &TopicData,
-    page_id: PageId,
-) -> Option<Arc<MessagesPage>> {
-    todo!("Implement")
+    let toc = storage.read_toc().await;
+
+    let messages_page = MessagesPage::create_uncompressed(page_id, toc);
+
+    uncomopressed_storages.insert(page_id, storage);
+
+    messages_page
 }

@@ -31,6 +31,13 @@ impl MessagesPage {
         }
     }
 
+    pub fn is_uncompressed(&self) -> bool {
+        match self {
+            MessagesPage::Uncompressed(_) => true,
+            _ => false,
+        }
+    }
+
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let uncompressed_messages = self.unwrap_as_uncompressed_page();
         let mut write_access = uncompressed_messages.page_data.write().await;
