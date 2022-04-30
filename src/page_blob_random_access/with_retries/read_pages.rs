@@ -6,7 +6,7 @@ pub async fn read_pages(
     page_blob: &AzurePageBlobStorage,
     page_no: &PageBlobPageId,
     pages_amount: usize,
-    create_if_not_exists_init_size: Option<usize>,
+    create_if_not_exists_init_pages_amount: Option<usize>,
 ) -> Vec<u8> {
     let mut attempt_no = 0;
     loop {
@@ -18,7 +18,7 @@ pub async fn read_pages(
                 super::read_error_handler::is_error_retrieable(
                     page_blob,
                     &err,
-                    create_if_not_exists_init_size,
+                    create_if_not_exists_init_pages_amount,
                     "get_blob_size",
                     attempt_no,
                 )

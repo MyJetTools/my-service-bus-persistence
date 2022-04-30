@@ -9,7 +9,11 @@ pub struct PageBlobRandomAccess {
 }
 
 impl PageBlobRandomAccess {
-    pub fn new(page_blob: AzurePageBlobStorage) -> Self {
+    pub async fn new(page_blob: AzurePageBlobStorage, auto_create_container: bool) -> Self {
+        if auto_create_container {
+            page_blob.create_container_if_not_exist().await.unwrap();
+        }
+
         Self {
             page_blob,
             blob_size: None,
@@ -46,7 +50,7 @@ impl PageBlobRandomAccess {
         &mut self,
         start_page_no: &PageBlobPageId,
         pages_amount: usize,
-        create_if_not_exists_init_size: Option<usize>,
+        create_if_not_exists_init_pages_amount: Option<usize>,
     ) -> Vec<u8> {
         if pages_amount == 1 {
             if let Some(content) = self
@@ -61,7 +65,7 @@ impl PageBlobRandomAccess {
             &self.page_blob,
             start_page_no,
             pages_amount,
-            create_if_not_exists_init_size,
+            create_if_not_exists_init_pages_amount,
         )
         .await;
 
@@ -100,18 +104,20 @@ impl PageBlobRandomAccess {
         content: &[u8],
         auto_resize_rate_in_pages: usize,
     ) {
-        let mut result = RandomAccessData::new(start_pos, content.len());
+        let mut payload_to_write = RandomAccessData::new(start_pos, content.len());
 
-        let start_page_id = result.get_start_page_id();
+        let start_page_id = payload_to_write.get_start_page_id();
 
-        let first_page = if result.get_payload_offset() > 0 {
+        let first_page = if payload_to_write.get_payload_offset() > 0 {
             let first_page = self.load_pages(&start_page_id, 1, None).await;
             Some(first_page)
         } else {
             None
         };
 
-        result.assign_write_content(first_page, content);
+        payload_to_write.assign_write_content(first_page, content);
+
+        payload_to_write.make_payload_size_complient();
 
         let required_pages_amount_after_we_write =
             super::utils::calc_required_pages_amount_after_we_append(
@@ -122,14 +128,20 @@ impl PageBlobRandomAccess {
 
         if self.get_pages_amount(Some(auto_resize_rate_in_pages)).await
             < required_pages_amount_after_we_write
-        {}
+        {
+            self.resize_blob(required_pages_amount_after_we_write).await;
+        }
 
-        self.save_pages(&start_page_id, result.get_whole_payload())
+        self.save_pages(&start_page_id, payload_to_write.get_whole_payload())
             .await;
     }
 
-    pub async fn download(&self, create_if_not_exists_init_size: Option<usize>) -> Vec<u8> {
-        super::with_retries::download(&self.page_blob, create_if_not_exists_init_size).await
+    pub async fn download(&mut self, create_if_not_exists_init_size: Option<usize>) -> Vec<u8> {
+        let result =
+            super::with_retries::download(&self.page_blob, create_if_not_exists_init_size).await;
+
+        self.blob_size = Some(result.len());
+        result
     }
 }
 
@@ -142,19 +154,39 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    pub async fn test_general_append_use_case() {
+    pub async fn test_we_have_everything_in_one_page() {
         let connection = AzureStorageConnection::new_in_memory();
         let azure_page_blob =
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
-        let mut page_blob_random_access = PageBlobRandomAccess::new(azure_page_blob);
+        let mut page_blob_random_access = PageBlobRandomAccess::new(azure_page_blob, true).await;
 
-        page_blob_random_access
-            .write_randomly(0, [1, 2].as_slice(), 1)
-            .await;
+        let mut start_pos = 0;
+        let mut end_pos = 2;
 
-        let result = page_blob_random_access.download(None).await;
+        for _ in 1..15 {
+            let mut save = Vec::new();
+            for b in start_pos..end_pos {
+                save.push((b + 1) as u8);
+            }
 
-        assert_eq!(result.len(), 512);
+            page_blob_random_access
+                .write_randomly(start_pos, save.as_slice(), 1)
+                .await;
+
+            let result = page_blob_random_access.read_randomly(0, end_pos).await;
+
+            let mut res_to_compare = Vec::new();
+            for b in 0..end_pos {
+                res_to_compare.push((b + 1) as u8);
+            }
+
+            assert_eq!(result.as_slice(), res_to_compare.as_slice());
+
+            let old_end_pos = end_pos;
+
+            start_pos = end_pos;
+            end_pos = start_pos + old_end_pos + 1;
+        }
     }
 }

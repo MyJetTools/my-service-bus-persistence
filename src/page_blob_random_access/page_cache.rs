@@ -43,7 +43,7 @@ impl LastKnownPageCache {
     }
 
     pub fn get_page_no(&self) -> Option<PageBlobPageId> {
-        let data = self.data.as_ref().unwrap();
+        let data = self.data.as_ref()?;
         Some(PageBlobPageId::new(data.page_no))
     }
 

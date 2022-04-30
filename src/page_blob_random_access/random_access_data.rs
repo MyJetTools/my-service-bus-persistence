@@ -52,13 +52,30 @@ impl RandomAccessData {
         let len = self.get_pages_amout() * BLOB_PAGE_SIZE;
         let mut result = Vec::with_capacity(len);
 
+        let payload_offset = self.get_payload_offset();
         if let Some(first_page) = first_page.as_ref() {
-            result.extend_from_slice(&first_page[..self.get_payload_offset()]);
+            result.extend_from_slice(&first_page[..payload_offset]);
+        } else {
+            while result.len() < payload_offset {
+                result.push(0)
+            }
         }
 
         result.extend_from_slice(content);
 
         self.data = Some(result);
+    }
+
+    pub fn make_payload_size_complient(&mut self) {
+        let data = self.data.as_mut().unwrap();
+
+        let pages_amount = super::utils::get_pages_amount(data.len(), BLOB_PAGE_SIZE);
+
+        let complient_size = pages_amount * BLOB_PAGE_SIZE;
+
+        while data.len() < complient_size {
+            data.push(0);
+        }
     }
 
     pub fn get_whole_payload(&self) -> &[u8] {

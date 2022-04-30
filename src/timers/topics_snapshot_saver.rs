@@ -29,12 +29,10 @@ impl MyTimerTick for TopicsSnapshotSaverTimer {
 
         let snapshot = snapshot.unwrap();
 
-        let result = self
-            .app
-            .topics_snapshot
-            .blob
-            .write(&snapshot.snapshot)
-            .await;
+        let result = {
+            let mut blob_access = self.app.topics_snapshot.blob.lock().await;
+            blob_access.write(&snapshot.snapshot).await
+        };
 
         if let Err(err) = result {
             self.app.logs.add_error_str(

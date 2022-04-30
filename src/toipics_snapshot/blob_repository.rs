@@ -1,64 +1,31 @@
-use std::{
-    sync::atomic::{AtomicUsize, Ordering},
-    usize,
-};
+use std::usize;
 
-use my_azure_storage_sdk::{
-    page_blob::{consts::BLOB_PAGE_SIZE, AzurePageBlobStorage},
-    AzureStorageError,
-};
+use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
+use crate::page_blob_random_access::PageBlobRandomAccess;
+
 pub struct TopicsSnapshotBlobRepository {
-    page_blob: AzurePageBlobStorage,
-    blob_size_in_pages: AtomicUsize,
+    page_blob: PageBlobRandomAccess,
 }
 
 impl TopicsSnapshotBlobRepository {
-    pub async fn new(page_blob: AzurePageBlobStorage) -> Self {
-        let result = Self {
-            page_blob,
-            blob_size_in_pages: AtomicUsize::new(0),
-        };
-        result
-            .page_blob
-            .create_container_if_not_exist()
-            .await
-            .unwrap();
-
-        result.page_blob.create_if_not_exists(0).await.unwrap();
-        result
+    pub fn new(page_blob: PageBlobRandomAccess) -> Self {
+        Self { page_blob }
     }
 
-    pub async fn read(&self) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
-        let download_result = self.page_blob.download().await;
+    pub async fn read(&mut self) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
+        let download_result = self.page_blob.download(Some(0)).await;
 
-        match download_result {
-            Ok(content) => {
-                if content.len() == 0 {
-                    self.blob_size_in_pages.store(0, Ordering::SeqCst);
-                    return Ok(TopicsSnapshotProtobufModel::create_default());
-                }
-
-                self.blob_size_in_pages
-                    .store(content.len() / BLOB_PAGE_SIZE, Ordering::SeqCst);
-
-                return Ok(deserialize_model(content.as_slice()));
-            }
-            Err(err) => {
-                if let AzureStorageError::BlobNotFound = &err {
-                    self.blob_size_in_pages.store(0, Ordering::SeqCst);
-                    self.page_blob.create_if_not_exists(0).await.unwrap();
-                    return Ok(TopicsSnapshotProtobufModel::create_default());
-                }
-
-                return Err(err);
-            }
+        if download_result.len() == 0 {
+            return Ok(TopicsSnapshotProtobufModel::create_default());
         }
+
+        return Ok(deserialize_model(download_result.as_slice()));
     }
 
     pub async fn write(
-        &self,
+        &mut self,
         model: &TopicsSnapshotProtobufModel,
     ) -> Result<(), AzureStorageError> {
         let mut data = Vec::new();
@@ -81,19 +48,7 @@ impl TopicsSnapshotBlobRepository {
 
         data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
-        let required_pages_amount =
-            crate::page_blob_random_access::utils::making_size_complient_to_page_blob(
-                &mut data,
-                BLOB_PAGE_SIZE,
-            );
-
-        if self.blob_size_in_pages.load(Ordering::SeqCst) < required_pages_amount {
-            self.page_blob.resize(required_pages_amount).await.unwrap();
-            self.blob_size_in_pages
-                .store(required_pages_amount, Ordering::SeqCst);
-        }
-
-        self.page_blob.save_pages(0, data).await?;
+        self.page_blob.write_randomly(0, data.as_slice(), 1).await;
 
         Ok(())
     }
@@ -134,7 +89,7 @@ mod tests {
 
     use super::*;
 
-    use my_azure_storage_sdk::AzureStorageConnection;
+    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus_shared::protobuf_models::{
         TopicSnapshotProtobufModel, TopicsSnapshotProtobufModel,
     };
@@ -146,7 +101,9 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let repo = TopicsSnapshotBlobRepository::new(page_blob).await;
+        let blob_random_access = PageBlobRandomAccess::new(page_blob, true).await;
+
+        let mut repo = TopicsSnapshotBlobRepository::new(blob_random_access);
 
         // Reading initial model
         let _ = repo.read().await.unwrap();

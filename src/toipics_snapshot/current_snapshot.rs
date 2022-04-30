@@ -1,5 +1,5 @@
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use super::blob_repository::TopicsSnapshotBlobRepository;
 
@@ -31,15 +31,15 @@ impl TopicsSnapshotData {
 
 pub struct CurrentTopicsSnapshot {
     data: RwLock<TopicsSnapshotData>,
-    pub blob: TopicsSnapshotBlobRepository,
+    pub blob: Mutex<TopicsSnapshotBlobRepository>,
 }
 
 impl CurrentTopicsSnapshot {
-    pub async fn new(blob: TopicsSnapshotBlobRepository) -> Self {
+    pub async fn new(mut blob: TopicsSnapshotBlobRepository) -> Self {
         let snapshot = blob.read().await.unwrap();
         Self {
             data: RwLock::new(TopicsSnapshotData::new(snapshot)),
-            blob,
+            blob: Mutex::new(blob),
         }
     }
 

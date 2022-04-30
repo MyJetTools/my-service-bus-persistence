@@ -4,7 +4,10 @@ use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnecti
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
-use crate::toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository;
+use crate::{
+    page_blob_random_access::PageBlobRandomAccess,
+    toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
@@ -38,7 +41,9 @@ impl SettingsModel {
         )
         .await;
 
-        TopicsSnapshotBlobRepository::new(storage).await
+        let blob_random_access = PageBlobRandomAccess::new(storage, true).await;
+
+        TopicsSnapshotBlobRepository::new(blob_random_access)
     }
 
     pub async fn read() -> Self {
