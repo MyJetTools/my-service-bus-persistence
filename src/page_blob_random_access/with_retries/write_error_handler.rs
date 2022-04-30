@@ -1,8 +1,7 @@
-use my_azure_page_blob::MyAzurePageBlob;
-use my_azure_storage_sdk::AzureStorageError;
+use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
 
 pub async fn is_error_retrieable(
-    page_blob: &MyAzurePageBlob,
+    page_blob: &AzurePageBlobStorage,
     err: &AzureStorageError,
     process: &str,
     attempt_no: usize,
@@ -17,7 +16,8 @@ pub async fn is_error_retrieable(
         my_azure_storage_sdk::AzureStorageError::InvalidPageRange => false,
         my_azure_storage_sdk::AzureStorageError::RequestBodyTooLarge => false,
         my_azure_storage_sdk::AzureStorageError::UnknownError { msg: _ } => true,
-        my_azure_storage_sdk::AzureStorageError::HyperError { err: _ } => true,
+        my_azure_storage_sdk::AzureStorageError::HyperError(_) => true,
+        AzureStorageError::IoError(_) => true,
     };
 
     if attempt_no > 5 || !result {

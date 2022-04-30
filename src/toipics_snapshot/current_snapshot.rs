@@ -1,6 +1,8 @@
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use tokio::sync::RwLock;
 
+use super::blob_repository::TopicsSnapshotBlobRepository;
+
 #[derive(Clone)]
 pub struct TopicsSnapshotData {
     pub snapshot_id: i64,
@@ -29,12 +31,15 @@ impl TopicsSnapshotData {
 
 pub struct CurrentTopicsSnapshot {
     data: RwLock<TopicsSnapshotData>,
+    pub blob: TopicsSnapshotBlobRepository,
 }
 
 impl CurrentTopicsSnapshot {
-    pub fn new(snapshot: TopicsSnapshotProtobufModel) -> Self {
+    pub async fn new(blob: TopicsSnapshotBlobRepository) -> Self {
+        let snapshot = blob.read().await.unwrap();
         Self {
             data: RwLock::new(TopicsSnapshotData::new(snapshot)),
+            blob,
         }
     }
 

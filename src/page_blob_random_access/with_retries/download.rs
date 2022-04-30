@@ -1,7 +1,7 @@
-use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
+use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
 
 pub async fn download(
-    page_blob: &MyAzurePageBlob,
+    page_blob: &AzurePageBlobStorage,
     create_if_not_exists_init_size: Option<usize>,
 ) -> Vec<u8> {
     let mut attempt_no = 0;

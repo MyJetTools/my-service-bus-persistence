@@ -1,9 +1,9 @@
-use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
+use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
 
 use crate::page_blob_random_access::PageBlobPageId;
 
 pub async fn read_pages(
-    page_blob: &MyAzurePageBlob,
+    page_blob: &AzurePageBlobStorage,
     page_no: &PageBlobPageId,
     pages_amount: usize,
     create_if_not_exists_init_size: Option<usize>,

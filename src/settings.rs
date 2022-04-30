@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use my_azure_page_blob::MyAzurePageBlob;
-use my_azure_storage_sdk::AzureStorageConnection;
+use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
+
+use crate::toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
@@ -27,14 +28,17 @@ pub struct SettingsModel {
 }
 
 impl SettingsModel {
-    pub fn get_topics_snapshot_page_blob(&self) -> MyAzurePageBlob {
+    pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotBlobRepository {
         let connection =
             AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
-        MyAzurePageBlob::new(
+        let storage = AzurePageBlobStorage::new(
             Arc::new(connection),
             "topics".to_string(),
             "topicsdata".to_string(),
         )
+        .await;
+
+        TopicsSnapshotBlobRepository::new(storage).await
     }
 
     pub async fn read() -> Self {

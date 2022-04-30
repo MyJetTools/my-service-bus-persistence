@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use my_azure_storage_sdk::AzureStorageConnection;
-use my_service_bus_shared::{page_id::PageId, protobuf_models::TopicsSnapshotProtobufModel};
+use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
@@ -35,10 +35,7 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn new(
-        topics_snapshot: TopicsSnapshotProtobufModel,
-        settings: SettingsModel,
-    ) -> AppContext {
+    pub async fn new(settings: SettingsModel) -> AppContext {
         let logs = Arc::new(Logs::new());
         let messages_connection = Arc::new(AzureStorageConnection::from_conn_string(
             settings.messages_connection_string.as_str(),
@@ -47,8 +44,10 @@ impl AppContext {
         let queue_connection =
             AzureStorageConnection::from_conn_string(settings.queues_connection_string.as_str());
 
+        let topics_repo = settings.get_topics_snapshot_repository().await;
+
         AppContext {
-            topics_snapshot: CurrentTopicsSnapshot::new(topics_snapshot),
+            topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
             logs: logs.clone(),
             topics_list: TopicsDataList::new(),
             settings,

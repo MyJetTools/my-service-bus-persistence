@@ -22,10 +22,7 @@ mod uncompressed_page_storage;
 use crate::{
     app::AppContext,
     settings::SettingsModel,
-    timers::{
-        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
-        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer,
-    },
+    timers::{topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer},
 };
 
 use tokio::signal;
@@ -38,14 +35,7 @@ pub mod persistence_grpc {
 async fn main() {
     let settings = SettingsModel::read().await;
 
-    let mut topics_snapshot_page_blob = settings.get_topics_snapshot_page_blob();
-
-    let topics_data =
-        toipics_snapshot::blob_repository::read_from_blob(&mut topics_snapshot_page_blob)
-            .await
-            .unwrap();
-
-    let app = AppContext::new(topics_data, settings);
+    let app = AppContext::new(settings).await;
 
     let app = Arc::new(app);
 
@@ -53,6 +43,11 @@ async fn main() {
     timer_3s.register_timer(
         "SaveMessagesTimer",
         Arc::new(SaveMessagesTimer::new(app.clone())),
+    );
+
+    timer_3s.register_timer(
+        "TopicsSnapshotSaver",
+        Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
     );
 
     /*
@@ -63,13 +58,6 @@ async fn main() {
            "SaveMinIndexTimer",
            Arc::new(SaveMinIndexTimer::new(app.clone())),
        );
-
-       timer_3s.register_timer(
-           "TopicsSnapshotSaver",
-           Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
-       );
-
-
     */
     timer_3s.start(app.clone(), app.clone());
 

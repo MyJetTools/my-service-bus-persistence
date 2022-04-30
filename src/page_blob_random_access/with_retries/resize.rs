@@ -1,6 +1,6 @@
-use my_azure_page_blob::{MyAzurePageBlob, MyPageBlob};
+use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
 
-pub async fn resize(page_blob: &MyAzurePageBlob, pages_amount: usize) {
+pub async fn resize(page_blob: &AzurePageBlobStorage, pages_amount: usize) {
     let mut attempt_no = 0;
     loop {
         match page_blob.resize(pages_amount).await {
