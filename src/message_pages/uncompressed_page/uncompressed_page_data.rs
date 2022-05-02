@@ -1,12 +1,13 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_shared::{
-    page_id::PageId, protobuf_models::MessageProtobufModel,
-    queue_with_intervals::QueueWithIntervals, MessageId,
-};
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 
 use crate::{
-    message_pages::MESSAGES_PER_PAGE, uncompressed_page_storage::toc::UncompressedFileToc,
+    message_pages::MESSAGES_PER_PAGE,
+    uncompressed_page_storage::{
+        toc::{MessageContentOffset, UncompressedFileToc},
+        UncompressedPageStorage,
+    },
 };
 
 pub struct MinMax {
@@ -32,24 +33,46 @@ impl MinMax {
     }
 }
 
+pub enum MessageStatus {
+    Loaded(Arc<MessageProtobufModel>),
+    Missing,
+}
+
+impl MessageStatus {
+    pub fn get_message_content(&self) -> Option<Arc<MessageProtobufModel>> {
+        match self {
+            MessageStatus::Loaded(message) => Some(message.clone()),
+            MessageStatus::Missing => None,
+        }
+    }
+}
+
 pub struct UncompressedPageData {
     pub page_id: PageId,
     pub toc: UncompressedFileToc,
-    pub messages: BTreeMap<i64, MessageProtobufModel>,
-    pub queue_to_save: QueueWithIntervals,
+    pub messages: BTreeMap<i64, MessageStatus>,
     pub min_max: Option<MinMax>,
+    pub storage: UncompressedPageStorage,
 }
 
 impl UncompressedPageData {
-    pub fn new(page_id: PageId, toc: UncompressedFileToc) -> Self {
+    pub async fn new(page_id: PageId, mut storage: UncompressedPageStorage) -> Self {
+        let toc = storage.read_toc().await;
         let min_max = get_min_max_from_toc(page_id, &toc);
+
         Self {
             page_id,
             messages: BTreeMap::new(),
-            queue_to_save: QueueWithIntervals::new(),
             min_max,
             toc,
+            storage,
         }
+    }
+
+    pub fn get_message_offset(&self, message_id: MessageId) -> MessageContentOffset {
+        let file_no = message_id - self.page_id * MESSAGES_PER_PAGE;
+
+        self.toc.get_position(file_no as usize)
     }
 
     fn update_min_max(&mut self, message_id: MessageId) {
@@ -62,53 +85,28 @@ impl UncompressedPageData {
 
     pub fn add(&mut self, messages: Vec<MessageProtobufModel>) {
         for msg in messages {
-            self.queue_to_save.enqueue(msg.message_id);
-            self.update_min_max(msg.message_id);
-            self.messages.insert(msg.message_id, msg);
+            self.add_message(msg);
         }
     }
 
-    pub fn restore(&mut self, messages: Vec<MessageProtobufModel>) {
-        for msg in messages {
-            self.restore_message(msg)
-        }
-    }
-
-    pub fn restore_message(&mut self, msg: MessageProtobufModel) {
+    pub fn add_message(&mut self, msg: MessageProtobufModel) {
         self.update_min_max(msg.message_id);
-        self.messages.insert(msg.message_id, msg);
+        self.messages
+            .insert(msg.message_id, MessageStatus::Loaded(Arc::new(msg)));
     }
 
-    pub fn get(&self, message_id: MessageId) -> Option<&MessageProtobufModel> {
+    pub fn get(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
         let result = self.messages.get(&message_id)?;
-        Some(result)
+        result.get_message_content()
     }
 
-    pub fn commit_saved(&mut self, messages: &[MessageProtobufModel]) {
-        for msg in messages {
-            self.queue_to_save.remove(msg.message_id);
-        }
-    }
-
-    pub fn get_messages_to_save(&self) -> Vec<MessageProtobufModel> {
-        let mut result = Vec::new();
-
-        for msg_id in &self.queue_to_save {
-            let msg = self.messages.get(&msg_id);
-
-            if let Some(msg) = msg {
-                result.push(msg.clone());
-            }
-        }
-
-        result
-    }
-
-    pub fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+    pub fn get_grpc_v0_snapshot(&self) -> Vec<Arc<MessageProtobufModel>> {
         let mut result = Vec::new();
 
         for msg in self.messages.values() {
-            result.push(msg.clone());
+            if let Some(msg) = msg.get_message_content() {
+                result.push(msg);
+            }
         }
 
         result

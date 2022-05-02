@@ -40,8 +40,7 @@ impl MessagesPage {
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let uncompressed_messages = self.unwrap_as_uncompressed_page();
-
-        uncompressed_messages.new_messages(messages);
+        uncompressed_messages.new_messages(messages).await;
     }
 
     pub fn unwrap_as_uncompressed_page(&self) -> &UncompressedPage {

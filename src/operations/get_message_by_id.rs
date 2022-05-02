@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
 use crate::{
@@ -12,7 +14,7 @@ pub async fn get_message_by_id(
     app: &AppContext,
     topic_id: &str,
     message_id: MessageId,
-) -> Result<Option<MessageProtobufModel>, OperationError> {
+) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
     let topic_data = super::topics::get_topic(app, topic_id).await?;
 
     let page_id = MessagePageId::from_message_id(message_id);
@@ -38,7 +40,7 @@ pub async fn read_message_from_blob(
     topic_data: &TopicData,
     page: &UncompressedPage,
     message_id: MessageId,
-) -> Result<Option<MessageProtobufModel>, OperationError> {
+) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
     let content = page.read_content(message_id).await;
 
     if content.is_none() {
@@ -60,5 +62,5 @@ pub async fn read_message_from_blob(
 
     let result = page.restore_message(message).await;
 
-    Ok(Some(result))
+    Ok(Some(Arc::new(result)))
 }
