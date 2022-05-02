@@ -16,7 +16,6 @@ use crate::{
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     topic_data::TopicsDataList,
-    uncompressed_page_storage::UncompressedPageStorage,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
@@ -111,7 +110,7 @@ impl AppContext {
         &self,
         topic_id: &str,
         page_id: &PageId,
-    ) -> Option<UncompressedPageStorage> {
+    ) -> Option<PageBlobRandomAccess> {
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
@@ -121,16 +120,14 @@ impl AppContext {
         )
         .await;
 
-        let page_blob = PageBlobRandomAccess::open_if_exists(azure_storage).await?;
-
-        Some(UncompressedPageStorage::new(page_blob))
+        PageBlobRandomAccess::open_if_exists(azure_storage).await
     }
 
     pub async fn open_or_create_uncompressed_page_storage(
         &self,
         topic_id: &str,
         page_id: &PageId,
-    ) -> UncompressedPageStorage {
+    ) -> PageBlobRandomAccess {
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
@@ -140,9 +137,7 @@ impl AppContext {
         )
         .await;
 
-        let page_blob = PageBlobRandomAccess::open_or_create(azure_storage).await;
-
-        UncompressedPageStorage::new(page_blob)
+        PageBlobRandomAccess::open_or_create(azure_storage).await
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {

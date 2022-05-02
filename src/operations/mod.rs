@@ -9,7 +9,7 @@ mod get_page_to_read;
 mod get_topic_data_to_publish_messages;
 pub mod index_by_minute;
 mod init_new_topic;
-pub mod init_page_storage;
+
 mod new_messages;
 mod restore_page_error;
 mod topics;

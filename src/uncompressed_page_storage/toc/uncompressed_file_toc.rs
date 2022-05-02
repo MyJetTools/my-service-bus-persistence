@@ -1,3 +1,5 @@
+use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
+
 use super::MessageContentOffset;
 
 pub const TOC_SIZE_IN_PAGES: usize = 1563;
@@ -27,7 +29,7 @@ impl UncompressedFileToc {
 
         let mut result = Self {
             toc_data,
-            write_position: 0,
+            write_position: TOC_SIZE,
             messages_count: 0,
         };
 
@@ -84,6 +86,12 @@ impl UncompressedFileToc {
 
         get_value(&self.toc_data[toc_pos..toc_pos + 4]) != 0
     }
+
+    pub fn get_toc_pages(&self, page_from: usize, pages_amount: usize) -> &[u8] {
+        let start_pos = page_from * BLOB_PAGE_SIZE;
+        let end_pos = start_pos + pages_amount * BLOB_PAGE_SIZE;
+        &self.toc_data[start_pos..end_pos]
+    }
 }
 
 fn get_value(src: &[u8]) -> i32 {
@@ -92,4 +100,31 @@ fn get_value(src: &[u8]) -> i32 {
     result.copy_from_slice(src);
 
     i32::from_le_bytes(result)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_we_save_toc_data_and_get() {
+        let content = vec![0u8; TOC_SIZE];
+        let mut toc = UncompressedFileToc::new(content);
+
+        for file_no in 0..100_000 {
+            let src_offset = MessageContentOffset {
+                offset: file_no + 1,
+                size: file_no + 1,
+            };
+
+            let res_page_no = toc.update_file_position(file_no, &src_offset);
+
+            assert_eq!(res_page_no, file_no * 8 / 512);
+
+            let result = toc.get_position(file_no);
+
+            assert_eq!(src_offset.offset, result.offset);
+            assert_eq!(src_offset.size, result.size);
+        }
+    }
 }

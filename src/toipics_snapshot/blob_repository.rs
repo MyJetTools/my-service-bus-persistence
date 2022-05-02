@@ -48,7 +48,9 @@ impl TopicsSnapshotBlobRepository {
 
         data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
-        self.page_blob.write_randomly(0, data.as_slice(), 1).await;
+        self.page_blob
+            .write_at_position(0, data.as_slice(), 1)
+            .await;
 
         Ok(())
     }

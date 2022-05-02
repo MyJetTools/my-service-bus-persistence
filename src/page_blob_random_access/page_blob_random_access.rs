@@ -100,7 +100,7 @@ impl PageBlobRandomAccess {
         }
     }
 
-    pub async fn read_randomly(&mut self, start_pos: usize, len: usize) -> RandomAccessData {
+    pub async fn read_from_position(&mut self, start_pos: usize, len: usize) -> RandomAccessData {
         let mut result = RandomAccessData::new(start_pos, len);
 
         let payload = self
@@ -112,7 +112,7 @@ impl PageBlobRandomAccess {
         result
     }
 
-    pub async fn write_randomly(
+    pub async fn write_at_position(
         &mut self,
         start_pos: usize,
         content: &[u8],
@@ -186,10 +186,10 @@ mod tests {
             }
 
             page_blob_random_access
-                .write_randomly(start_pos, save.as_slice(), 1)
+                .write_at_position(start_pos, save.as_slice(), 1)
                 .await;
 
-            let result = page_blob_random_access.read_randomly(0, end_pos).await;
+            let result = page_blob_random_access.read_from_position(0, end_pos).await;
 
             let mut res_to_compare = Vec::new();
             for b in 0..end_pos {

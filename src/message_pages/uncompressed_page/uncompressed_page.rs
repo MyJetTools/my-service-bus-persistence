@@ -4,11 +4,7 @@ use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufMod
 use rust_extensions::StopWatch;
 use tokio::sync::Mutex;
 
-use crate::{
-    message_pages::PageMetrics,
-    page_blob_random_access::RandomAccessData,
-    uncompressed_page_storage::{PayloadsToUploadContainer, UncompressedPageStorage},
-};
+use crate::{message_pages::PageMetrics, page_blob_random_access::PageBlobRandomAccess};
 
 use super::{NewMessages, UncompressedPageData};
 
@@ -20,9 +16,9 @@ pub struct UncompressedPage {
 }
 
 impl UncompressedPage {
-    pub async fn new(page_id: PageId, storage: UncompressedPageStorage) -> Self {
+    pub async fn new(page_id: PageId, page_blob: PageBlobRandomAccess) -> Self {
         Self {
-            page_data: Mutex::new(UncompressedPageData::new(page_id, storage).await),
+            page_data: Mutex::new(UncompressedPageData::new(page_id, page_blob).await),
             page_id,
             metrics: PageMetrics::new(),
             new_messages: NewMessages::new(),
@@ -50,27 +46,13 @@ impl UncompressedPage {
     }
 
     pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
-        let read_access = self.page_data.lock().await;
-        read_access.get(message_id)
+        let mut write_access = self.page_data.lock().await;
+        write_access.get(message_id).await
     }
 
     pub async fn get_grpc_v0_snapshot(&self) -> Vec<Arc<MessageProtobufModel>> {
         let read_access = self.page_data.lock().await;
         return read_access.get_grpc_v0_snapshot();
-    }
-
-    pub async fn read_content(&self, message_id: MessageId) -> Option<RandomAccessData> {
-        let mut write_access = self.page_data.lock().await;
-
-        let offset = write_access.get_message_offset(message_id);
-
-        if !offset.has_data() {
-            return None;
-        }
-
-        let content = write_access.storage.read_content(&offset).await;
-
-        Some(content)
     }
 
     pub async fn flush_to_storage(&self, max_persist_size: usize) -> Duration {
@@ -87,28 +69,17 @@ impl UncompressedPage {
             return sw.duration();
         }
 
-        let messages_to_persist = messages_to_persist.as_ref().unwrap().as_slice();
+        let messages_to_persist = messages_to_persist.unwrap();
 
         {
             let mut write_access = self.page_data.lock().await;
-
-            let write_position = write_access.toc.get_write_position();
-
-            let mut upload_container = PayloadsToUploadContainer::new(write_position);
-
-            for msg_to_persist in messages_to_persist {
-                upload_container.append(self.page_id, msg_to_persist);
-            }
-
             write_access
-                .storage
-                .append_payload(upload_container)
-                .await
-                .unwrap();
+                .persist_messages(messages_to_persist.as_slice())
+                .await;
         }
 
         self.new_messages
-            .confirm_persisted(messages_to_persist)
+            .confirm_persisted(messages_to_persist.as_slice())
             .await;
 
         sw.pause();
