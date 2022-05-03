@@ -58,6 +58,7 @@ pub struct UncompressedPageData {
 impl UncompressedPageData {
     pub async fn new(page_id: PageId, mut page_blob: PageBlobRandomAccess) -> Self {
         let toc = crate::uncompressed_page_storage::read_toc(&mut page_blob).await;
+
         let min_max = get_min_max_from_toc(page_id, &toc);
 
         Self {
@@ -239,7 +240,8 @@ mod test {
     use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use crate::{
-        page_blob_random_access::PageBlobRandomAccess, uncompressed_page_storage::toc::TOC_SIZE,
+        page_blob_random_access::PageBlobRandomAccess,
+        uncompressed_page_storage::toc::{TOC_SIZE, TOC_SIZE_IN_PAGES},
     };
 
     use super::*;
@@ -294,7 +296,20 @@ mod test {
             .persist_messages(&items_to_upload)
             .await;
 
-        uncompressed_page_data.messages.clear();
+        let result = uncompressed_page_data
+            .page_blob
+            .load_pages(&PageBlobPageId::new(TOC_SIZE_IN_PAGES), 1, None)
+            .await;
+
+        let mut uncompressed_page_data =
+            UncompressedPageData::new(1, uncompressed_page_data.page_blob).await;
+
+        let result2 = uncompressed_page_data
+            .page_blob
+            .load_pages(&PageBlobPageId::new(TOC_SIZE_IN_PAGES), 1, None)
+            .await;
+
+        assert_eq!(result, result2);
 
         let result_message0 = uncompressed_page_data.get(100_001).await.unwrap();
         let result_message1 = uncompressed_page_data.get(100_002).await.unwrap();

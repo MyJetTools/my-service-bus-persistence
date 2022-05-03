@@ -167,6 +167,8 @@ mod tests {
 
     use super::*;
 
+    use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
+
     #[tokio::test]
     pub async fn test_we_have_everything_in_one_page() {
         let connection = AzureStorageConnection::new_in_memory();
@@ -203,5 +205,50 @@ mod tests {
             start_pos = end_pos;
             end_pos = start_pos + old_end_pos + 1;
         }
+    }
+
+    #[tokio::test]
+    async fn test_random_read_write() {
+        let connection = AzureStorageConnection::new_in_memory();
+        let page_blob =
+            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
+                .await;
+
+        let mut page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+
+        let first_page = [1u8; 512];
+
+        page_blob_random_access
+            .write_at_position(0, &first_page, 1)
+            .await;
+
+        assert_eq!(
+            first_page.as_slice(),
+            page_blob_random_access
+                .last_known_page_cache
+                .get_page_cache_content(0)
+                .unwrap()
+        );
+
+        assert_eq!(
+            0,
+            page_blob_random_access
+                .last_known_page_cache
+                .get_page_no()
+                .unwrap()
+                .value
+        );
+
+        let first_page = [2u8; 512];
+
+        page_blob_random_access
+            .write_at_position(1, &first_page, 1)
+            .await;
+
+        let first_page = [3u8; 512];
+
+        page_blob_random_access
+            .write_at_position(0, &first_page, 1)
+            .await;
     }
 }

@@ -19,11 +19,13 @@ impl LastKnownPageCache {
     pub fn update(&mut self, page_no: usize, content: &[u8]) {
         let pages_in_content = content.len() / BLOB_PAGE_SIZE;
 
-        let last_page_id = page_no + pages_in_content;
+        let last_page_id = page_no + pages_in_content - 1;
 
         if let Some(ref mut data) = self.data {
-            data.page_no = last_page_id;
-            data.content = content[content.len() - BLOB_PAGE_SIZE..content.len()].to_vec();
+            if last_page_id >= data.page_no {
+                data.page_no = last_page_id;
+                data.content = content[content.len() - BLOB_PAGE_SIZE..content.len()].to_vec();
+            }
         } else {
             self.data = Some(PageData {
                 content: content[content.len() - BLOB_PAGE_SIZE..content.len()].to_vec(),
@@ -49,5 +51,28 @@ impl LastKnownPageCache {
 
     pub fn clear(&mut self) {
         self.data = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_writing_to_cache() {
+        let mut last_known_page = LastKnownPageCache::new();
+
+        let mut to_write = Vec::new();
+
+        to_write.extend_from_slice([1u8; 512].as_slice());
+        to_write.extend_from_slice([2u8; 512].as_slice());
+
+        last_known_page.update(0, to_write.as_slice());
+
+        assert_eq!(last_known_page.get_page_no().unwrap().value, 1);
+        assert_eq!(
+            last_known_page.get_page_cache_content(1).unwrap(),
+            &[2u8; 512]
+        );
     }
 }

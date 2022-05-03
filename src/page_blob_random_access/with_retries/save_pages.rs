@@ -15,7 +15,8 @@ pub async fn save_pages(
             }
             Err(err) => {
                 super::write_error_handler::is_error_retrieable(err, "save_pages", attempt_no)
-                    .await;
+                    .await
+                    .unwrap();
 
                 attempt_no += 1;
             }
