@@ -1,3 +1,5 @@
+use my_service_bus_shared::protobuf_models::MessagesProtobufModel;
+
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
 pub fn get_none_message() -> MessageContentGrpcModel {
@@ -18,8 +20,6 @@ pub async fn get_v0(
     page: &MessagesPage,
     max_payload_size: usize,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    todo!("Implement");
-    /*
     let messages = page.get_grpc_v0_snapshot().await;
 
     let messages = MessagesProtobufModel { messages };
@@ -32,7 +32,6 @@ pub async fn get_v0(
 
     let result = split(compressed.as_slice(), max_payload_size);
     return Ok(result);
-     */
 }
 
 pub async fn get_v1(

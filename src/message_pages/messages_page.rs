@@ -62,10 +62,17 @@ impl MessagesPage {
         }
     }
 
-    pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
+    pub async fn get_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
         match self {
             MessagesPage::Uncompressed(page) => page.get_message(message_id).await,
             MessagesPage::Empty(_) => None,
+        }
+    }
+
+    pub async fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+        match self {
+            MessagesPage::Uncompressed(page) => page.get_grpc_v0_snapshot().await,
+            MessagesPage::Empty(_) => vec![],
         }
     }
 }

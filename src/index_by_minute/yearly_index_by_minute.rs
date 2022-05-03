@@ -86,6 +86,11 @@ mod test {
 
     #[tokio::test]
     async fn test_that_second_time_is_not_updated() {
+        test_1().await;
+        test_2().await;
+    }
+
+    async fn test_1() {
         let azure_conn_string = AzureStorageConnection::new_in_memory();
         let page_blob = AzurePageBlobStorage::new(
             Arc::new(azure_conn_string),
@@ -111,8 +116,7 @@ mod test {
         assert_eq!(index_by_year.pages_to_save.contains_key(&0), true);
     }
 
-    #[tokio::test]
-    async fn test_we_flushed_to_storage() {
+    async fn test_2() {
         let azure_conn_string = AzureStorageConnection::new_in_memory();
         let page_blob = AzurePageBlobStorage::new(
             Arc::new(azure_conn_string),

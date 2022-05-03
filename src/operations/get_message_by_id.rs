@@ -10,7 +10,7 @@ pub async fn get_message_by_id(
     app: &AppContext,
     topic_id: &str,
     message_id: MessageId,
-) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
+) -> Result<Option<MessageProtobufModel>, OperationError> {
     let topic_data = super::topics::get_topic(app, topic_id).await?;
 
     let page_id = MessagePageId::from_message_id(message_id);

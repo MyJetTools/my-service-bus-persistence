@@ -45,12 +45,12 @@ impl UncompressedPage {
         self.metrics.update_last_access_to_now();
     }
 
-    pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
+    pub async fn get_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
         let mut write_access = self.page_data.lock().await;
         write_access.get(message_id).await
     }
 
-    pub async fn get_grpc_v0_snapshot(&self) -> Vec<Arc<MessageProtobufModel>> {
+    pub async fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
         let read_access = self.page_data.lock().await;
         return read_access.get_grpc_v0_snapshot();
     }
