@@ -16,6 +16,34 @@ impl MessagesPage {
         Self::Empty(BlankPage::new(page_id))
     }
 
+    pub fn get_metrics_percent(&self) -> usize {
+        match self {
+            MessagesPage::Uncompressed(page) => page.metrics.get_precent(),
+            MessagesPage::Empty(_) => 0,
+        }
+    }
+
+    pub fn get_messages_count(&self) -> usize {
+        match self {
+            MessagesPage::Uncompressed(page) => page.metrics.get_messages_count(),
+            MessagesPage::Empty(_) => 0,
+        }
+    }
+
+    pub fn get_metrics_skipped_messages(&self) -> bool {
+        match self {
+            MessagesPage::Uncompressed(page) => page.metrics.get_has_skipped_messages(),
+            MessagesPage::Empty(_) => true,
+        }
+    }
+
+    pub fn get_metrics_blob_position(&self) -> usize {
+        match self {
+            MessagesPage::Uncompressed(page) => page.metrics.get_blob_position(),
+            MessagesPage::Empty(_) => 0,
+        }
+    }
+
     pub async fn create_uncompressed(page_id: PageId, page_blob: PageBlobRandomAccess) -> Self {
         Self::Uncompressed(UncompressedPage::new(page_id, page_blob).await)
     }
@@ -62,16 +90,29 @@ impl MessagesPage {
         }
     }
 
-    pub async fn get_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
+    pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
         match self {
             MessagesPage::Uncompressed(page) => page.get_message(message_id).await,
             MessagesPage::Empty(_) => None,
         }
     }
 
-    pub async fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+    pub async fn get_all(&self) -> Vec<Arc<MessageProtobufModel>> {
         match self {
-            MessagesPage::Uncompressed(page) => page.get_grpc_v0_snapshot().await,
+            MessagesPage::Uncompressed(page) => page.get_all().await,
+            MessagesPage::Empty(_) => vec![],
+        }
+    }
+
+    pub async fn get_range(
+        &self,
+        from_message_id: MessageId,
+        to_message_id: MessageId,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        match self {
+            MessagesPage::Uncompressed(page) => {
+                page.get_range(from_message_id, to_message_id).await
+            }
             MessagesPage::Empty(_) => vec![],
         }
     }

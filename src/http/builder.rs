@@ -34,5 +34,13 @@ pub fn build(app: &Arc<AppContext>) -> ControllersMiddleware {
         super::controllers::home_controller::IndexAction::new(),
     ));
 
+    result.register_get_action(Arc::new(
+        super::controllers::read_controller::ByIdAction::new(app.clone()),
+    ));
+
+    result.register_get_action(Arc::new(
+        super::controllers::read_controller::ListFromDateAction::new(app.clone()),
+    ));
+
     result
 }

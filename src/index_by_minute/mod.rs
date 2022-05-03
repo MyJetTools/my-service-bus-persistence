@@ -1,8 +1,6 @@
 mod index_by_minute_storage;
-mod message_index_builder_data;
 pub mod utils;
 mod yearly_index_by_minute;
-pub use message_index_builder_data::MessageIndexBuilderData;
 pub use utils::IndexByMinuteUtils;
 pub use yearly_index_by_minute::YearlyIndexByMinute;
 mod minute_within_year;

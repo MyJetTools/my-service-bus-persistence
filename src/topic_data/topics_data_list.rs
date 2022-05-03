@@ -17,10 +17,13 @@ impl TopicsDataList {
 
     pub async fn get(&self, topic_id: &str) -> Option<Arc<TopicData>> {
         let read_access = self.data.read().await;
-
         let result = read_access.get(topic_id)?;
-
         return Some(result.clone());
+    }
+
+    pub async fn get_all(&self) -> Vec<Arc<TopicData>> {
+        let read_access = self.data.read().await;
+        read_access.values().map(|v| v.clone()).collect()
     }
 
     pub async fn create_topic_data(&self, topic_id: &str) -> bool {

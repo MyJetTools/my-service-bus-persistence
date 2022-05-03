@@ -30,7 +30,7 @@ impl ByIdAction {
 async fn handle_request(
     action: &ByIdAction,
     input_data: GetMessageByIdInputContract,
-    ctx: &mut HttpContext,
+    _ctx: &mut HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     let message = crate::operations::get_message_by_id(
         action.app.as_ref(),

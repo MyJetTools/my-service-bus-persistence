@@ -18,7 +18,8 @@ pub async fn download(
                     "get_blob_size",
                     attempt_no,
                 )
-                .await;
+                .await
+                .unwrap();
 
                 attempt_no += 1;
             }

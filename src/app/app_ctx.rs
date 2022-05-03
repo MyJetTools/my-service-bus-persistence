@@ -11,7 +11,6 @@ use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
     index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
-    message_pages::MessagePageId,
     page_blob_random_access::PageBlobRandomAccess,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
@@ -67,18 +66,6 @@ impl AppContext {
             index_by_minute_utils: IndexByMinuteUtils::new(),
             messages_conn_string: Arc::new(messages_conn_string),
         }
-    }
-
-    pub async fn get_current_page_id(&self, topic_id: &str) -> Option<MessagePageId> {
-        let snapshot = self.topics_snapshot.get().await;
-
-        for topic_data in &snapshot.snapshot.data {
-            if topic_data.topic_id == topic_id {
-                return Some(MessagePageId::from_message_id(topic_data.message_id));
-            }
-        }
-
-        None
     }
 
     pub fn get_max_payload_size(&self) -> usize {

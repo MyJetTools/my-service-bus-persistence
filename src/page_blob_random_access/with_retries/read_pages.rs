@@ -22,7 +22,8 @@ pub async fn read_pages(
                     "get_blob_size",
                     attempt_no,
                 )
-                .await;
+                .await
+                .unwrap();
 
                 attempt_no += 1;
             }

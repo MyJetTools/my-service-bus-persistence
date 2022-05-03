@@ -18,7 +18,8 @@ pub async fn get_blob_size(
                     "get_blob_size",
                     attempt_no,
                 )
-                .await;
+                .await
+                .unwrap();
 
                 attempt_no += 1;
             }

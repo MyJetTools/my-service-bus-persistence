@@ -34,12 +34,12 @@ impl MinMax {
 }
 
 pub enum MessageStatus {
-    Loaded(MessageProtobufModel),
+    Loaded(Arc<MessageProtobufModel>),
     Missing,
 }
 
 impl MessageStatus {
-    pub fn get_message_content(&self) -> Option<MessageProtobufModel> {
+    pub fn get_message_content(&self) -> Option<Arc<MessageProtobufModel>> {
         match self {
             MessageStatus::Loaded(message) => Some(message.clone()),
             MessageStatus::Missing => None,
@@ -93,7 +93,7 @@ impl UncompressedPageData {
     pub fn add_message(&mut self, msg: MessageProtobufModel) {
         self.update_min_max(msg.message_id);
         self.messages
-            .insert(msg.message_id, MessageStatus::Loaded(msg));
+            .insert(msg.message_id, MessageStatus::Loaded(Arc::new(msg)));
     }
 
     async fn load_message(&mut self, message_id: MessageId) {
@@ -120,7 +120,7 @@ impl UncompressedPageData {
         }
     }
 
-    pub async fn get(&mut self, message_id: MessageId) -> Option<MessageProtobufModel> {
+    pub async fn get(&mut self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
         if !self.messages.contains_key(&message_id) {
             self.load_message(message_id).await;
         }
@@ -155,7 +155,7 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn get_grpc_v0_snapshot(&self) -> Vec<MessageProtobufModel> {
+    pub fn get_all(&self) -> Vec<Arc<MessageProtobufModel>> {
         let mut result = Vec::new();
 
         for msg in self.messages.values() {
@@ -165,6 +165,14 @@ impl UncompressedPageData {
         }
 
         result
+    }
+
+    pub fn get_range(
+        &self,
+        from_id: MessageId,
+        to_id: MessageId,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        todo!("Implement")
     }
 
     pub fn has_skipped_messages(&self) -> bool {

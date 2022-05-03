@@ -34,6 +34,7 @@ pub async fn is_error_retrieable(
     match result {
         RetryResult::Retry => {
             if attempt_no > 5 {
+                println!("Error of process {}", process);
                 return Err(err);
             } else {
                 return Ok(());
@@ -41,6 +42,7 @@ pub async fn is_error_retrieable(
         }
         RetryResult::RetryWithDelay(duration) => {
             if attempt_no > 5 {
+                println!("Error of process {}", process);
                 return Err(err);
             } else {
                 tokio::time::sleep(duration).await;

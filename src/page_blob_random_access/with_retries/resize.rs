@@ -15,7 +15,8 @@ pub async fn resize(page_blob: &AzurePageBlobStorage, pages_amount: usize) {
                     "save_pages",
                     attempt_no,
                 )
-                .await;
+                .await
+                .unwrap();
 
                 attempt_no += 1;
             }

@@ -164,17 +164,15 @@ impl StatusModel {
     }
 }
 async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
-    todo!("Uncomment");
-    /*
     let mut result: Vec<LoadedPageModel> = Vec::new();
 
-    for page in topic_data.get_all().await {
+    for page in topic_data.pages_list.get_all().await {
         let item = LoadedPageModel {
-            page_id: page.page_id.value,
-            percent: page.metrics.get_precent(),
-            count: page.metrics.get_messages_count(),
-            has_skipped_messages: page.metrics.get_has_skipped_messages(),
-            write_position: page.metrics.get_blob_position(),
+            page_id: page.get_page_id(),
+            percent: page.get_metrics_percent(),
+            count: page.get_messages_count(),
+            has_skipped_messages: page.get_metrics_skipped_messages(),
+            write_position: page.get_metrics_blob_position(),
         };
 
         result.push(item);
@@ -186,7 +184,6 @@ async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
     });
 
     result
-     */
 }
 
 async fn get_topics_model(

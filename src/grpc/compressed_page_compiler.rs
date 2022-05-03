@@ -1,4 +1,7 @@
-use my_service_bus_shared::protobuf_models::MessagesProtobufModel;
+use my_service_bus_shared::{
+    page_compressor::CompressedPageBuilder,
+    protobuf_models::{MessageProtobufModel, MessagesProtobufModel},
+};
 
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
@@ -20,7 +23,17 @@ pub async fn get_v0(
     page: &MessagesPage,
     max_payload_size: usize,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    let messages = page.get_grpc_v0_snapshot().await;
+    let arced_messages = page.get_all().await;
+
+    let mut messages = Vec::with_capacity(arced_messages.len());
+    for acred_message in arced_messages {
+        messages.push(MessageProtobufModel {
+            message_id: acred_message.message_id,
+            created: acred_message.created,
+            data: acred_message.data.clone(),
+            headers: acred_message.headers.clone(),
+        });
+    }
 
     let messages = MessagesProtobufModel { messages };
 
@@ -40,74 +53,44 @@ pub async fn get_v1(
     max_payload_size: usize,
     range: Option<MsgRange>,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    todo!("Implement");
-    /*
-    match page {
-        MessagesPage::Uncompressed(uncompressed_page) => {
-            let mut zip_builder = CompressedPageBuilder::new();
+    let messages_snapshot = if let Some(range) = range {
+        page.get_range(range.msg_from, range.msg_to).await
+    } else {
+        page.get_all().await
+    };
 
-            let mut messages = 0;
-
-            let mut used_messages = 0;
-
-            for msg in uncompressed_page.messages.values() {
-                if let Some(range) = &range {
-                    if range.msg_from <= msg.message_id && msg.message_id <= range.msg_to {
-                        let mut buffer = Vec::new();
-                        msg.serialize(&mut buffer)?;
-                        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
-                        used_messages += 1;
-                    }
-                } else {
-                    let mut buffer = Vec::new();
-                    msg.serialize(&mut buffer)?;
-                    zip_builder.add_message(msg.message_id, buffer.as_slice())?;
-                    used_messages += 1;
-                }
-                messages += 1;
-            }
-
-            let zip_payload = zip_builder.get_payload()?;
-
-            println!(
-                "Sending zip_2 for topic {}/{}. Size {}. Messages: {}. Filtered: {}",
-                topic_id,
-                page.page_id,
-                zip_payload.len(),
-                messages,
-                used_messages
-            );
-
-            let result = split(zip_payload.as_slice(), max_payload_size);
-            return Ok(result);
-        }
-        crate::message_pages::MessagesPageData::Compressed(compressed_page) => {
-            if let Some(range) = &range {
-                let mut zip_builder = CompressedPageBuilder::new();
-                for msg_id in range.msg_from..range.msg_to {
-                    let msg = compressed_page.get(msg_id)?;
-
-                    if let Some(msg) = msg {
-                        let mut buffer = Vec::new();
-                        msg.serialize(&mut buffer)?;
-                        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
-                    }
-                }
-
-                let zip_payload = zip_builder.get_payload()?;
-
-                let result = split(zip_payload.as_slice(), max_payload_size);
-                return Ok(result);
-            } else {
-                let result = split(compressed_page.zip_data.as_slice(), max_payload_size);
-                return Ok(result);
-            }
-        }
-        crate::message_pages::MessagesPageData::Blank(_) => {
-            return Ok(Vec::new());
-        }
+    if messages_snapshot.len() == 0 {
+        return Ok(vec![]);
     }
-     */
+
+    let mut zip_builder = CompressedPageBuilder::new();
+
+    let mut messages = 0;
+
+    let mut used_messages = 0;
+
+    for msg in messages_snapshot {
+        let mut buffer = Vec::new();
+        msg.serialize(&mut buffer)?;
+        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+        used_messages += 1;
+
+        messages += 1;
+    }
+
+    let zip_payload = zip_builder.get_payload()?;
+
+    println!(
+        "Sending zip_2 for topic {}/{}. Size {}. Messages: {}. Filtered: {}",
+        topic_id,
+        page.get_page_id(),
+        zip_payload.len(),
+        messages,
+        used_messages
+    );
+
+    let result = split(zip_payload.as_slice(), max_payload_size);
+    return Ok(result);
 }
 
 fn split(src: &[u8], max_payload_size: usize) -> Vec<Vec<u8>> {

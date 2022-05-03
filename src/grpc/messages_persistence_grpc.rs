@@ -66,11 +66,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let page_id = MessagePageId::new(req.page_no);
 
-            let current_page_id = app
-                .get_current_page_id(topic_data.topic_id.as_str())
-                .await
-                .unwrap();
-
             let page = crate::operations::get_page_to_publish_messages(
                 app.as_ref(),
                 topic_data.as_ref(),

@@ -57,13 +57,6 @@ impl UncompressedFileToc {
         self.write_position
     }
 
-    pub fn reset_as_new(&mut self) -> &[u8] {
-        self.toc_data.clear();
-        self.toc_data.extend_from_slice([0u8; TOC_SIZE].as_slice());
-
-        self.toc_data.as_slice()
-    }
-
     pub fn update_file_position(
         &mut self,
         no_in_page: usize,

@@ -17,16 +17,13 @@ impl SaveMinIndexTimer {
 #[async_trait::async_trait]
 impl MyTimerTick for SaveMinIndexTimer {
     async fn tick(&self) {
-        todo!("Uncomment");
-        /*
-        let topics_snapshot = self.app.topics_snapshot.get().await;
-        for topic in &topics_snapshot.snapshot.data {
-            let index_handler = self.app.index_by_minute.get(topic.topic_id.as_str()).await;
+        let topics_snapshot = self.app.topics_list.get_all().await;
+        for topic_data in &topics_snapshot {
+            let mut yearly_indices = topic_data.yearly_index_by_minute.lock().await;
 
-            index_handler
-                .save_to_storage(&self.app.index_by_minute_utils)
-                .await;
+            for index in yearly_indices.values_mut() {
+                index.flush_to_storage().await;
+            }
         }
-         */
     }
 }
