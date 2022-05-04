@@ -20,19 +20,7 @@ pub async fn get_page_to_read(
             return Ok(page);
         };
 
-        let page = app
-            .open_uncompressed_page_storage_if_exists(topic_data.topic_id.as_str(), &page_id.value)
-            .await;
-
-        let page = if let Some(storage) = page {
-            MessagesPage::create_uncompressed(page_id.value, storage).await
-        } else {
-            MessagesPage::create_as_empty(page_id.value)
-        };
-
-        topic_data
-            .pages_list
-            .add(page_id.value, Arc::new(page))
+        crate::operations::restore_page::open_uncompressed_or_empty(app, topic_data, page_id.value)
             .await;
     }
 }

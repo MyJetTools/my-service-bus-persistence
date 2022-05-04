@@ -59,14 +59,17 @@ impl UncompressedFileToc {
 
     pub fn update_file_position(
         &mut self,
-        no_in_page: usize,
+        file_no: usize,
         offset: &MessageContentOffset,
-    ) -> usize {
-        let toc_pos = no_in_page * 8;
+    ) -> Option<usize> {
+        let toc_pos = file_no * 8;
+        if self.has_content(file_no) {
+            return None;
+        }
 
         offset.serialize(&mut self.toc_data[toc_pos..toc_pos + 8]);
 
-        toc_pos / 512
+        return Some(toc_pos / 512);
     }
 
     pub fn get_position(&self, file_no: usize) -> MessageContentOffset {
@@ -84,6 +87,11 @@ impl UncompressedFileToc {
         let start_pos = page_from * BLOB_PAGE_SIZE;
         let end_pos = start_pos + pages_amount * BLOB_PAGE_SIZE;
         &self.toc_data[start_pos..end_pos]
+    }
+
+    //TODO - UnitTest It
+    pub fn get_messages_count(&self) -> usize {
+        self.messages_count
     }
 }
 
@@ -112,12 +120,26 @@ mod test {
 
             let res_page_no = toc.update_file_position(file_no, &src_offset);
 
-            assert_eq!(res_page_no, file_no * 8 / 512);
+            assert_eq!(res_page_no.unwrap(), file_no * 8 / 512);
 
             let result = toc.get_position(file_no);
 
             assert_eq!(src_offset.offset, result.offset);
             assert_eq!(src_offset.size, result.size);
         }
+    }
+
+    #[test]
+    fn test_message_count_is_calculated() {
+        let content = vec![0u8; TOC_SIZE];
+        let mut toc = UncompressedFileToc::new(content);
+
+        assert_eq!(0, toc.get_messages_count());
+
+        toc.update_file_position(1, &MessageContentOffset { offset: 1, size: 1 });
+        assert_eq!(1, toc.get_messages_count());
+
+        toc.update_file_position(1, &MessageContentOffset { offset: 1, size: 1 });
+        assert_eq!(1, toc.get_messages_count());
     }
 }

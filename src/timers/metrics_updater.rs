@@ -28,7 +28,7 @@ impl MyTimerTick for MetricsUpdater {
 
             let topic_data = topic_data.unwrap();
 
-            let queue_size = topic_data.get_messages_amount_to_save();
+            let queue_size = topic_data.get_messages_amount_to_save().await;
 
             self.app
                 .metrics_keeper

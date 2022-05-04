@@ -2,19 +2,19 @@ use std::collections::HashMap;
 
 use my_service_bus_shared::MessageId;
 
-use crate::page_blob_random_access::*;
+use crate::{page_blob_random_access::*, typing::*};
 
 use super::{IndexByMinuteStorage, MinuteWithinYear};
 
 pub struct YearlyIndexByMinute {
     pub index_data: Vec<u8>,
-    pub year: u32,
+    pub year: Year,
     pub pages_to_save: HashMap<usize, ()>,
     storage: IndexByMinuteStorage,
 }
 
 impl YearlyIndexByMinute {
-    pub async fn new(year: u32, mut storage: IndexByMinuteStorage) -> Self {
+    pub async fn new(year: Year, mut storage: IndexByMinuteStorage) -> Self {
         Self {
             year,
             index_data: storage.load().await,
@@ -62,9 +62,15 @@ impl YearlyIndexByMinute {
         None
     }
 
-    pub fn get_message_id(&self, minute_witin_year: &MinuteWithinYear) -> MessageId {
+    pub fn get_message_id(&self, minute_witin_year: &MinuteWithinYear) -> Option<MessageId> {
         let position_in_file = minute_witin_year.get_position_in_file();
-        return self.get_message_id_from_position(position_in_file);
+        let result = self.get_message_id_from_position(position_in_file);
+
+        if result == 0 {
+            None
+        } else {
+            Some(result)
+        }
     }
 
     pub async fn flush_to_storage(&mut self) {
@@ -110,7 +116,7 @@ mod test {
 
         let message_id = index_by_year.get_message_id(&minute);
 
-        assert_eq!(message_id, 15);
+        assert_eq!(message_id.unwrap(), 15);
 
         //Check that page to persist has changes
         assert_eq!(index_by_year.pages_to_save.contains_key(&0), true);

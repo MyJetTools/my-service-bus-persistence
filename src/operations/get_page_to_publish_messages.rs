@@ -18,12 +18,6 @@ pub async fn get_page_to_publish_messages(
             }
         };
 
-        let storage = app
-            .open_or_create_uncompressed_page_storage(topic_data.topic_id.as_str(), &page_id)
-            .await;
-
-        let page = MessagesPage::create_uncompressed(page_id, storage).await;
-
-        topic_data.pages_list.add(page_id, Arc::new(page)).await;
+        crate::operations::restore_page::open_or_create(app, topic_data, page_id).await;
     }
 }

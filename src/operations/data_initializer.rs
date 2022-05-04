@@ -54,9 +54,6 @@ async fn restore_page(
     is_page_current: bool,
     topic_id: String,
 ) {
-    todo!("Implement");
-
-    /*
     let mut sw = StopWatch::new();
     sw.start();
 
@@ -66,12 +63,19 @@ async fn restore_page(
         format!("Loading messages #{}", page_id),
     );
 
-    let topic_data = app
-        .topics_list
-        .get_or_create_data_by_topic(topic_id.as_str(), app.clone())
-        .await;
+    let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
 
-    super::blob::initilize_page(app.clone(), topic_data, page_id, is_page_current).await;
+    if is_page_current {
+        crate::operations::restore_page::open_or_create(app.as_ref(), topic_data.as_ref(), page_id)
+            .await;
+    } else {
+        crate::operations::restore_page::open_uncompressed_or_empty(
+            app.as_ref(),
+            topic_data.as_ref(),
+            page_id,
+        )
+        .await;
+    }
 
     sw.pause();
 
@@ -80,6 +84,4 @@ async fn restore_page(
         "Initialization",
         format!("Loaded messages #{} in {:?}", page_id, sw.duration()),
     );
-
-     */
 }

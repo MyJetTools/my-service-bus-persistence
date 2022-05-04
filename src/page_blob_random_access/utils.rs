@@ -28,19 +28,6 @@ pub fn calc_required_pages_amount_after_we_append(
     pages_amount * auto_resize_rate_in_pages
 }
 
-pub fn making_size_complient_to_page_blob(payload: &mut Vec<u8>, page_size: usize) -> usize {
-    let pages_amount =
-        crate::page_blob_random_access::utils::get_pages_amount(payload.len(), page_size);
-
-    let complient_size = pages_amount * page_size;
-
-    while payload.len() < complient_size {
-        payload.push(0);
-    }
-
-    pages_amount
-}
-
 #[cfg(test)]
 mod test {
 

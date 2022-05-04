@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    app::AppContext, message_pages::MessagePageId, operations::OperationError,
-    topic_data::TopicData,
-};
+use crate::{app::AppContext, operations::OperationError};
 
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use rust_extensions::MyTimerTick;
@@ -43,44 +40,15 @@ async fn gc_pages(
 
         let topic_data = topic_data.unwrap();
 
-        let current_page_id = MessagePageId::from_message_id(topic_snapshot.message_id);
-
-        warm_up_pages(
-            app.clone(),
-            topic_data.clone(),
-            active_pages.as_ref(),
-            current_page_id,
-        )
-        .await;
-
         crate::operations::gc::gc_if_needed(
             app.as_ref(),
             topic_data.clone(),
             active_pages.as_slice(),
         )
         .await?;
+
+        crate::operations::gc_yearly_index(app.as_ref(), topic_data.as_ref()).await;
     }
 
     Ok(())
-}
-
-async fn warm_up_pages(
-    app: Arc<AppContext>,
-    topic_data: Arc<TopicData>,
-    active_pages: &[MessagePageId],
-    current_page_id: MessagePageId,
-) {
-    todo!("Implement");
-
-    /*
-    for page_id in active_pages {
-        crate::operations::pages::get_or_restore(
-            app.clone(),
-            topic_data.clone(),
-            *page_id,
-            page_id.value >= current_page_id.value,
-        )
-        .await;
-    }
-     */
 }

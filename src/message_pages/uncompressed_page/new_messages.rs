@@ -43,11 +43,18 @@ impl NewMessages {
         result.get_result()
     }
 
-    pub async fn confirm_persisted(&self, messages: &[Arc<MessageProtobufModel>]) {
+    pub async fn confirm_persisted(&self, messages: &[Arc<MessageProtobufModel>]) -> usize {
         let mut write_access = self.messages.lock().await;
 
         for message in messages {
             write_access.remove(&message.message_id);
         }
+
+        write_access.len()
+    }
+
+    pub async fn get_count(&self) -> usize {
+        let read_access = self.messages.lock().await;
+        read_access.len()
     }
 }

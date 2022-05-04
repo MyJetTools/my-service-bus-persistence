@@ -53,10 +53,15 @@ pub struct UncompressedPageData {
     pub messages: BTreeMap<i64, MessageStatus>,
     pub min_max: Option<MinMax>,
     pub page_blob: PageBlobRandomAccess,
+    pub max_message_size_protection: usize,
 }
 
 impl UncompressedPageData {
-    pub async fn new(page_id: PageId, mut page_blob: PageBlobRandomAccess) -> Self {
+    pub async fn new(
+        page_id: PageId,
+        mut page_blob: PageBlobRandomAccess,
+        max_message_size_protection: usize,
+    ) -> Self {
         let toc = crate::uncompressed_page_storage::read_toc(&mut page_blob).await;
 
         let min_max = get_min_max_from_toc(page_id, &toc);
@@ -67,6 +72,7 @@ impl UncompressedPageData {
             min_max,
             toc,
             page_blob,
+            max_message_size_protection,
         }
     }
 
@@ -83,40 +89,46 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn add(&mut self, messages: Vec<MessageProtobufModel>) {
-        for msg in messages {
-            self.add_message(msg);
-        }
-    }
-
-    pub fn add_message(&mut self, msg: MessageProtobufModel) {
+    pub fn add_message(&mut self, msg: Arc<MessageProtobufModel>) {
         self.update_min_max(msg.message_id);
         self.messages
-            .insert(msg.message_id, MessageStatus::Loaded(Arc::new(msg)));
+            .insert(msg.message_id, MessageStatus::Loaded(msg));
     }
 
     async fn load_message(&mut self, message_id: MessageId) {
         let toc_offset = self.get_message_offset(message_id);
 
-        if !toc_offset.has_data() {
+        if !toc_offset.has_data(self.max_message_size_protection) {
             return;
         }
 
-        //TODO - сделать проверку на мусор
         let result = self
             .page_blob
             .read_from_position(toc_offset.offset, toc_offset.size)
             .await;
 
-        match prost::Message::decode(result.as_slice()) {
+        self.restore_message(message_id, result.as_slice());
+    }
+
+    fn restore_message(
+        &mut self,
+        message_id: MessageId,
+        payload: &[u8],
+    ) -> Option<Arc<MessageProtobufModel>> {
+        //TODO - сделать проверку на мусор
+        match prost::Message::decode(payload) {
             Ok(msg) => {
-                self.add_message(msg);
+                let msg: Arc<MessageProtobufModel> = Arc::new(msg);
+                self.add_message(msg.clone());
+                return Some(msg);
             }
             Err(err) => {
                 println!("Can not decode message{}", err);
                 self.messages.insert(message_id, MessageStatus::Missing);
             }
         }
+
+        None
     }
 
     pub async fn get(&mut self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
@@ -128,15 +140,26 @@ impl UncompressedPageData {
         result.get_message_content()
     }
 
-    pub async fn persist_messages(&mut self, messages_to_persist: &[Arc<MessageProtobufModel>]) {
+    pub async fn persist_messages(
+        &mut self,
+        messages_to_persist: &[Arc<MessageProtobufModel>],
+    ) -> (usize, MessageId) {
         let write_position = self.toc.get_write_position();
 
         let mut upload_container =
             PayloadsToUploadContainer::new(self.page_id, write_position, &mut self.toc);
 
+        let mut last_saved_message_id = 0;
+
         for msg_to_persist in messages_to_persist {
+            if msg_to_persist.message_id > last_saved_message_id {
+                last_saved_message_id = msg_to_persist.message_id;
+            }
+
             upload_container.append(msg_to_persist);
         }
+
+        let payload_size = upload_container.payload.len();
 
         self.page_blob
             .write_at_position(write_position, upload_container.payload.as_slice(), 8092)
@@ -152,9 +175,11 @@ impl UncompressedPageData {
                 .save_pages(&PageBlobPageId::new(start_page), toc_pages_content)
                 .await;
         }
+
+        (payload_size, last_saved_message_id)
     }
 
-    pub fn get_all(
+    pub async fn get_all(
         &mut self,
         current_message_id: Option<MessageId>,
     ) -> Vec<Arc<MessageProtobufModel>> {
@@ -168,32 +193,58 @@ impl UncompressedPageData {
             }
         }
 
-        return self.get_range(start_message_id, to_message_id);
+        return self.get_range(start_message_id, to_message_id, None).await;
     }
 
-    pub fn get_range(
+    pub async fn get_range(
         &mut self,
         from_id: MessageId,
         to_id: MessageId,
+        limit: Option<usize>,
     ) -> Vec<Arc<MessageProtobufModel>> {
         let mut read_intervals = ReadIntervalsCompiler::new();
         let mut result = Vec::new();
+
+        let mut collected_messages_count = 0;
 
         for message_id in from_id..=to_id {
             if let Some(msg) = self.messages.get(&message_id) {
                 match msg {
                     MessageStatus::Loaded(msg) => {
                         result.push(msg.clone());
+                        collected_messages_count += 1;
                     }
                     MessageStatus::Missing => {}
                 }
             } else {
                 let message_offset = self.get_message_offset(message_id);
 
-                if message_offset.has_data() {
+                if message_offset.has_data(self.max_message_size_protection) {
                     read_intervals.add_new_interval(message_id, message_offset);
+                    collected_messages_count += 1;
                 } else {
                     self.messages.insert(message_id, MessageStatus::Missing);
+                }
+            }
+
+            if let Some(limit) = limit {
+                if collected_messages_count >= limit {
+                    break;
+                }
+            }
+        }
+
+        for interval in &read_intervals.intervals {
+            let full_payload = self
+                .page_blob
+                .read_from_position(interval.start_pos, interval.len)
+                .await;
+
+            for msg_id in interval.messages.keys() {
+                let message_payload = read_intervals.read_payload(*msg_id, full_payload.as_slice());
+
+                if let Some(msg) = self.restore_message(*msg_id, message_payload) {
+                    result.push(msg);
                 }
             }
         }
@@ -201,52 +252,19 @@ impl UncompressedPageData {
         result
     }
 
-    pub fn has_skipped_messages(&self) -> bool {
-        self.messages.len() != should_have_amount(self.page_id, self.min_max.as_ref())
+    pub async fn read_from_message_id(
+        &mut self,
+        from_message_id: MessageId,
+        max_amount: usize,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
+
+        let to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
+
+        return self
+            .get_range(from_message_id, to_message_id, Some(max_amount))
+            .await;
     }
-}
-
-pub fn get_min_max(messages: &BTreeMap<i64, MessageProtobufModel>) -> (Option<i64>, Option<i64>) {
-    let mut min: Option<i64> = None;
-    let mut max: Option<i64> = None;
-
-    for id in messages.keys() {
-        match min {
-            Some(value) => {
-                if value < *id {
-                    min = Some(*id)
-                }
-            }
-            None => min = Some(*id),
-        }
-
-        match max {
-            Some(value) => {
-                if value > *id {
-                    max = Some(*id)
-                }
-            }
-            None => max = Some(*id),
-        }
-    }
-
-    (min, max)
-}
-
-fn should_have_amount(page_id: PageId, min_max: Option<&MinMax>) -> usize {
-    if min_max.is_none() {
-        return 0;
-    }
-    let min_max = min_max.unwrap();
-
-    let first_message_id = page_id * MESSAGES_PER_PAGE;
-    let result = min_max.max - first_message_id + 1;
-
-    result as usize
-}
-
-pub fn has_skipped_messages(page_id: PageId, amount: usize, min_max: Option<&MinMax>) -> bool {
-    amount != should_have_amount(page_id, min_max)
 }
 
 pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Option<MinMax> {
@@ -290,7 +308,8 @@ mod test {
 
         let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
 
-        let mut uncompressed_data = UncompressedPageData::new(1, page_blob_random_access).await;
+        let mut uncompressed_data =
+            UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
 
         let result = uncompressed_data.page_blob.download(None).await;
 
@@ -308,7 +327,7 @@ mod test {
         let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
 
         let mut uncompressed_page_data =
-            UncompressedPageData::new(1, page_blob_random_access).await;
+            UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
 
         let msg_to_upload0 = MessageProtobufModel {
             message_id: 100_001,
@@ -336,7 +355,7 @@ mod test {
             .await;
 
         let mut uncompressed_page_data =
-            UncompressedPageData::new(1, uncompressed_page_data.page_blob).await;
+            UncompressedPageData::new(1, uncompressed_page_data.page_blob, 1024 * 1024).await;
 
         let result2 = uncompressed_page_data
             .page_blob

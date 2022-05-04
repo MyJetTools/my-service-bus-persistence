@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_extensions::MyTimerTick;
+use rust_extensions::{date_time::DateTimeAsMicroseconds, MyTimerTick};
 
 use crate::{app::AppContext, topic_data::TopicData};
 
@@ -41,13 +41,23 @@ impl MyTimerTick for SaveMessagesTimer {
             let pages_with_data_to_save = topic_data.pages_list.get_pages_with_data_to_save().await;
 
             for page in pages_with_data_to_save {
-                let uncompressed_page = page.unwrap_as_uncompressed_page();
+                if let Some(result) = page.flush_to_storage(MAX_PERSIST_SIZE).await {
+                    topic_data
+                        .metrics
+                        .update_last_saved_duration(result.duration);
 
-                let duration = uncompressed_page.flush_to_storage(MAX_PERSIST_SIZE).await;
+                    topic_data
+                        .metrics
+                        .update_last_saved_moment(DateTimeAsMicroseconds::now());
 
-                //TODO - Uncomment
-                //page.update_metrics(&page.metrics).await;
-                topic_data.metrics.update_last_saved_duration(duration);
+                    topic_data
+                        .metrics
+                        .update_last_saved_chunk(result.last_saved_chunk);
+
+                    topic_data
+                        .metrics
+                        .update_last_saved_message_id(result.last_saved_message_id);
+                }
             }
         }
     }

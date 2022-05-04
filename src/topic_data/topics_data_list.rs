@@ -37,4 +37,11 @@ impl TopicsDataList {
         write_access.insert(topic_id.to_string(), topic_data);
         return true;
     }
+
+    pub async fn init_topic_data(&self, topic_id: &str) -> Arc<TopicData> {
+        let mut write_access = self.data.write().await;
+        let topic_data = Arc::new(TopicData::new(topic_id));
+        write_access.insert(topic_id.to_string(), topic_data.clone());
+        topic_data
+    }
 }

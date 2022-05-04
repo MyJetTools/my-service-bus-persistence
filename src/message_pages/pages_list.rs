@@ -43,17 +43,6 @@ impl PagesList {
         result
     }
 
-    pub async fn get_messages_amount_to_save(&self) -> usize {
-        let pages_access = self.get_all().await;
-
-        let mut result = 0;
-        for page in pages_access {
-            result += page.get_messages_amount_to_save()
-        }
-
-        result
-    }
-
     pub async fn get_pages_with_data_to_save(&self) -> Vec<Arc<MessagesPage>> {
         let mut result = Vec::new();
 

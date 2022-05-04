@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 
 use crate::page_blob_random_access::PageBlobRandomAccess;
 
-use super::{BlankPage, PageMetrics, UncompressedPage};
+use super::{uncompressed_page::FlushToStorageResult, BlankPage, PageMetrics, UncompressedPage};
 
 pub enum MessagesPageType {
     Uncompressed(UncompressedPage),
@@ -24,13 +24,19 @@ impl MessagesPage {
         }
     }
 
-    pub async fn create_uncompressed(page_id: PageId, page_blob: PageBlobRandomAccess) -> Self {
-        Self {
+    pub async fn create_uncompressed(
+        page_id: PageId,
+        page_blob: PageBlobRandomAccess,
+        max_message_size_protection: usize,
+    ) -> Self {
+        let result = Self {
             page_type: MessagesPageType::Uncompressed(
-                UncompressedPage::new(page_id, page_blob).await,
+                UncompressedPage::new(page_id, page_blob, max_message_size_protection).await,
             ),
             metrics: PageMetrics::new(),
-        }
+        };
+
+        result
     }
 
     pub fn has_messages_to_save(&self) -> bool {
@@ -38,7 +44,12 @@ impl MessagesPage {
     }
 
     pub fn get_messages_amount_to_save(&self) -> usize {
-        self.metrics.get_messages_amount_to_save()
+        match &self.page_type {
+            MessagesPageType::Uncompressed(page) => {
+                page.messages_amount_to_save.load(Ordering::SeqCst)
+            }
+            MessagesPageType::Empty(_) => 0,
+        }
     }
 
     pub fn is_uncompressed(&self) -> bool {
@@ -49,13 +60,8 @@ impl MessagesPage {
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
-        let messages_to_save = {
-            let uncompressed_messages = self.unwrap_as_uncompressed_page();
-            uncompressed_messages.new_messages(messages).await
-        };
-
-        self.metrics
-            .update_messages_amount_to_save(messages_to_save);
+        let uncompressed_messages = self.unwrap_as_uncompressed_page();
+        uncompressed_messages.new_messages(messages).await;
 
         self.metrics.update_last_access_to_now();
     }
@@ -85,6 +91,7 @@ impl MessagesPage {
         &self,
         current_message_id: Option<MessageId>,
     ) -> Vec<Arc<MessageProtobufModel>> {
+        self.metrics.update_last_access_to_now();
         match &self.page_type {
             MessagesPageType::Uncompressed(page) => page.get_all(current_message_id).await,
             MessagesPageType::Empty(_) => vec![],
@@ -96,11 +103,61 @@ impl MessagesPage {
         from_message_id: MessageId,
         to_message_id: MessageId,
     ) -> Vec<Arc<MessageProtobufModel>> {
+        self.metrics.update_last_access_to_now();
+
         match &self.page_type {
             MessagesPageType::Uncompressed(page) => {
                 page.get_range(from_message_id, to_message_id).await
             }
             MessagesPageType::Empty(_) => vec![],
         }
+    }
+
+    pub async fn read_from_message_id(
+        &self,
+        from_message_id: MessageId,
+        max_amount: usize,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        match &self.page_type {
+            MessagesPageType::Uncompressed(page) => {
+                page.read_from_message_id(from_message_id, max_amount).await
+            }
+            MessagesPageType::Empty(_) => vec![],
+        }
+    }
+
+    pub fn get_messages_count(&self) -> usize {
+        match &self.page_type {
+            MessagesPageType::Uncompressed(page) => page.messages_count.load(Ordering::SeqCst),
+            MessagesPageType::Empty(_) => 0,
+        }
+    }
+
+    pub fn get_write_position(&self) -> usize {
+        match &self.page_type {
+            MessagesPageType::Uncompressed(page) => page.write_position.load(Ordering::SeqCst),
+            MessagesPageType::Empty(_) => 0,
+        }
+    }
+
+    pub fn has_skipped_messages(&self) -> bool {
+        match &self.page_type {
+            MessagesPageType::Uncompressed(page) => {
+                page.has_skipped_messages.load(Ordering::SeqCst)
+            }
+            MessagesPageType::Empty(_) => true,
+        }
+    }
+
+    pub async fn flush_to_storage(&self, max_persist_size: usize) -> Option<FlushToStorageResult> {
+        if let MessagesPageType::Uncompressed(page) = &self.page_type {
+            if let Some(write_result) = page.flush_to_storage(max_persist_size).await {
+                self.metrics.update_last_access_to_now();
+
+                return Some(write_result);
+            }
+        }
+
+        None
     }
 }

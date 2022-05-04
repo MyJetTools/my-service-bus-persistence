@@ -39,8 +39,8 @@ impl<'s> PayloadsToUploadContainer<'s> {
         let file_no =
             super::utils::get_file_no_inside_uncompressed_file(self.page_id, contract.message_id);
 
-        let toc_page = self.toc.update_file_position(file_no, &offset);
-
-        self.toc_pages.enqueue(toc_page as i64);
+        if let Some(toc_page) = self.toc.update_file_position(file_no, &offset) {
+            self.toc_pages.enqueue(toc_page as i64);
+        }
     }
 }

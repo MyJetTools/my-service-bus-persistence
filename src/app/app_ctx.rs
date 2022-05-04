@@ -72,6 +72,10 @@ impl AppContext {
         1024 * 1024 * 3 //TODO - сделать настройку
     }
 
+    pub fn get_max_message_size(&self) -> usize {
+        1024 * 1024 * 5
+    }
+
     pub fn get_env_info(&self) -> String {
         let env_info = std::env::var("ENV_INFO");
 

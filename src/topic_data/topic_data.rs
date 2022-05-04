@@ -24,7 +24,11 @@ impl TopicData {
         }
     }
 
-    pub fn get_messages_amount_to_save(&self) -> usize {
-        todo!("Implement");
+    pub async fn get_messages_amount_to_save(&self) -> usize {
+        let mut result = 0;
+        for page in &self.pages_list.get_all().await {
+            result += page.get_messages_amount_to_save();
+        }
+        result
     }
 }
