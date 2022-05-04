@@ -4,7 +4,7 @@ use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 pub struct PageMetrics {
     last_access: AtomicI64,
-    blob_position: AtomicUsize,
+    write_position: AtomicUsize,
     has_skipped_messages: AtomicBool,
     messages_count: AtomicUsize,
     precent: AtomicUsize,
@@ -15,7 +15,7 @@ impl PageMetrics {
     pub fn new() -> Self {
         Self {
             last_access: AtomicI64::new(DateTimeAsMicroseconds::now().unix_microseconds),
-            blob_position: AtomicUsize::new(0),
+            write_position: AtomicUsize::new(0),
             has_skipped_messages: AtomicBool::new(false),
             messages_count: AtomicUsize::new(0),
             precent: AtomicUsize::new(0),
@@ -35,12 +35,14 @@ impl PageMetrics {
         );
     }
 
-    pub fn get_blob_position(&self) -> usize {
-        return self.blob_position.load(std::sync::atomic::Ordering::SeqCst);
+    pub fn get_write_position(&self) -> usize {
+        return self
+            .write_position
+            .load(std::sync::atomic::Ordering::SeqCst);
     }
 
-    pub fn update_blob_position(&self, pos: usize) {
-        self.blob_position
+    pub fn update_write_position(&self, pos: usize) {
+        self.write_position
             .store(pos, std::sync::atomic::Ordering::SeqCst);
     }
 

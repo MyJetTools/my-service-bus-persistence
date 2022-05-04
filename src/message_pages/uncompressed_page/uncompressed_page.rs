@@ -11,7 +11,6 @@ use super::{NewMessages, UncompressedPageData};
 pub struct UncompressedPage {
     page_data: Mutex<UncompressedPageData>,
     pub page_id: PageId,
-    pub metrics: PageMetrics,
     pub new_messages: NewMessages,
 }
 
@@ -20,7 +19,7 @@ impl UncompressedPage {
         Self {
             page_data: Mutex::new(UncompressedPageData::new(page_id, page_blob).await),
             page_id,
-            metrics: PageMetrics::new(),
+
             new_messages: NewMessages::new(),
         }
     }
@@ -32,17 +31,8 @@ impl UncompressedPage {
         result
     }
 
-    pub fn has_messages_to_save(&self) -> bool {
-        self.metrics.get_messages_amount_to_save() > 0
-    }
-
-    pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
-        let messages_to_save = self.new_messages.add_messages(messages).await;
-
-        self.metrics
-            .update_messages_amount_to_save(messages_to_save);
-
-        self.metrics.update_last_access_to_now();
+    pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) -> usize {
+        self.new_messages.add_messages(messages).await
     }
 
     pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
