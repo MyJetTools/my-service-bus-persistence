@@ -62,7 +62,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 .await
                 .unwrap();
 
-            //TODO - Restore page before
             let data_by_topic = app.topics_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
                 return;
@@ -72,12 +71,9 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let page_id = MessagePageId::new(req.page_no);
 
-            let page = crate::operations::get_page_to_publish_messages(
-                app.as_ref(),
-                topic_data.as_ref(),
-                page_id.value,
-            )
-            .await;
+            let page =
+                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
+                    .await;
 
             let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
                 None
@@ -93,7 +89,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             let zip_payload = if req.version == 1 {
                 super::compressed_page_compiler::get_v1(
                     topic_data.topic_id.as_str(),
-                    page.as_ref(),
+                    &page,
                     max_payload_size,
                     range,
                     current_message_id,
@@ -101,13 +97,9 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 .await
                 .unwrap()
             } else {
-                super::compressed_page_compiler::get_v0(
-                    page.as_ref(),
-                    max_payload_size,
-                    current_message_id,
-                )
-                .await
-                .unwrap()
+                super::compressed_page_compiler::get_v0(&page, max_payload_size, current_message_id)
+                    .await
+                    .unwrap()
             };
 
             for chunk in zip_payload {

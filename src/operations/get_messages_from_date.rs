@@ -52,7 +52,7 @@ async fn read_from_yearly_index(
 
     let page_id = MessagePageId::from_message_id(message_id);
 
-    let page = crate::operations::get_page_to_read(app, topic_data, &page_id).await?;
+    let page = crate::operations::get_page_to_read(app, topic_data, &page_id).await;
 
     let result = page.read_from_message_id(message_id, max_amount).await;
     Ok(result)

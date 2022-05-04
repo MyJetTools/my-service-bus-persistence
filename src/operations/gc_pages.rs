@@ -6,7 +6,7 @@ use crate::{app::AppContext, message_pages::MessagePageId, topic_data::TopicData
 
 use super::OperationError;
 
-pub async fn gc_if_needed(
+pub async fn gc_pages(
     app: &AppContext,
     topic_data: Arc<TopicData>,
     active_pages: &[MessagePageId],

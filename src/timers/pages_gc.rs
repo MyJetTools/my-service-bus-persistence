@@ -40,12 +40,8 @@ async fn gc_pages(
 
         let topic_data = topic_data.unwrap();
 
-        crate::operations::gc::gc_if_needed(
-            app.as_ref(),
-            topic_data.clone(),
-            active_pages.as_slice(),
-        )
-        .await?;
+        crate::operations::gc_pages(app.as_ref(), topic_data.clone(), active_pages.as_slice())
+            .await?;
 
         crate::operations::gc_yearly_index(app.as_ref(), topic_data.as_ref()).await;
     }

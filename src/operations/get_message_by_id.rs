@@ -15,7 +15,7 @@ pub async fn get_message_by_id(
 
     let page_id = MessagePageId::from_message_id(message_id);
 
-    let page = super::get_page_to_read(app, topic_data.as_ref(), &page_id).await?;
+    let page = super::get_page_to_read(app, topic_data.as_ref(), &page_id).await;
 
     Ok(page.get_message(message_id).await)
 }

@@ -102,6 +102,11 @@ impl UncompressedPageData {
             return;
         }
 
+        if toc_offset.last_position() > self.page_blob.get_blob_size(None).await {
+            self.messages.insert(message_id, MessageStatus::Missing);
+            return;
+        }
+
         let result = self
             .page_blob
             .read_from_position(toc_offset.offset, toc_offset.size)
@@ -115,7 +120,6 @@ impl UncompressedPageData {
         message_id: MessageId,
         payload: &[u8],
     ) -> Option<Arc<MessageProtobufModel>> {
-        //TODO - сделать проверку на мусор
         match prost::Message::decode(payload) {
             Ok(msg) => {
                 let msg: Arc<MessageProtobufModel> = Arc::new(msg);

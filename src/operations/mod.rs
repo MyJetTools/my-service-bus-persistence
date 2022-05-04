@@ -1,6 +1,6 @@
 pub mod data_initializer;
 mod error;
-pub mod gc;
+mod gc_pages;
 mod gc_yearly_index;
 mod get_active_pages;
 mod get_message_by_id;
@@ -17,6 +17,7 @@ mod restore_page_error;
 mod topics;
 
 pub use error::OperationError;
+pub use gc_pages::gc_pages;
 pub use gc_yearly_index::gc_yearly_index;
 pub use get_active_pages::get_active_pages;
 pub use get_message_by_id::get_message_by_id;

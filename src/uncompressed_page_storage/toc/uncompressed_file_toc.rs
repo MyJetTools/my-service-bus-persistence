@@ -11,12 +11,6 @@ pub struct UncompressedFileToc {
     messages_count: usize,
 }
 
-impl MessageContentOffset {
-    pub fn last_position(&self) -> usize {
-        self.offset + self.size
-    }
-}
-
 impl UncompressedFileToc {
     pub fn new(toc_data: Vec<u8>) -> Self {
         if toc_data.len() != TOC_SIZE {
@@ -89,7 +83,6 @@ impl UncompressedFileToc {
         &self.toc_data[start_pos..end_pos]
     }
 
-    //TODO - UnitTest It
     pub fn get_messages_count(&self) -> usize {
         self.messages_count
     }

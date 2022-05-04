@@ -28,6 +28,10 @@ impl MessageContentOffset {
 
         return self.size <= max_message_size;
     }
+
+    pub fn last_position(&self) -> usize {
+        self.offset + self.size
+    }
 }
 
 fn serialize_value(value: u32, dest: &mut [u8]) {

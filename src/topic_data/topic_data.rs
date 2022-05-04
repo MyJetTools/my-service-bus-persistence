@@ -10,7 +10,6 @@ pub struct TopicData {
     pub topic_id: String,
     pub pages_list: PagesList,
     pub metrics: TopicDataMetrics,
-    //TODO - не забыть GC
     pub yearly_index_by_minute: Mutex<HashMap<u32, YearlyIndexByMinute>>,
 }
 
