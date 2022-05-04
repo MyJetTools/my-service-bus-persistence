@@ -4,6 +4,11 @@ pub struct MessageContentOffset {
 }
 
 impl MessageContentOffset {
+    #[cfg(test)]
+    pub fn new(offset: usize, size: usize) -> Self {
+        Self { offset, size }
+    }
+
     pub fn serialize(&self, dest: &mut [u8]) {
         serialize_value(self.offset as u32, &mut dest[0..4]);
         serialize_value(self.size as u32, &mut dest[4..8]);

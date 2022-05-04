@@ -8,7 +8,7 @@ use crate::{
     uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc},
 };
 
-use super::PayloadsToUploadContainer;
+use super::{read_intervals_compiler::ReadIntervalsCompiler, PayloadsToUploadContainer};
 
 pub struct MinMax {
     pub min: MessageId,
@@ -72,7 +72,6 @@ impl UncompressedPageData {
 
     pub fn get_message_offset(&self, message_id: MessageId) -> MessageContentOffset {
         let file_no = message_id - self.page_id * MESSAGES_PER_PAGE;
-
         self.toc.get_position(file_no as usize)
     }
 
@@ -155,24 +154,51 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn get_all(&self) -> Vec<Arc<MessageProtobufModel>> {
+    pub fn get_all(
+        &mut self,
+        current_message_id: Option<MessageId>,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
+
+        let mut to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
+
+        if let Some(current_message_id) = current_message_id {
+            if to_message_id > current_message_id {
+                to_message_id = current_message_id;
+            }
+        }
+
+        return self.get_range(start_message_id, to_message_id);
+    }
+
+    pub fn get_range(
+        &mut self,
+        from_id: MessageId,
+        to_id: MessageId,
+    ) -> Vec<Arc<MessageProtobufModel>> {
+        let mut read_intervals = ReadIntervalsCompiler::new();
         let mut result = Vec::new();
 
-        for msg in self.messages.values() {
-            if let Some(msg) = msg.get_message_content() {
-                result.push(msg);
+        for message_id in from_id..=to_id {
+            if let Some(msg) = self.messages.get(&message_id) {
+                match msg {
+                    MessageStatus::Loaded(msg) => {
+                        result.push(msg.clone());
+                    }
+                    MessageStatus::Missing => {}
+                }
+            } else {
+                let message_offset = self.get_message_offset(message_id);
+
+                if message_offset.has_data() {
+                    read_intervals.add_new_interval(message_id, message_offset);
+                } else {
+                    self.messages.insert(message_id, MessageStatus::Missing);
+                }
             }
         }
 
         result
-    }
-
-    pub fn get_range(
-        &self,
-        from_id: MessageId,
-        to_id: MessageId,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        todo!("Implement")
     }
 
     pub fn has_skipped_messages(&self) -> bool {

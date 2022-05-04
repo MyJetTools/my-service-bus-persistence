@@ -1,4 +1,4 @@
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
+use my_service_bus_shared::{protobuf_models::TopicsSnapshotProtobufModel, MessageId};
 use tokio::sync::{Mutex, RwLock};
 
 use super::blob_repository::TopicsSnapshotBlobRepository;
@@ -65,5 +65,17 @@ impl CurrentTopicsSnapshot {
         }
 
         return Some(read_access.clone());
+    }
+
+    pub async fn get_current_message_id(&self, topic_id: &str) -> Option<MessageId> {
+        let read_access = self.data.read().await;
+
+        for topic in &read_access.snapshot.data {
+            if topic.topic_id == topic_id {
+                return Some(topic.message_id);
+            }
+        }
+
+        None
     }
 }

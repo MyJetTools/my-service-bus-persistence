@@ -97,9 +97,12 @@ impl MessagesPage {
         }
     }
 
-    pub async fn get_all(&self) -> Vec<Arc<MessageProtobufModel>> {
+    pub async fn get_all(
+        &self,
+        current_message_id: Option<MessageId>,
+    ) -> Vec<Arc<MessageProtobufModel>> {
         match self {
-            MessagesPage::Uncompressed(page) => page.get_all().await,
+            MessagesPage::Uncompressed(page) => page.get_all(current_message_id).await,
             MessagesPage::Empty(_) => vec![],
         }
     }

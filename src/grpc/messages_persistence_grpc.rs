@@ -56,6 +56,12 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
+            let current_message_id = app
+                .topics_snapshot
+                .get_current_message_id(req.topic_id.as_ref())
+                .await
+                .unwrap();
+
             //TODO - Restore page before
             let data_by_topic = app.topics_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
@@ -90,13 +96,18 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                     page.as_ref(),
                     max_payload_size,
                     range,
+                    current_message_id,
                 )
                 .await
                 .unwrap()
             } else {
-                super::compressed_page_compiler::get_v0(page.as_ref(), max_payload_size)
-                    .await
-                    .unwrap()
+                super::compressed_page_compiler::get_v0(
+                    page.as_ref(),
+                    max_payload_size,
+                    current_message_id,
+                )
+                .await
+                .unwrap()
             };
 
             for chunk in zip_payload {

@@ -1,6 +1,7 @@
 use my_service_bus_shared::{
     page_compressor::CompressedPageBuilder,
     protobuf_models::{MessageProtobufModel, MessagesProtobufModel},
+    MessageId,
 };
 
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
@@ -22,8 +23,9 @@ pub struct MsgRange {
 pub async fn get_v0(
     page: &MessagesPage,
     max_payload_size: usize,
+    current_message_id: MessageId,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    let arced_messages = page.get_all().await;
+    let arced_messages = page.get_all(Some(current_message_id)).await;
 
     let mut messages = Vec::with_capacity(arced_messages.len());
     for acred_message in arced_messages {
@@ -52,11 +54,12 @@ pub async fn get_v1(
     page: &MessagesPage,
     max_payload_size: usize,
     range: Option<MsgRange>,
+    current_message_id: MessageId,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
     let messages_snapshot = if let Some(range) = range {
         page.get_range(range.msg_from, range.msg_to).await
     } else {
-        page.get_all().await
+        page.get_all(Some(current_message_id)).await
     };
 
     if messages_snapshot.len() == 0 {
