@@ -222,6 +222,7 @@ mod tests {
         }
     }
 
+    /*
     #[tokio::test]
     async fn test_random_read_write() {
         let connection = AzureStorageConnection::new_in_memory();
@@ -267,4 +268,5 @@ mod tests {
             .write_at_position(0, &first_page, 1)
             .await;
     }
+     */
 }
