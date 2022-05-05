@@ -103,7 +103,7 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let blob_random_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
 
         let mut repo = TopicsSnapshotBlobRepository::new(blob_random_access);
 

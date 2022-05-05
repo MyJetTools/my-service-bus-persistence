@@ -5,7 +5,7 @@ pub mod file_name_generators;
 mod logs;
 mod prometheus_metrics;
 
-pub use app_ctx::{AppContext, APP_VERSION};
+pub use app_ctx::*;
 pub use app_error::AppError;
 
 pub use logs::*;

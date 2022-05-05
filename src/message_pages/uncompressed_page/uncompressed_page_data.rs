@@ -310,7 +310,8 @@ mod test {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let page_blob_random_access =
+            PageBlobRandomAccess::open_or_create(page_blob, 1024 * 1024).await;
 
         let mut uncompressed_data =
             UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
@@ -328,7 +329,8 @@ mod test {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let page_blob_random_access =
+            PageBlobRandomAccess::open_or_create(page_blob, 1024 * 1024).await;
 
         let mut uncompressed_page_data =
             UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;

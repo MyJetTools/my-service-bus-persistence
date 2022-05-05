@@ -105,7 +105,7 @@ mod test {
         )
         .await;
 
-        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
 
         let storage = IndexByMinuteStorage::new(random_file_access);
         let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
@@ -131,7 +131,7 @@ mod test {
         )
         .await;
 
-        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
 
         let storage = IndexByMinuteStorage::new(random_file_access);
         let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;

@@ -6,27 +6,36 @@ pub struct PageBlobRandomAccess {
     pub page_blob: AzurePageBlobStorage,
     blob_size: Option<usize>,
     last_known_page_cache: LastKnownPageCache,
+    max_pages_amount_chunk: usize,
 }
 
 impl PageBlobRandomAccess {
-    pub async fn open_if_exists(page_blob: AzurePageBlobStorage) -> Option<Self> {
+    pub async fn open_if_exists(
+        page_blob: AzurePageBlobStorage,
+        max_pages_amount_chunk: usize,
+    ) -> Option<Self> {
         let blob_size = super::with_retries::get_blob_properties(&page_blob).await?;
 
         Self {
             page_blob,
             blob_size: Some(blob_size),
             last_known_page_cache: LastKnownPageCache::new(),
+            max_pages_amount_chunk,
         }
         .into()
     }
 
-    pub async fn open_or_create(page_blob: AzurePageBlobStorage) -> Self {
+    pub async fn open_or_create(
+        page_blob: AzurePageBlobStorage,
+        max_pages_amount_chunk: usize,
+    ) -> Self {
         page_blob.create_container_if_not_exist().await.unwrap();
 
         Self {
             page_blob,
             blob_size: None,
             last_known_page_cache: LastKnownPageCache::new(),
+            max_pages_amount_chunk,
         }
     }
 
@@ -54,7 +63,13 @@ impl PageBlobRandomAccess {
     }
 
     pub async fn save_pages(&mut self, start_page_no: &PageBlobPageId, content: &[u8]) {
-        super::with_retries::save_pages(&self.page_blob, start_page_no, content).await;
+        super::with_retries::save_pages(
+            &self.page_blob,
+            start_page_no,
+            content,
+            self.max_pages_amount_chunk,
+        )
+        .await;
 
         self.last_known_page_cache
             .update(start_page_no.value, content);
@@ -176,7 +191,7 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
         let mut page_blob_random_access =
-            PageBlobRandomAccess::open_or_create(azure_page_blob).await;
+            PageBlobRandomAccess::open_or_create(azure_page_blob, 1024).await;
 
         let mut start_pos = 0;
         let mut end_pos = 2;
@@ -214,7 +229,8 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let mut page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob).await;
+        let mut page_blob_random_access =
+            PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
 
         let first_page = [1u8; 512];
 

@@ -41,7 +41,11 @@ impl SettingsModel {
         )
         .await;
 
-        let blob_random_access = PageBlobRandomAccess::open_or_create(storage).await;
+        let blob_random_access = PageBlobRandomAccess::open_or_create(
+            storage,
+            crate::app::PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await;
 
         TopicsSnapshotBlobRepository::new(blob_random_access)
     }

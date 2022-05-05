@@ -21,6 +21,8 @@ use super::{logs::Logs, PrometheusMetrics};
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
+
 pub struct AppContext {
     pub topics_snapshot: CurrentTopicsSnapshot,
     pub logs: Arc<Logs>,
@@ -111,7 +113,11 @@ impl AppContext {
         )
         .await;
 
-        PageBlobRandomAccess::open_if_exists(azure_storage).await
+        PageBlobRandomAccess::open_if_exists(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await
     }
 
     pub async fn open_or_create_uncompressed_page_storage(
@@ -128,7 +134,11 @@ impl AppContext {
         )
         .await;
 
-        PageBlobRandomAccess::open_or_create(azure_storage).await
+        PageBlobRandomAccess::open_or_create(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
@@ -148,7 +158,11 @@ impl AppContext {
         )
         .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::open_or_create(azure_storage).await;
+        let page_blob_random_access = PageBlobRandomAccess::open_or_create(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await;
 
         IndexByMinuteStorage::new(page_blob_random_access)
     }
