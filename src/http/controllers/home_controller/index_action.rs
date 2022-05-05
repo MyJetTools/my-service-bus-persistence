@@ -1,7 +1,7 @@
 use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput, WebContentType};
 use rand::Rng;
 
-#[my_http_server_swagger::http_route(method: "GET",route: "/metrics",)]
+#[my_http_server_swagger::http_route(method: "GET",route: "/",)]
 pub struct IndexAction {
     rnd: u64,
 }
@@ -9,7 +9,6 @@ pub struct IndexAction {
 impl IndexAction {
     pub fn new() -> Self {
         let mut rng = rand::thread_rng();
-
         IndexAction { rnd: rng.gen() }
     }
 }
