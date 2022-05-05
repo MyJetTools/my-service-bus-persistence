@@ -22,16 +22,17 @@ impl MyTimerTick for SaveMessagesTimer {
         let topics = self.app.topics_snapshot.get().await;
 
         for topic in &topics.snapshot.data {
-            let topic_data = self.app.topics_list.get(&topic.topic_id).await;
+            let mut topic_data = self.app.topics_list.get(&topic.topic_id).await;
 
             if topic_data.is_none() {
                 self.app.logs.add_info(
                     Some(topic.topic_id.as_str()),
                     "Saving messages",
-                    format!("Topic data {} is not found", topic.topic_id),
+                    format!("Topic data {} is not found. Creating it", topic.topic_id),
                 );
-                crate::operations::init_new_topic(self.app.as_ref(), topic.topic_id.as_str()).await;
-                continue;
+                topic_data =
+                    crate::operations::init_new_topic(self.app.as_ref(), topic.topic_id.as_str())
+                        .await;
             }
 
             let topic_data = topic_data.unwrap();

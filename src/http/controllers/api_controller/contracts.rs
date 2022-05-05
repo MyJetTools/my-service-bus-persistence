@@ -171,11 +171,11 @@ async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
 
     for page in topic_data.pages_list.get_all().await {
         let count = page.get_messages_count();
-        let percent = count / (MESSAGES_PER_PAGE as usize) * 100;
+        let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
 
         let item = LoadedPageModel {
             page_id: page.get_page_id(),
-            percent,
+            percent: percent as usize,
             count,
             has_skipped_messages: page.has_skipped_messages(),
             write_position: page.get_write_position(),

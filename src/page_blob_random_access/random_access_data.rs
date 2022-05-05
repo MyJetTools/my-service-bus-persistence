@@ -16,6 +16,14 @@ impl RandomAccessData {
         }
     }
 
+    pub fn new_empty() -> Self {
+        return Self {
+            data: Some(vec![]),
+            pos_start: 0,
+            len: 0,
+        };
+    }
+
     pub fn as_slice(&self) -> &[u8] {
         if let Some(content) = self.data.as_ref() {
             let payload_offset = self.get_payload_offset();

@@ -114,11 +114,12 @@ impl UncompressedPage {
                 .persist_messages(messages_to_persist.as_slice())
                 .await;
 
+            let write_position = write_access.toc.increase_write_position(result.0);
+
             self.messages_count
                 .store(write_access.toc.get_messages_count(), Ordering::SeqCst);
 
-            self.write_position
-                .store(write_access.toc.get_write_position(), Ordering::SeqCst);
+            self.write_position.store(write_position, Ordering::SeqCst);
 
             result
         };

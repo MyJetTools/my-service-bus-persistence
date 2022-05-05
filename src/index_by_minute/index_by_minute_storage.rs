@@ -19,8 +19,7 @@ impl IndexByMinuteStorage {
 
         if file_size < MINUTE_INDEX_FILE_SIZE {
             self.page_blob.resize_blob(INIT_PAGES_SIZE).await;
-            let empty_content = [0u8; MINUTE_INDEX_FILE_SIZE];
-            return empty_content.to_vec();
+            return vec![0u8; MINUTE_INDEX_FILE_SIZE];
         }
 
         self.page_blob.download(Some(INIT_PAGES_SIZE)).await

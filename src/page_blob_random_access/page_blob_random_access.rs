@@ -63,6 +63,15 @@ impl PageBlobRandomAccess {
     }
 
     pub async fn save_pages(&mut self, start_page_no: &PageBlobPageId, content: &[u8]) {
+        if content.len() == 0 {
+            println!(
+                "Warning: saving 0 pages at position {} for page_blob {}/{}",
+                start_page_no.value,
+                self.page_blob.get_container_name(),
+                self.page_blob.get_blob_name()
+            );
+        }
+
         super::with_retries::save_pages(
             &self.page_blob,
             start_page_no,
@@ -81,6 +90,16 @@ impl PageBlobRandomAccess {
         pages_amount: usize,
         create_if_not_exists_init_pages_amount: Option<usize>,
     ) -> Vec<u8> {
+        if pages_amount == 0 {
+            println!(
+                "Warning: Reading 0 pages at position {} for page_blob {}/{}",
+                start_page_no.value,
+                self.page_blob.get_container_name(),
+                self.page_blob.get_blob_name()
+            );
+            return vec![];
+        }
+
         if pages_amount == 1 {
             if let Some(content) = self
                 .last_known_page_cache
@@ -98,8 +117,10 @@ impl PageBlobRandomAccess {
         )
         .await;
 
-        self.last_known_page_cache
-            .update(start_page_no.value, result.as_slice());
+        if result.len() > 0 {
+            self.last_known_page_cache
+                .update(start_page_no.value, result.as_slice());
+        }
 
         result
     }
@@ -116,6 +137,14 @@ impl PageBlobRandomAccess {
     }
 
     pub async fn read_from_position(&mut self, start_pos: usize, len: usize) -> RandomAccessData {
+        if len == 0 {
+            println!(
+                "Warning: Reading empty data from page_blob {}/{}",
+                self.page_blob.get_container_name(),
+                self.page_blob.get_blob_name()
+            );
+            return RandomAccessData::new_empty();
+        }
         let mut result = RandomAccessData::new(start_pos, len);
 
         let payload = self
@@ -133,6 +162,16 @@ impl PageBlobRandomAccess {
         content: &[u8],
         auto_resize_rate_in_pages: usize,
     ) {
+        if content.len() == 0 {
+            println!(
+                "Warning: Writing empty content at position {} for page_blob {}/{}",
+                start_pos,
+                self.page_blob.get_container_name(),
+                self.page_blob.get_blob_name()
+            );
+            return;
+        }
+
         let mut payload_to_write = RandomAccessData::new(start_pos, content.len());
 
         let start_page_id = payload_to_write.get_start_page_id();

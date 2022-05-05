@@ -1,7 +1,11 @@
-use crate::app::AppContext;
+use std::sync::Arc;
 
-pub async fn init_new_topic(app: &AppContext, topic_id: &str) {
-    if  app.topics_list.create_topic_data(topic_id).await {
+use crate::{app::AppContext, topic_data::TopicData};
+
+pub async fn init_new_topic(app: &AppContext, topic_id: &str) -> Option<Arc<TopicData>> {
+    if app.topics_list.create_topic_data(topic_id).await {
         app.create_topic_folder(topic_id).await;
     }
+
+    app.topics_list.get(topic_id).await
 }

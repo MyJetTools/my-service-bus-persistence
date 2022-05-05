@@ -51,6 +51,11 @@ impl UncompressedFileToc {
         self.write_position
     }
 
+    pub fn increase_write_position(&mut self, delta: usize) -> usize {
+        self.write_position += delta;
+        self.write_position
+    }
+
     pub fn update_file_position(
         &mut self,
         file_no: usize,
@@ -60,6 +65,8 @@ impl UncompressedFileToc {
         if self.has_content(file_no) {
             return None;
         }
+
+        self.messages_count += 1;
 
         offset.serialize(&mut self.toc_data[toc_pos..toc_pos + 8]);
 
