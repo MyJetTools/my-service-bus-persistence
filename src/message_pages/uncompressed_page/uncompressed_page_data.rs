@@ -148,37 +148,45 @@ impl UncompressedPageData {
         &mut self,
         messages_to_persist: &[Arc<MessageProtobufModel>],
     ) -> (usize, MessageId) {
-        let write_position = self.toc.get_write_position();
+        let (payload_size, last_saved_message_id) = {
+            let write_position = self.toc.get_write_position();
 
-        let mut upload_container =
-            PayloadsToUploadContainer::new(self.page_id, write_position, &mut self.toc);
+            let mut upload_container =
+                PayloadsToUploadContainer::new(self.page_id, write_position, &mut self.toc);
 
-        let mut last_saved_message_id = 0;
+            let mut last_saved_message_id = 0;
 
-        for msg_to_persist in messages_to_persist {
-            if msg_to_persist.message_id > last_saved_message_id {
-                last_saved_message_id = msg_to_persist.message_id;
+            for msg_to_persist in messages_to_persist {
+                if msg_to_persist.message_id > last_saved_message_id {
+                    last_saved_message_id = msg_to_persist.message_id;
+                }
+
+                upload_container.append(msg_to_persist);
             }
 
-            upload_container.append(msg_to_persist);
-        }
+            let payload_size = upload_container.payload.len();
 
-        let payload_size = upload_container.payload.len();
-
-        self.page_blob
-            .write_at_position(write_position, upload_container.payload.as_slice(), 8092)
-            .await;
-
-        for interval in upload_container.toc_pages.intervals {
-            let start_page = interval.from_id as usize;
-            let pages_amount = (interval.to_id - interval.from_id + 1) as usize;
-
-            let toc_pages_content = self.toc.get_toc_pages(start_page, pages_amount);
+            println!("Payload Size: {}", payload_size);
 
             self.page_blob
-                .save_pages(&PageBlobPageId::new(start_page), toc_pages_content)
+                .write_at_position(write_position, upload_container.payload.as_slice(), 8092)
                 .await;
-        }
+
+            for interval in upload_container.toc_pages.intervals {
+                let start_page = interval.from_id as usize;
+                let pages_amount = (interval.to_id - interval.from_id + 1) as usize;
+
+                let toc_pages_content = self.toc.get_toc_pages(start_page, pages_amount);
+
+                self.page_blob
+                    .save_pages(&PageBlobPageId::new(start_page), toc_pages_content)
+                    .await;
+            }
+
+            (payload_size, last_saved_message_id)
+        };
+
+        self.toc.increase_write_position(payload_size);
 
         (payload_size, last_saved_message_id)
     }
@@ -375,5 +383,81 @@ mod test {
 
         assert_eq!(result_message0.data, items_to_upload[0].data);
         assert_eq!(result_message1.data, items_to_upload[1].data);
+    }
+
+    fn get_value(src: &[u8]) -> i32 {
+        let mut result = [0u8; 4];
+
+        result.copy_from_slice(src);
+
+        i32::from_le_bytes(result)
+    }
+
+    #[tokio::test]
+    async fn test_persist() {
+        let connection = AzureStorageConnection::new_in_memory();
+
+        let page_blob =
+            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
+                .await;
+
+        let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
+
+        let mut uncompressed_page_data =
+            UncompressedPageData::new(0, page_blob_random_access, 1024 * 1024).await;
+
+        let mut contents = Vec::new();
+
+        let mut message_id = 0;
+
+        for _ in 0..10 {
+            let mut items_to_upload = Vec::new();
+
+            for _ in 0..10000 {
+                let msg_to_upload = MessageProtobufModel {
+                    message_id,
+                    created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+                    data: format!("CONTENT: {:20}", message_id).into_bytes(),
+                    headers: vec![],
+                };
+
+                message_id += 1;
+
+                let mut content = Vec::new();
+
+                prost::Message::encode(&msg_to_upload, &mut content).unwrap();
+
+                contents.push(content);
+
+                items_to_upload.push(Arc::new(msg_to_upload));
+            }
+
+            uncompressed_page_data
+                .persist_messages(&items_to_upload)
+                .await;
+        }
+
+        let result = uncompressed_page_data.page_blob.download(None).await;
+
+        let mut pos: usize = 0;
+
+        let mut result_offset = TOC_SIZE;
+
+        for message_id in 0..100_000 {
+            let offset = get_value(&result[pos..pos + 4]) as usize;
+            pos += 4;
+            assert_eq!(offset, result_offset);
+            let size = get_value(&result[pos..pos + 4]) as usize;
+            assert_eq!(size, contents[message_id].len());
+            pos += 4;
+            result_offset += size;
+
+            assert_eq!(
+                contents[message_id].as_slice(),
+                &result[offset..offset + size]
+            );
+        }
+
+        println!("len:{}", result.len());
     }
 }

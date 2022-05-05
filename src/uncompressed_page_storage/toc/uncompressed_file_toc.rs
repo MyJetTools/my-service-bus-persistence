@@ -51,9 +51,8 @@ impl UncompressedFileToc {
         self.write_position
     }
 
-    pub fn increase_write_position(&mut self, delta: usize) -> usize {
+    pub fn increase_write_position(&mut self, delta: usize) {
         self.write_position += delta;
-        self.write_position
     }
 
     pub fn update_file_position(
