@@ -16,14 +16,7 @@ pub async fn save_pages(
         let pages_amount = content.len() / BLOB_PAGE_SIZE;
 
         let result = if pages_amount > max_pages_amount_chunk {
-            save_by_chunks(
-                page_blob,
-                page_no,
-                content,
-                pages_amount,
-                max_pages_amount_chunk,
-            )
-            .await
+            save_by_chunks(page_blob, page_no, content, max_pages_amount_chunk).await
         } else {
             page_blob.save_pages(page_no.value, content.to_vec()).await
         };
@@ -48,10 +41,9 @@ async fn save_by_chunks(
     page_blob: &AzurePageBlobStorage,
     page_no: &PageBlobPageId,
     content: &[u8],
-    content_pages_amount: usize,
     max_pages_chunk: usize,
 ) -> Result<(), AzureStorageError> {
-    let mut content_pages_amount = content_pages_amount;
+    let mut content_pages_amount = content.len() / BLOB_PAGE_SIZE;
     let mut page_no = page_no.value;
 
     while content_pages_amount > max_pages_chunk {
@@ -69,7 +61,7 @@ async fn save_by_chunks(
 
     if content_pages_amount > 0 {
         let start_pos = page_no * BLOB_PAGE_SIZE;
-        let end_pos = start_pos + max_pages_chunk * BLOB_PAGE_SIZE;
+        let end_pos = start_pos + content_pages_amount * BLOB_PAGE_SIZE;
         let payload_to_save = &content[start_pos..end_pos];
         page_blob
             .save_pages(page_no, payload_to_save.to_vec())
@@ -77,4 +69,47 @@ async fn save_by_chunks(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use my_azure_storage_sdk::{
+        page_blob::{consts::BLOB_PAGE_SIZE, AzurePageBlobStorage},
+        AzureStorageConnection,
+    };
+
+    use super::*;
+    use crate::page_blob_random_access::PageBlobPageId;
+
+    #[tokio::test]
+    async fn test_save_by_chunks() {
+        let mut payload = Vec::new();
+
+        payload.extend_from_slice(&[1u8; BLOB_PAGE_SIZE].as_ref());
+        payload.extend_from_slice(&[2u8; BLOB_PAGE_SIZE].as_ref());
+        payload.extend_from_slice(&[3u8; BLOB_PAGE_SIZE].as_ref());
+        payload.extend_from_slice(&[4u8; BLOB_PAGE_SIZE].as_ref());
+        payload.extend_from_slice(&[5u8; BLOB_PAGE_SIZE].as_ref());
+
+        let conn_string = AzureStorageConnection::new_in_memory();
+        let page_blob = AzurePageBlobStorage::new(
+            Arc::new(conn_string),
+            "test".to_string(),
+            "test".to_string(),
+        )
+        .await;
+
+        page_blob.create_container_if_not_exist().await.unwrap();
+        page_blob.create_if_not_exists(5).await.unwrap();
+
+        save_by_chunks(&page_blob, &PageBlobPageId::new(0), &payload, 2)
+            .await
+            .unwrap();
+
+        let result = page_blob.download().await.unwrap();
+
+        assert_eq!(payload, result)
+    }
 }
