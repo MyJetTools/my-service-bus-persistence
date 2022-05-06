@@ -1,59 +1,25 @@
-use std::collections::HashMap;
-
-use prometheus::{Encoder, Gauge, Opts, Registry, TextEncoder};
-use tokio::sync::RwLock;
+use prometheus::{Encoder, IntGaugeVec, Opts, Registry, TextEncoder};
 
 pub struct PrometheusMetrics {
     registry: Registry,
-    gauges: RwLock<HashMap<String, Gauge>>,
+    topic_persist_queue_size: IntGaugeVec,
 }
+
+const TOPIC_LABEL: &str = "topic";
 
 impl PrometheusMetrics {
     pub fn new() -> Self {
+        let topic_persist_queue_size = create_topic_persist_queue_size_gauge();
         return Self {
             registry: Registry::new(),
-            gauges: RwLock::new(HashMap::new()),
+            topic_persist_queue_size,
         };
     }
-    async fn update_gauge_if_exists_amount(&self, name: &str, value: usize) -> bool {
-        let read_access = self.gauges.read().await;
-
-        if read_access.contains_key(name) {
-            let gauge = read_access.get(name).unwrap();
-            gauge.set(value as f64);
-            return true;
-        }
-
-        return false;
-    }
-
-    async fn create_gauge(&self, name: &str, value: usize, gauge_opts: Opts) {
-        let mut write_access = self.gauges.write().await;
-
-        if !write_access.contains_key(name) {
-            let gauge = Gauge::with_opts(gauge_opts).unwrap();
-            self.registry.register(Box::new(gauge.clone())).unwrap();
-            write_access.insert(name.to_string(), gauge);
-        }
-
-        let gauge = write_access.get(name).unwrap();
-        gauge.set(value as f64);
-    }
-
-    pub async fn update_topic_queue_size(&self, name: &str, value: usize) {
-        let name = name.replace('-', "_");
-        if self
-            .update_gauge_if_exists_amount(name.as_str(), value)
-            .await
-        {
-            return;
-        }
-
-        let gauge_opts = Opts::new(
-            format!("topic_{}_persist_queue_size", name),
-            format!("{} persist queue size", name),
-        );
-        self.create_gauge(name.as_str(), value, gauge_opts).await;
+    pub fn update_topic_persist_queue_size(&self, topic_id: &str, value: usize) {
+        let value = value as i64;
+        self.topic_persist_queue_size
+            .with_label_values(&[topic_id])
+            .set(value);
     }
 
     pub fn build_prometheus_content(&self) -> String {
@@ -64,4 +30,14 @@ impl PrometheusMetrics {
 
         return String::from_utf8(buffer).unwrap();
     }
+}
+
+fn create_topic_persist_queue_size_gauge() -> IntGaugeVec {
+    let gauge_opts = Opts::new(
+        format!("topic_persist_queue_size"),
+        format!("topic persist queue size"),
+    );
+
+    let lables = &[TOPIC_LABEL];
+    IntGaugeVec::new(gauge_opts, lables).unwrap()
 }

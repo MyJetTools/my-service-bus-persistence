@@ -32,8 +32,7 @@ impl MyTimerTick for MetricsUpdater {
 
             self.app
                 .metrics_keeper
-                .update_topic_queue_size(topic.topic_id.as_str(), queue_size)
-                .await;
+                .update_topic_persist_queue_size(topic.topic_id.as_str(), queue_size);
         }
     }
 }
