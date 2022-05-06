@@ -1,6 +1,6 @@
 [package]
 name = "my-sb-persistence"
-version = "1.1.7"
+version = "1.1.7-rc01"
 authors = ["Andrey <amigin@gmail.com>"]
 edition = "2021"
 
