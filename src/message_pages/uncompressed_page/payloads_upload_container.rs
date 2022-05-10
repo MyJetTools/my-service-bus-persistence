@@ -3,18 +3,18 @@ use my_service_bus_shared::{
     queue_with_intervals::QueueWithIntervals,
 };
 
-use crate::uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc};
+use crate::toc::{ContentOffset, FileToc};
 
 pub struct PayloadsToUploadContainer<'s> {
     pub write_position: usize,
-    toc: &'s mut UncompressedFileToc,
+    toc: &'s mut FileToc,
     pub toc_pages: QueueWithIntervals,
     pub payload: Vec<u8>,
     pub page_id: PageId,
 }
 
 impl<'s> PayloadsToUploadContainer<'s> {
-    pub fn new(page_id: PageId, write_position: usize, toc: &'s mut UncompressedFileToc) -> Self {
+    pub fn new(page_id: PageId, write_position: usize, toc: &'s mut FileToc) -> Self {
         Self {
             write_position,
             toc_pages: QueueWithIntervals::new(),
@@ -31,7 +31,7 @@ impl<'s> PayloadsToUploadContainer<'s> {
 
         let size = self.payload.len() - current_pos;
 
-        let offset = MessageContentOffset {
+        let offset = ContentOffset {
             offset: self.write_position + current_pos,
             size,
         };

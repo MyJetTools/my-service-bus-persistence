@@ -4,13 +4,15 @@ use std::sync::{
 };
 
 use my_azure_storage_sdk::{
-    blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
+    blob::BlobApi, blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage,
+    AzureStorageConnection,
 };
 use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
     index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
+    message_pages::{CompressedCluster, CompressedClusterId},
     page_blob_random_access::PageBlobRandomAccess,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
@@ -165,6 +167,76 @@ impl AppContext {
         .await;
 
         IndexByMinuteStorage::new(page_blob_random_access)
+    }
+
+    pub async fn open_or_create_compressed_cluster(
+        &self,
+        topic_id: &str,
+        cluster_id: CompressedClusterId,
+    ) -> CompressedCluster {
+        let blob_name = super::file_name_generators::generate_cluster_blob_name(&cluster_id);
+
+        let azure_page_blob_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob = PageBlobRandomAccess::open_or_create(
+            azure_page_blob_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await;
+
+        CompressedCluster::new(
+            topic_id.to_string(),
+            cluster_id,
+            page_blob,
+            1024 * 1024 * 100,
+            self.logs.clone(),
+        )
+        .await
+    }
+
+    pub async fn open_compressed_cluster_if_exists(
+        &self,
+        topic_id: &str,
+        cluster_id: CompressedClusterId,
+    ) -> Option<CompressedCluster> {
+        let blob_name = super::file_name_generators::generate_cluster_blob_name(&cluster_id);
+
+        let azure_page_blob_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob = PageBlobRandomAccess::open_if_exists(
+            azure_page_blob_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await?;
+
+        CompressedCluster::new(
+            topic_id.to_string(),
+            cluster_id,
+            page_blob,
+            1024 * 1024 * 100,
+            self.logs.clone(),
+        )
+        .await
+        .into()
+    }
+
+    pub(crate) async fn delete_uncompressed_page_blob(&self, topic_id: &str, page_id: PageId) {
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+
+        self.messages_conn_string
+            .delete_blob(topic_id, blob_name.as_str())
+            .await
+            .unwrap();
     }
 }
 

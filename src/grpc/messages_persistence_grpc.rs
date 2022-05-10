@@ -71,9 +71,12 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let page_id = MessagePageId::new(req.page_no);
 
-            let page =
-                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
-                    .await;
+            let page = crate::operations::get_uncompressed_page_to_read(
+                app.as_ref(),
+                topic_data.as_ref(),
+                &page_id,
+            )
+            .await;
 
             let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
                 None
@@ -89,7 +92,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             let zip_payload = if req.version == 1 {
                 super::compressed_page_compiler::get_v1(
                     topic_data.topic_id.as_str(),
-                    &page,
+                    page,
                     max_payload_size,
                     range,
                     current_message_id,
@@ -97,7 +100,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 .await
                 .unwrap()
             } else {
-                super::compressed_page_compiler::get_v0(&page, max_payload_size, current_message_id)
+                super::compressed_page_compiler::get_v0(page, max_payload_size, current_message_id)
                     .await
                     .unwrap()
             };

@@ -1,6 +1,8 @@
+mod error;
 mod new_messages;
 mod payloads_upload_container;
 mod read_intervals_compiler;
+mod toc;
 mod uncompressed_page;
 mod uncompressed_page_data;
 mod utils;

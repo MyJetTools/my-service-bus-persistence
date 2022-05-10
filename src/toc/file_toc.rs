@@ -1,30 +1,54 @@
 use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
 
-use super::MessageContentOffset;
+use crate::page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess};
 
-pub const TOC_SIZE_IN_PAGES: usize = 1563;
-pub const TOC_SIZE: usize = TOC_SIZE_IN_PAGES * 512;
+use super::ContentOffset;
 
-pub struct UncompressedFileToc {
+pub struct FileToc {
     toc_data: Vec<u8>,
     write_position: usize,
     messages_count: usize,
+    max_toc_elements: usize,
 }
 
-impl UncompressedFileToc {
-    pub fn new(toc_data: Vec<u8>) -> Self {
-        if toc_data.len() != TOC_SIZE {
+impl FileToc {
+    pub async fn read_toc(
+        page_blob: &mut PageBlobRandomAccess,
+        toc_size_in_pages: usize,
+        toc_size: usize,
+        max_toc_elements: usize,
+    ) -> FileToc {
+        let size = page_blob.get_blob_size(Some(toc_size_in_pages)).await;
+
+        if size < toc_size {
+            page_blob.resize_blob(toc_size_in_pages).await;
+        }
+
+        let content = page_blob
+            .load_pages(
+                &PageBlobPageId::new(0),
+                toc_size_in_pages,
+                Some(toc_size_in_pages),
+            )
+            .await;
+
+        FileToc::new(content, toc_size, max_toc_elements)
+    }
+
+    fn new(toc_data: Vec<u8>, toc_size: usize, max_toc_elements: usize) -> Self {
+        if toc_data.len() != toc_size {
             panic!(
                 "TOC size is not correct. It must be {} but it is {}",
-                TOC_SIZE,
+                toc_size,
                 toc_data.len()
             );
         }
 
         let mut result = Self {
             toc_data,
-            write_position: TOC_SIZE,
+            write_position: toc_size,
             messages_count: 0,
+            max_toc_elements,
         };
 
         result.init_write_position();
@@ -33,7 +57,7 @@ impl UncompressedFileToc {
     }
 
     fn init_write_position(&mut self) {
-        for file_no in 0..100_000 {
+        for file_no in 0..self.max_toc_elements {
             let pos = self.get_position(file_no);
             let last_position = pos.last_position();
 
@@ -58,7 +82,7 @@ impl UncompressedFileToc {
     pub fn update_file_position(
         &mut self,
         file_no: usize,
-        offset: &MessageContentOffset,
+        offset: &ContentOffset,
     ) -> Option<usize> {
         let toc_pos = file_no * 8;
         if self.has_content(file_no) {
@@ -72,9 +96,9 @@ impl UncompressedFileToc {
         return Some(toc_pos / 512);
     }
 
-    pub fn get_position(&self, file_no: usize) -> MessageContentOffset {
-        let toc_pos = file_no * 8;
-        MessageContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
+    pub fn get_position(&self, message_no: usize) -> ContentOffset {
+        let toc_pos = message_no * 8;
+        ContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
     }
 
     pub fn has_content(&self, file_no: usize) -> bool {
@@ -106,13 +130,17 @@ fn get_value(src: &[u8]) -> i32 {
 mod test {
     use super::*;
 
+    const MAX_MESSAGES_AMOUNT: usize = 100_000;
+
+    const TOC_SIZE: usize = MAX_MESSAGES_AMOUNT * 8;
+
     #[test]
     fn test_we_save_toc_data_and_get() {
         let content = vec![0u8; TOC_SIZE];
-        let mut toc = UncompressedFileToc::new(content);
+        let mut toc = FileToc::new(content, TOC_SIZE, MAX_MESSAGES_AMOUNT);
 
         for file_no in 0..100_000 {
-            let src_offset = MessageContentOffset {
+            let src_offset = ContentOffset {
                 offset: file_no + 1,
                 size: file_no + 1,
             };
@@ -131,14 +159,14 @@ mod test {
     #[test]
     fn test_message_count_is_calculated() {
         let content = vec![0u8; TOC_SIZE];
-        let mut toc = UncompressedFileToc::new(content);
+        let mut toc = FileToc::new(content, TOC_SIZE, MAX_MESSAGES_AMOUNT);
 
         assert_eq!(0, toc.get_messages_count());
 
-        toc.update_file_position(1, &MessageContentOffset { offset: 1, size: 1 });
+        toc.update_file_position(1, &ContentOffset { offset: 1, size: 1 });
         assert_eq!(1, toc.get_messages_count());
 
-        toc.update_file_position(1, &MessageContentOffset { offset: 1, size: 1 });
+        toc.update_file_position(1, &ContentOffset { offset: 1, size: 1 });
         assert_eq!(1, toc.get_messages_count());
     }
 }

@@ -5,10 +5,10 @@ use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufMod
 use crate::{
     message_pages::MESSAGES_PER_PAGE,
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
-    uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc},
+    toc::*,
 };
 
-use super::{read_intervals_compiler::ReadIntervalsCompiler, PayloadsToUploadContainer};
+use super::{read_intervals_compiler::ReadIntervalsCompiler, toc::*, PayloadsToUploadContainer};
 
 pub struct MinMax {
     pub min: MessageId,
@@ -49,7 +49,7 @@ impl MessageStatus {
 
 pub struct UncompressedPageData {
     pub page_id: PageId,
-    pub toc: UncompressedFileToc,
+    pub toc: FileToc,
     pub messages: BTreeMap<i64, MessageStatus>,
     pub min_max: Option<MinMax>,
     pub page_blob: PageBlobRandomAccess,
@@ -62,7 +62,13 @@ impl UncompressedPageData {
         mut page_blob: PageBlobRandomAccess,
         max_message_size_protection: usize,
     ) -> Self {
-        let toc = crate::uncompressed_page_storage::read_toc(&mut page_blob).await;
+        let toc = FileToc::read_toc(
+            &mut page_blob,
+            TOC_SIZE_IN_PAGES,
+            TOC_SIZE,
+            MESSAGES_PER_PAGE as usize,
+        )
+        .await;
 
         let min_max = get_min_max_from_toc(page_id, &toc);
 
@@ -76,7 +82,7 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn get_message_offset(&self, message_id: MessageId) -> MessageContentOffset {
+    pub fn get_message_offset(&self, message_id: MessageId) -> ContentOffset {
         let file_no = message_id - self.page_id * MESSAGES_PER_PAGE;
         self.toc.get_position(file_no as usize)
     }
@@ -279,7 +285,7 @@ impl UncompressedPageData {
     }
 }
 
-pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Option<MinMax> {
+pub fn get_min_max_from_toc(page_id: PageId, toc: &FileToc) -> Option<MinMax> {
     let mut result: Option<MinMax> = None;
 
     for file_no in 0..100_000 {
@@ -304,8 +310,8 @@ mod test {
     use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use crate::{
+        message_pages::uncompressed_page::toc::{TOC_SIZE, TOC_SIZE_IN_PAGES},
         page_blob_random_access::PageBlobRandomAccess,
-        uncompressed_page_storage::toc::{TOC_SIZE, TOC_SIZE_IN_PAGES},
     };
 
     use super::*;

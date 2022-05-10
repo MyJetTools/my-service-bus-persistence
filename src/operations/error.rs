@@ -1,3 +1,4 @@
+use my_service_bus_shared::page_compressor::CompressedPageReaderError;
 use zip::result::ZipError;
 
 use crate::message_pages::PageOperationError;
@@ -8,6 +9,7 @@ pub enum OperationError {
     PageOperationError(PageOperationError),
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
+    CompressedPageReaderError(CompressedPageReaderError),
     ZipError(ZipError),
 }
 
@@ -32,5 +34,11 @@ impl From<prost::EncodeError> for OperationError {
 impl From<ZipError> for OperationError {
     fn from(src: ZipError) -> Self {
         Self::ZipError(src)
+    }
+}
+
+impl From<CompressedPageReaderError> for OperationError {
+    fn from(src: CompressedPageReaderError) -> Self {
+        Self::CompressedPageReaderError(src)
     }
 }

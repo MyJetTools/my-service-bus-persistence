@@ -12,7 +12,7 @@ pub enum MessagesPageType {
 }
 
 pub struct MessagesPage {
-    page_type: MessagesPageType,
+    pub page_type: MessagesPageType,
     pub metrics: PageMetrics,
 }
 
@@ -75,7 +75,7 @@ impl MessagesPage {
 
     pub fn get_page_id(&self) -> PageId {
         match &self.page_type {
-            MessagesPageType::Uncompressed(page) => page.page_id,
+            MessagesPageType::Uncompressed(page) => page.page_id.value,
             MessagesPageType::Empty(page) => page.page_id,
         }
     }

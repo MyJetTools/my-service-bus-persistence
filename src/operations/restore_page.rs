@@ -15,16 +15,19 @@ pub async fn open_or_create(app: &AppContext, topic_data: &TopicData, page_id: P
     topic_data.pages_list.add(page_id, Arc::new(page)).await;
 }
 
-pub async fn open_uncompressed_or_empty(app: &AppContext, topic_data: &TopicData, page_id: PageId) {
-    let page = app
+pub async fn open_uncompressed_if_exists(
+    app: &AppContext,
+    topic_data: &TopicData,
+    page_id: PageId,
+) -> Option<Arc<MessagesPage>> {
+    let page_blob = app
         .open_uncompressed_page_storage_if_exists(topic_data.topic_id.as_str(), &page_id)
-        .await;
+        .await?;
 
-    let page = if let Some(storage) = page {
-        MessagesPage::create_uncompressed(page_id, storage, app.get_max_message_size()).await
-    } else {
-        MessagesPage::create_as_empty(page_id)
-    };
+    let page =
+        MessagesPage::create_uncompressed(page_id, page_blob, app.get_max_message_size()).await;
+    let page = Arc::new(page);
+    topic_data.pages_list.add(page_id, page.clone()).await;
 
-    topic_data.pages_list.add(page_id, Arc::new(page)).await;
+    Some(page)
 }

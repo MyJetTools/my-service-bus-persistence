@@ -69,7 +69,7 @@ async fn restore_page(
         crate::operations::restore_page::open_or_create(app.as_ref(), topic_data.as_ref(), page_id)
             .await;
     } else {
-        crate::operations::restore_page::open_uncompressed_or_empty(
+        crate::operations::restore_page::open_uncompressed_if_exists(
             app.as_ref(),
             topic_data.as_ref(),
             page_id,

@@ -1,5 +1,7 @@
 use my_service_bus_shared::page_id::PageId;
 
+use crate::message_pages::CompressedClusterId;
+
 pub const SYSTEM_FILE_NAME: &str = "system";
 
 pub fn generate_uncompressed_blob_name(page_id: &PageId) -> String {
@@ -8,6 +10,10 @@ pub fn generate_uncompressed_blob_name(page_id: &PageId) -> String {
 
 pub fn generate_year_index_blob_name(year: u32) -> String {
     return format!(".{}.yearindex", year);
+}
+
+pub fn generate_cluster_blob_name(cluster_id: &CompressedClusterId) -> String {
+    return format!("{:019}.compressed", cluster_id.value);
 }
 
 #[cfg(test)]

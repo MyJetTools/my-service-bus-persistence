@@ -10,7 +10,7 @@ use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufMod
 use rust_extensions::StopWatch;
 use tokio::sync::Mutex;
 
-use crate::page_blob_random_access::PageBlobRandomAccess;
+use crate::{message_pages::MessagePageId, page_blob_random_access::PageBlobRandomAccess};
 
 use super::{NewMessages, UncompressedPageData};
 
@@ -23,7 +23,7 @@ pub struct FlushToStorageResult {
 
 pub struct UncompressedPage {
     page_data: Mutex<UncompressedPageData>,
-    pub page_id: PageId,
+    pub page_id: MessagePageId,
     pub new_messages: NewMessages,
     pub messages_count: AtomicUsize,
     pub write_position: AtomicUsize,
@@ -45,7 +45,7 @@ impl UncompressedPage {
 
         Self {
             page_data: Mutex::new(uncompressed_page),
-            page_id,
+            page_id: MessagePageId::new(page_id),
 
             new_messages: NewMessages::new(),
             messages_count: AtomicUsize::new(messages_count),

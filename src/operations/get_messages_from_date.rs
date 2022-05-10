@@ -52,8 +52,10 @@ async fn read_from_yearly_index(
 
     let page_id = MessagePageId::from_message_id(message_id);
 
-    let page = crate::operations::get_page_to_read(app, topic_data, &page_id).await;
+    if let Some(page) = super::get_uncompressed_page_to_read(app, topic_data, &page_id).await {
+        let result = page.read_from_message_id(message_id, max_amount).await;
+        return Ok(result);
+    }
 
-    let result = page.read_from_message_id(message_id, max_amount).await;
-    Ok(result)
+    Ok(vec![]) //TODO - did not plug compressed page reading
 }

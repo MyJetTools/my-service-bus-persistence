@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use my_service_bus_shared::{
     page_compressor::CompressedPageBuilder,
     protobuf_models::{MessageProtobufModel, MessagesProtobufModel},
@@ -21,11 +23,15 @@ pub struct MsgRange {
 }
 
 pub async fn get_v0(
-    page: &MessagesPage,
+    page: Option<Arc<MessagesPage>>,
     max_payload_size: usize,
     current_message_id: MessageId,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
-    let arced_messages = page.get_all(Some(current_message_id)).await;
+    if page.is_none() {
+        return Ok(vec![]);
+    }
+
+    let arced_messages = page.unwrap().get_all(Some(current_message_id)).await;
 
     let mut messages = Vec::with_capacity(arced_messages.len());
     for acred_message in arced_messages {
@@ -51,11 +57,17 @@ pub async fn get_v0(
 
 pub async fn get_v1(
     topic_id: &str,
-    page: &MessagesPage,
+    page: Option<Arc<MessagesPage>>,
     max_payload_size: usize,
     range: Option<MsgRange>,
     current_message_id: MessageId,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
+    if page.is_none() {
+        return Ok(vec![]);
+    }
+
+    let page = page.unwrap();
+
     let messages_snapshot = if let Some(range) = range {
         page.get_range(range.msg_from, range.msg_to).await
     } else {

@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::Mutex;
 
-use crate::{index_by_minute::YearlyIndexByMinute, message_pages::PagesList};
+use crate::{
+    index_by_minute::YearlyIndexByMinute,
+    message_pages::{CompressedCluster, PagesList},
+};
 
 use super::topic_data_metrics::TopicDataMetrics;
 
@@ -11,6 +14,7 @@ pub struct TopicData {
     pub pages_list: PagesList,
     pub metrics: TopicDataMetrics,
     pub yearly_index_by_minute: Mutex<HashMap<u32, YearlyIndexByMinute>>,
+    pub compressed_clusters: Mutex<HashMap<usize, Arc<CompressedCluster>>>,
 }
 
 impl TopicData {
@@ -20,6 +24,7 @@ impl TopicData {
             pages_list: PagesList::new(),
             metrics: TopicDataMetrics::new(),
             yearly_index_by_minute: Mutex::new(HashMap::new()),
+            compressed_clusters: Mutex::new(HashMap::new()),
         }
     }
 
