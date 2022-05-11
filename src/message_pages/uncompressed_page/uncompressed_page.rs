@@ -72,13 +72,15 @@ impl UncompressedPage {
         let mut page_data_access = self.page_data.lock().await;
         return page_data_access.get_all(current_message_id).await;
     }
-    pub async fn get_range(
+    pub async fn get_range_incl_to_id(
         &self,
         from_id: MessageId,
         to_id: MessageId,
     ) -> Vec<Arc<MessageProtobufModel>> {
         let mut page_data_access = self.page_data.lock().await;
-        return page_data_access.get_range(from_id, to_id, None).await;
+        return page_data_access
+            .get_range_incl_to_id(from_id, to_id, None)
+            .await;
     }
 
     pub async fn read_from_message_id(

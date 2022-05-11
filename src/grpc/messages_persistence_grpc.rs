@@ -1,5 +1,4 @@
-use crate::grpc::compressed_page_compiler::MsgRange;
-use crate::message_pages::MessagePageId;
+use crate::message_pages::MESSAGES_PER_PAGE;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
 
@@ -56,12 +55,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
-            let current_message_id = app
-                .topics_snapshot
-                .get_current_message_id(req.topic_id.as_ref())
-                .await
-                .unwrap();
-
             let data_by_topic = app.topics_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
                 return;
@@ -69,40 +62,34 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let topic_data = data_by_topic.unwrap();
 
-            let page_id = MessagePageId::new(req.page_no);
-
-            let page = crate::operations::get_uncompressed_page_to_read(
-                app.as_ref(),
-                topic_data.as_ref(),
-                &page_id,
-            )
-            .await;
-
-            let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
-                None
+            let (from_id, to_id) = if req.from_message_id <= 0 && req.to_message_id <= 0 {
+                let from_message_id = req.page_no * MESSAGES_PER_PAGE as i64;
+                let to_message_id = from_message_id + MESSAGES_PER_PAGE as i64 - 1;
+                (from_message_id, to_message_id)
             } else {
-                Some(MsgRange {
-                    msg_from: req.from_message_id,
-                    msg_to: req.to_message_id,
-                })
+                (req.from_message_id, req.to_message_id)
             };
 
             let max_payload_size = app.get_max_payload_size();
 
             let zip_payload = if req.version == 1 {
                 super::compressed_page_compiler::get_v1(
-                    topic_data.topic_id.as_str(),
-                    page,
+                    app,
+                    topic_data,
                     max_payload_size,
-                    range,
-                    current_message_id,
+                    from_id,
+                    to_id,
                 )
                 .await
-                .unwrap()
             } else {
-                super::compressed_page_compiler::get_v0(page, max_payload_size, current_message_id)
-                    .await
-                    .unwrap()
+                super::compressed_page_compiler::get_v0(
+                    app,
+                    topic_data,
+                    max_payload_size,
+                    from_id,
+                    to_id,
+                )
+                .await
             };
 
             for chunk in zip_payload {

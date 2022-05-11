@@ -211,10 +211,12 @@ impl UncompressedPageData {
             }
         }
 
-        return self.get_range(start_message_id, to_message_id, None).await;
+        return self
+            .get_range_incl_to_id(start_message_id, to_message_id, None)
+            .await;
     }
 
-    pub async fn get_range(
+    pub async fn get_range_incl_to_id(
         &mut self,
         from_id: MessageId,
         to_id: MessageId,
@@ -280,7 +282,7 @@ impl UncompressedPageData {
         let to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
 
         return self
-            .get_range(from_message_id, to_message_id, Some(max_amount))
+            .get_range_incl_to_id(from_message_id, to_message_id, Some(max_amount))
             .await;
     }
 }

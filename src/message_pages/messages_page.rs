@@ -1,4 +1,7 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{atomic::Ordering, Arc},
+};
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 
@@ -107,10 +110,19 @@ impl MessagesPage {
 
         match &self.page_type {
             MessagesPageType::Uncompressed(page) => {
-                page.get_range(from_message_id, to_message_id).await
+                page.get_range_incl_to_id(from_message_id, to_message_id)
+                    .await
             }
             MessagesPageType::Empty(_) => vec![],
         }
+    }
+
+    pub async fn read_range(
+        &self,
+        from_message_id: MessageId,
+        to_message_id: MessageId,
+    ) -> BTreeMap<MessageId, MessageProtobufModel> {
+        todo!("Implement");
     }
 
     pub async fn read_from_message_id(

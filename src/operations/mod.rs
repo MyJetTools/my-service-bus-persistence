@@ -15,6 +15,7 @@ mod get_uncompressed_page_to_read;
 pub mod index_by_minute;
 mod init_new_topic;
 mod new_messages;
+pub mod read_page;
 pub mod restore_page;
 mod restore_page_error;
 mod topics;

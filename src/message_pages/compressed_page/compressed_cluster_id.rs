@@ -1,5 +1,7 @@
 use my_service_bus_shared::MessageId;
 
+use crate::message_pages::MessagePageId;
+
 use super::{utils::*, CompressedPageId};
 
 #[derive(Debug, Clone)]
@@ -17,6 +19,10 @@ impl CompressedClusterId {
         Self {
             value: compressed_page_id.value / PAGES_PER_CLUSTER,
         }
+    }
+
+    pub fn from_uncompressed_page_id(page_id: &MessagePageId) -> Self {
+        todo!("Implement")
     }
 }
 

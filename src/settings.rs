@@ -25,7 +25,6 @@ pub struct SettingsModel {
     pub max_response_records_amount: usize,
     #[serde(rename = "DeleteTopicSecretKey")]
     pub delete_topic_secret_key: String,
-
     #[serde(rename = "MaxMessageSize")]
     pub max_message_size: usize,
 }

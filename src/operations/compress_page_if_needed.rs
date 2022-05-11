@@ -25,10 +25,9 @@ pub async fn compress_page_if_needed(
 
     let from_id = compressed_page_id.get_first_message_id();
 
-    let to_id = from_id + (MESSAGES_PER_COMPRESSED_PAGE as MessageId);
+    let to_id = from_id + (MESSAGES_PER_COMPRESSED_PAGE as MessageId) - 1;
 
-    //TODO - Check if we include last message_id
-    let messages_to_compress = uncompressed_page.get_range(from_id, to_id).await;
+    let messages_to_compress = uncompressed_page.get_range_incl_to_id(from_id, to_id).await;
 
     let mut clusters = topic_data.compressed_clusters.lock().await;
 
