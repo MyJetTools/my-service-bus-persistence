@@ -9,9 +9,14 @@ const TOPIC_LABEL: &str = "topic";
 
 impl PrometheusMetrics {
     pub fn new() -> Self {
+        let registry = Registry::new();
         let topic_persist_queue_size = create_topic_persist_queue_size_gauge();
+
+        registry
+            .register(Box::new(topic_persist_queue_size.clone()))
+            .unwrap();
         return Self {
-            registry: Registry::new(),
+            registry,
             topic_persist_queue_size,
         };
     }
