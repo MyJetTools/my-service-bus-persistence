@@ -10,10 +10,11 @@ use tokio::sync::Mutex;
 use crate::{
     app::Logs,
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
+    sub_page::{MessageStatus, SubPage, SubPageId},
     toc::{ContentOffset, FileToc},
 };
 
-use super::{utils::*, CompressedClusterId, CompressedPageId};
+use super::{utils::*, CompressedClusterId};
 
 pub struct CompressedClusterData {
     toc: FileToc,
@@ -46,7 +47,7 @@ impl CompressedCluster {
             &mut page_blob,
             COMPRESSED_CLUSTER_TOC_IN_PAGES,
             COMPRESSED_CLUSTER_TOC,
-            PAGES_PER_CLUSTER,
+            SUB_PAGES_PER_CLUSTER,
         )
         .await;
 
@@ -59,18 +60,21 @@ impl CompressedCluster {
         }
     }
 
-    pub async fn has_compressed_page(&self, compressed_page_id: &CompressedPageId) -> bool {
+    pub async fn has_compressed_page(&self, sub_page_id: &SubPageId) -> bool {
         let data = self.data.lock().await;
-        let page_id_within_cluster = compressed_page_id.get_page_id_within_cluster();
-        data.toc.has_content(page_id_within_cluster)
+        let payload_no = sub_page_id.get_payload_no(SUB_PAGES_PER_CLUSTER);
+        data.toc.has_content(&payload_no)
     }
 
-    async fn get_compressed_page_payload(
-        &self,
-        compressed_page_id: &CompressedPageId,
-    ) -> Option<Vec<u8>> {
+    pub fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<SubPage> {
+        todo!("Implement")
+    }
+
+    async fn get_compressed_page_payload(&self, sub_page_id: &SubPageId) -> Option<Vec<u8>> {
         let mut data = self.data.lock().await;
-        let toc = data.toc.get_position(compressed_page_id.value);
+
+        let payload_no = sub_page_id.get_payload_no(SUB_PAGES_PER_CLUSTER);
+        let toc = data.toc.get_position(&payload_no);
 
         if toc.has_data(self.max_message_size) {
             return None;
@@ -86,9 +90,9 @@ impl CompressedCluster {
 
     pub async fn get_compressed_page_messages(
         &self,
-        compressed_page_id: &CompressedPageId,
+        sub_page_id: &SubPageId,
     ) -> Result<Option<BTreeMap<MessageId, MessageProtobufModel>>, CompressedPageReaderError> {
-        let compressed_payload = self.get_compressed_page_payload(compressed_page_id).await;
+        let compressed_payload = self.get_compressed_page_payload(&sub_page_id).await;
 
         if compressed_payload.is_none() {
             return Ok(None);
@@ -117,24 +121,27 @@ impl CompressedCluster {
         Ok(Some(result))
     }
 
-    pub async fn save_cluser_page(&self, messages: &[Arc<MessageProtobufModel>]) {
-        let compressed_page_id =
-            CompressedPageId::from_message_id(messages.first().unwrap().message_id);
-
+    pub async fn save_cluser_page(&self, sub_page: &SubPage) {
         let mut data = self.data.lock().await;
-
-        if data.toc.has_content(compressed_page_id.value) {
+        let payload_no = sub_page.sub_page_id.get_payload_no(SUB_PAGES_PER_CLUSTER);
+        if data.toc.has_content(&payload_no) {
             return;
         }
 
         let mut compressed_page_builder = CompressedPageBuilder::new();
 
-        for message in messages {
-            let mut payload = Vec::new();
-            prost::Message::encode(message.as_ref(), &mut payload).unwrap();
-            compressed_page_builder
-                .add_message(message.message_id, payload.as_slice())
-                .unwrap();
+        {
+            let messages_access = sub_page.messages.lock().await;
+
+            for message_status in messages_access.values() {
+                if let MessageStatus::Loaded(message) = message_status {
+                    let mut payload = Vec::new();
+                    prost::Message::encode(message, &mut payload).unwrap();
+                    compressed_page_builder
+                        .add_message(message.message_id, payload.as_slice())
+                        .unwrap();
+                }
+            }
         }
 
         let compressed_content = compressed_page_builder.get_payload().unwrap();
@@ -148,10 +155,7 @@ impl CompressedCluster {
             .write_at_position(offset.offset, compressed_content.as_slice(), 1)
             .await;
 
-        if let Some(page_from) = data
-            .toc
-            .update_file_position(compressed_page_id.value, &offset)
-        {
+        if let Some(page_from) = data.toc.update_file_position(&payload_no, &offset) {
             let toc_content = data.toc.get_toc_pages(page_from, 1).to_vec();
 
             data.page_blob

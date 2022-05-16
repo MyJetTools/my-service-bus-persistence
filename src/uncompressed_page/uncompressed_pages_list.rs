@@ -3,35 +3,35 @@ use std::{collections::HashMap, sync::Arc};
 use my_service_bus_shared::page_id::PageId;
 use tokio::sync::Mutex;
 
-use super::MessagesPage;
+use super::UncompressedPage;
 
-pub struct PagesList {
-    pub pages: Mutex<HashMap<PageId, Arc<MessagesPage>>>,
+pub struct UncompressedPagesList {
+    pub pages: Mutex<HashMap<PageId, Arc<UncompressedPage>>>,
 }
 
-impl PagesList {
+impl UncompressedPagesList {
     pub fn new() -> Self {
         Self {
             pages: Mutex::new(HashMap::new()),
         }
     }
 
-    pub async fn add(&self, page_id: PageId, page: Arc<MessagesPage>) {
+    pub async fn add(&self, page_id: PageId, page: Arc<UncompressedPage>) {
         self.pages.lock().await.insert(page_id, page);
     }
 
-    pub async fn get(&self, page_id: PageId) -> Option<Arc<MessagesPage>> {
+    pub async fn get(&self, page_id: PageId) -> Option<Arc<UncompressedPage>> {
         let pages_access = self.pages.lock().await;
         let result = pages_access.get(&page_id)?;
         Some(result.clone())
     }
 
-    pub async fn remove_page(&self, page_id: PageId) -> Option<Arc<MessagesPage>> {
+    pub async fn remove_page(&self, page_id: PageId) -> Option<Arc<UncompressedPage>> {
         let mut pages_access = self.pages.lock().await;
         pages_access.remove(&page_id)
     }
 
-    pub async fn get_all(&self) -> Vec<Arc<MessagesPage>> {
+    pub async fn get_all(&self) -> Vec<Arc<UncompressedPage>> {
         let mut result = Vec::new();
         let read_access = self.pages.lock().await;
 
@@ -43,13 +43,13 @@ impl PagesList {
         result
     }
 
-    pub async fn get_pages_with_data_to_save(&self) -> Vec<Arc<MessagesPage>> {
+    pub async fn get_pages_with_data_to_save(&self) -> Vec<Arc<UncompressedPage>> {
         let mut result = Vec::new();
 
         let pages_access = self.pages.lock().await;
 
         for page in pages_access.values() {
-            if page.has_messages_to_save() {
+            if page.new_messages.get_count().await > 0 {
                 result.push(page.clone());
             }
         }
@@ -61,7 +61,7 @@ impl PagesList {
         let pages_access = self.get_all().await;
 
         for page in pages_access {
-            if page.has_messages_to_save() {
+            if page.new_messages.get_count().await > 0 {
                 return true;
             }
         }

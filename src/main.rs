@@ -14,7 +14,9 @@ mod topic_data;
 mod utils;
 use rust_extensions::MyTimer;
 use toipics_snapshot::current_snapshot::TopicsSnapshotData;
+mod sub_page;
 mod typing;
+mod uncompressed_page;
 
 use crate::{
     app::AppContext,
@@ -128,7 +130,11 @@ async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData)
 
             let topic_data = topic_data.unwrap();
 
-            if topic_data.pages_list.has_messages_to_save().await {
+            if topic_data
+                .uncompressed_pages_list
+                .has_messages_to_save()
+                .await
+            {
                 has_data_to_sync = Some(topic_data.as_ref().topic_id.to_string());
             }
         }

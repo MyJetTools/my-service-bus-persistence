@@ -3,12 +3,12 @@ use std::{collections::BTreeMap, sync::Arc};
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 
 use crate::{
-    message_pages::MESSAGES_PER_PAGE,
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
+    sub_page::{SubPage, SubPageId},
     toc::*,
 };
 
-use super::{read_intervals_compiler::ReadIntervalsCompiler, toc::*, PayloadsToUploadContainer};
+use super::{toc::*, utils::MESSAGES_PER_PAGE, PayloadsToUploadContainer};
 
 pub struct MinMax {
     pub min: MessageId,
@@ -33,24 +33,10 @@ impl MinMax {
     }
 }
 
-pub enum MessageStatus {
-    Loaded(Arc<MessageProtobufModel>),
-    Missing,
-}
-
-impl MessageStatus {
-    pub fn get_message_content(&self) -> Option<Arc<MessageProtobufModel>> {
-        match self {
-            MessageStatus::Loaded(message) => Some(message.clone()),
-            MessageStatus::Missing => None,
-        }
-    }
-}
-
 pub struct UncompressedPageData {
     pub page_id: PageId,
     pub toc: FileToc,
-    pub messages: BTreeMap<i64, MessageStatus>,
+    pub sub_pages: BTreeMap<usize, Arc<SubPage>>,
     pub min_max: Option<MinMax>,
     pub page_blob: PageBlobRandomAccess,
     pub max_message_size_protection: usize,
@@ -74,7 +60,7 @@ impl UncompressedPageData {
 
         Self {
             page_id,
-            messages: BTreeMap::new(),
+            sub_pages: BTreeMap::new(),
             min_max,
             toc,
             page_blob,
@@ -83,8 +69,8 @@ impl UncompressedPageData {
     }
 
     pub fn get_message_offset(&self, message_id: MessageId) -> ContentOffset {
-        let file_no = message_id - self.page_id * MESSAGES_PER_PAGE;
-        self.toc.get_position(file_no as usize)
+        let payload_no = PayloadNo::from_uncompressed_message_id(message_id, self.page_id);
+        self.toc.get_position(&payload_no)
     }
 
     fn update_min_max(&mut self, message_id: MessageId) {
@@ -95,10 +81,21 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn add_message(&mut self, msg: Arc<MessageProtobufModel>) {
+    pub async fn add_message(&mut self, msg: MessageProtobufModel) {
         self.update_min_max(msg.message_id);
-        self.messages
-            .insert(msg.message_id, MessageStatus::Loaded(msg));
+
+        let sub_page_id = SubPageId::from_message_id(msg.message_id);
+
+        if !self.sub_pages.contains_key(&sub_page_id.value) {
+            self.sub_pages
+                .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
+        }
+
+        self.sub_pages
+            .get(&sub_page_id.value)
+            .unwrap()
+            .add_message(msg)
+            .await;
     }
 
     async fn load_message(&mut self, message_id: MessageId) {
@@ -108,8 +105,18 @@ impl UncompressedPageData {
             return;
         }
 
+        let sub_page_id = SubPageId::from_message_id(message_id);
+
         if toc_offset.last_position() > self.page_blob.get_blob_size(None).await {
-            self.messages.insert(message_id, MessageStatus::Missing);
+            if !self.sub_pages.contains_key(&sub_page_id.value) {
+                self.sub_pages
+                    .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
+            }
+            self.sub_pages
+                .get(&sub_page_id.value)
+                .unwrap()
+                .add_missing(message_id)
+                .await;
             return;
         }
 
@@ -118,36 +125,33 @@ impl UncompressedPageData {
             .read_from_position(toc_offset.offset, toc_offset.size)
             .await;
 
-        self.restore_message(message_id, result.as_slice());
+        self.restore_message(message_id, result.as_slice()).await;
     }
 
-    fn restore_message(
+    async fn restore_message(
         &mut self,
         message_id: MessageId,
         payload: &[u8],
-    ) -> Option<Arc<MessageProtobufModel>> {
+    ) -> Option<Arc<SubPage>> {
+        let sub_page_id = SubPageId::from_message_id(message_id);
+
+        if !self.sub_pages.contains_key(&sub_page_id.value) {
+            self.sub_pages
+                .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
+        }
+
+        let sub_page = self.sub_pages.get(&sub_page_id.value).unwrap();
         match prost::Message::decode(payload) {
             Ok(msg) => {
-                let msg: Arc<MessageProtobufModel> = Arc::new(msg);
-                self.add_message(msg.clone());
-                return Some(msg);
+                sub_page.add_message(msg).await;
             }
             Err(err) => {
                 println!("Can not decode message{}", err);
-                self.messages.insert(message_id, MessageStatus::Missing);
+                sub_page.add_missing(message_id).await;
             }
         }
 
-        None
-    }
-
-    pub async fn get(&mut self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
-        if !self.messages.contains_key(&message_id) {
-            self.load_message(message_id).await;
-        }
-
-        let result = self.messages.get(&message_id)?;
-        result.get_message_content()
+        return Some(sub_page.clone());
     }
 
     pub async fn persist_messages(
@@ -196,102 +200,13 @@ impl UncompressedPageData {
 
         (payload_size, last_saved_message_id)
     }
-
-    pub async fn get_all(
-        &mut self,
-        current_message_id: Option<MessageId>,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
-
-        let mut to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
-
-        if let Some(current_message_id) = current_message_id {
-            if to_message_id > current_message_id {
-                to_message_id = current_message_id;
-            }
-        }
-
-        return self
-            .get_range_incl_to_id(start_message_id, to_message_id, None)
-            .await;
-    }
-
-    pub async fn get_range_incl_to_id(
-        &mut self,
-        from_id: MessageId,
-        to_id: MessageId,
-        limit: Option<usize>,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let mut read_intervals = ReadIntervalsCompiler::new();
-        let mut result = Vec::new();
-
-        let mut collected_messages_count = 0;
-
-        for message_id in from_id..=to_id {
-            if let Some(msg) = self.messages.get(&message_id) {
-                match msg {
-                    MessageStatus::Loaded(msg) => {
-                        result.push(msg.clone());
-                        collected_messages_count += 1;
-                    }
-                    MessageStatus::Missing => {}
-                }
-            } else {
-                let message_offset = self.get_message_offset(message_id);
-
-                if message_offset.has_data(self.max_message_size_protection) {
-                    read_intervals.add_new_interval(message_id, message_offset);
-                    collected_messages_count += 1;
-                } else {
-                    self.messages.insert(message_id, MessageStatus::Missing);
-                }
-            }
-
-            if let Some(limit) = limit {
-                if collected_messages_count >= limit {
-                    break;
-                }
-            }
-        }
-
-        for interval in &read_intervals.intervals {
-            let full_payload = self
-                .page_blob
-                .read_from_position(interval.start_pos, interval.len)
-                .await;
-
-            for msg_id in interval.messages.keys() {
-                let message_payload = read_intervals.read_payload(*msg_id, full_payload.as_slice());
-
-                if let Some(msg) = self.restore_message(*msg_id, message_payload) {
-                    result.push(msg);
-                }
-            }
-        }
-
-        result
-    }
-
-    pub async fn read_from_message_id(
-        &mut self,
-        from_message_id: MessageId,
-        max_amount: usize,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
-
-        let to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
-
-        return self
-            .get_range_incl_to_id(from_message_id, to_message_id, Some(max_amount))
-            .await;
-    }
 }
 
 pub fn get_min_max_from_toc(page_id: PageId, toc: &FileToc) -> Option<MinMax> {
     let mut result: Option<MinMax> = None;
 
     for file_no in 0..100_000 {
-        if toc.has_content(file_no) {
+        if toc.has_content(&PayloadNo::new(file_no)) {
             let message_id: MessageId = file_no as MessageId + page_id * MESSAGES_PER_PAGE;
 
             if let Some(ref mut min_max) = result {
@@ -312,8 +227,8 @@ mod test {
     use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use crate::{
-        message_pages::uncompressed_page::toc::{TOC_SIZE, TOC_SIZE_IN_PAGES},
         page_blob_random_access::PageBlobRandomAccess,
+        uncompressed_page::toc::{TOC_SIZE, TOC_SIZE_IN_PAGES},
     };
 
     use super::*;
@@ -339,6 +254,9 @@ mod test {
 
     #[tokio::test]
     async fn test_we_are_reading_saved_messages() {
+        let message_id1 = 100_001;
+        let message_id2 = 100_002;
+
         let connection = AzureStorageConnection::new_in_memory();
 
         let page_blob =
@@ -352,14 +270,14 @@ mod test {
             UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
 
         let msg_to_upload0 = MessageProtobufModel {
-            message_id: 100_001,
+            message_id: message_id1,
             created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
             data: vec![1, 2, 3],
             headers: vec![],
         };
 
         let msg_to_upload1 = MessageProtobufModel {
-            message_id: 100_002,
+            message_id: message_id2,
             created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
             data: vec![1, 2, 3],
             headers: vec![],
@@ -386,11 +304,25 @@ mod test {
 
         assert_eq!(result, result2);
 
-        let result_message0 = uncompressed_page_data.get(100_001).await.unwrap();
-        let result_message1 = uncompressed_page_data.get(100_002).await.unwrap();
+        let sub_page_id = SubPageId::from_message_id(message_id1);
+        let sub_page = uncompressed_page_data
+            .sub_pages
+            .get(&sub_page_id.value)
+            .unwrap();
 
-        assert_eq!(result_message0.data, items_to_upload[0].data);
-        assert_eq!(result_message1.data, items_to_upload[1].data);
+        let result_message = sub_page.get_message(message_id1).await.unwrap();
+
+        assert_eq!(result_message.data, items_to_upload[0].data);
+
+        let sub_page_id = SubPageId::from_message_id(message_id2);
+        let sub_page = uncompressed_page_data
+            .sub_pages
+            .get(&sub_page_id.value)
+            .unwrap();
+
+        let result_message = sub_page.get_message(message_id2).await.unwrap();
+
+        assert_eq!(result_message.data, items_to_upload[1].data);
     }
 
     fn get_value(src: &[u8]) -> i32 {

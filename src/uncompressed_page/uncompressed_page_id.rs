@@ -1,13 +1,13 @@
 use my_service_bus_shared::{page_id::PageId, MessageId};
 
-use super::MESSAGES_PER_PAGE;
+use super::utils::MESSAGES_PER_PAGE;
 
 #[derive(Clone, Copy)]
-pub struct MessagePageId {
+pub struct UncompressedPageId {
     pub value: PageId,
 }
 
-impl MessagePageId {
+impl UncompressedPageId {
     pub fn new(page_id: PageId) -> Self {
         Self { value: page_id }
     }

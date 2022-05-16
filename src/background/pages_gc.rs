@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    app::AppContext,
-    message_pages::{MessagePageId, MessagesPageType},
-    operations::OperationError,
-};
+use crate::{app::AppContext, operations::OperationError, uncompressed_page::UncompressedPageId};
 
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use rust_extensions::MyTimerTick;
@@ -44,24 +40,24 @@ async fn gc_pages(
 
         let topic_data = topic_data.unwrap();
 
-        let page_id = MessagePageId::from_message_id(topic_snapshot.message_id);
+        let page_id = UncompressedPageId::from_message_id(topic_snapshot.message_id);
 
-        if let Some(page) = topic_data.pages_list.get(page_id.value).await {
-            if let MessagesPageType::Uncompressed(uncompressed_page) = &page.page_type {
-                crate::operations::compress_previous_page(
-                    app.as_ref(),
-                    topic_data.as_ref(),
-                    topic_snapshot,
-                    uncompressed_page,
-                )
-                .await;
-            }
+        if let Some(uncompressed_page) = topic_data.uncompressed_pages_list.get(page_id.value).await
+        {
+            crate::operations::compress_previous_page(
+                app.as_ref(),
+                topic_data.as_ref(),
+                topic_snapshot,
+                uncompressed_page.as_ref(),
+            )
+            .await;
         }
 
         crate::operations::gc_uncompressed_pages(
             app.as_ref(),
             topic_data.clone(),
             active_pages.as_slice(),
+            topic_snapshot.message_id,
         )
         .await?;
 

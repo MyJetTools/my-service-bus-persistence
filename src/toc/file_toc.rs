@@ -2,7 +2,7 @@ use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
 
 use crate::page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess};
 
-use super::ContentOffset;
+use super::{ContentOffset, PayloadNo};
 
 pub struct FileToc {
     toc_data: Vec<u8>,
@@ -58,7 +58,7 @@ impl FileToc {
 
     fn init_write_position(&mut self) {
         for file_no in 0..self.max_toc_elements {
-            let pos = self.get_position(file_no);
+            let pos = self.get_position(&PayloadNo::new(file_no));
             let last_position = pos.last_position();
 
             if last_position > self.write_position {
@@ -81,30 +81,30 @@ impl FileToc {
 
     pub fn update_file_position(
         &mut self,
-        file_no: usize,
+        payload_no: &PayloadNo,
         offset: &ContentOffset,
     ) -> Option<usize> {
-        let toc_pos = file_no * 8;
-        if self.has_content(file_no) {
+        if self.has_content(payload_no) {
             return None;
         }
 
+        let toc_offset = payload_no.get_toc_offset();
         self.messages_count += 1;
 
-        offset.serialize(&mut self.toc_data[toc_pos..toc_pos + 8]);
+        offset.serialize(&mut self.toc_data[toc_offset..toc_offset + 8]);
 
-        return Some(toc_pos / 512);
+        return Some(toc_offset / 512);
     }
 
-    pub fn get_position(&self, message_no: usize) -> ContentOffset {
-        let toc_pos = message_no * 8;
+    pub fn get_position(&self, payload_no: &PayloadNo) -> ContentOffset {
+        let toc_pos = payload_no.get_toc_offset();
         ContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
     }
 
-    pub fn has_content(&self, file_no: usize) -> bool {
-        let toc_pos = file_no * 8;
+    pub fn has_content(&self, payload_no: &PayloadNo) -> bool {
+        let toc_offset = payload_no.get_toc_offset();
 
-        get_value(&self.toc_data[toc_pos..toc_pos + 4]) != 0
+        get_value(&self.toc_data[toc_offset..toc_offset + 4]) != 0
     }
 
     pub fn get_toc_pages(&self, page_from: usize, pages_amount: usize) -> &[u8] {
@@ -145,11 +145,11 @@ mod test {
                 size: file_no + 1,
             };
 
-            let res_page_no = toc.update_file_position(file_no, &src_offset);
+            let res_page_no = toc.update_file_position(&PayloadNo::new(file_no), &src_offset);
 
             assert_eq!(res_page_no.unwrap(), file_no * 8 / 512);
 
-            let result = toc.get_position(file_no);
+            let result = toc.get_position(&PayloadNo::new(file_no));
 
             assert_eq!(src_offset.offset, result.offset);
             assert_eq!(src_offset.size, result.size);
@@ -163,10 +163,10 @@ mod test {
 
         assert_eq!(0, toc.get_messages_count());
 
-        toc.update_file_position(1, &ContentOffset { offset: 1, size: 1 });
+        toc.update_file_position(&PayloadNo::new(1), &ContentOffset { offset: 1, size: 1 });
         assert_eq!(1, toc.get_messages_count());
 
-        toc.update_file_position(1, &ContentOffset { offset: 1, size: 1 });
+        toc.update_file_position(&PayloadNo::new(1), &ContentOffset { offset: 1, size: 1 });
         assert_eq!(1, toc.get_messages_count());
     }
 }

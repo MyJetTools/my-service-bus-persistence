@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use my_http_server_swagger::{MyHttpInput, MyHttpObjectStructure};
 use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
 use serde::{Deserialize, Serialize};
@@ -32,7 +30,7 @@ pub struct GetMessagesResponseModel {
 }
 
 impl GetMessagesResponseModel {
-    pub fn create(messages: Vec<Arc<MessageProtobufModel>>) -> Self {
+    pub fn create(messages: Vec<MessageProtobufModel>) -> Self {
         let mut data = Vec::new();
 
         for msg in &messages {

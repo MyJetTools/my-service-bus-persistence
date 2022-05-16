@@ -7,7 +7,9 @@ use my_service_bus_shared::{
 };
 
 use crate::{
-    app::AppContext, operations::read_page::MessagesReader, persistence_grpc::*,
+    app::AppContext,
+    operations::read_page::{MessagesReader, ReadCondition},
+    persistence_grpc::*,
     topic_data::TopicData,
 };
 
@@ -29,15 +31,19 @@ pub async fn get_v0(
 ) -> Vec<Vec<u8>> {
     let mut messages = Vec::new();
 
-    let mut messages_reader = MessagesReader::new(app.clone(), topic_data.clone(), from_id, to_id);
+    let mut messages_reader = MessagesReader::new(
+        app.clone(),
+        topic_data.clone(),
+        ReadCondition::as_from_to(from_id, to_id),
+    );
 
     while let Some(msgs) = messages_reader.get_next_chunk().await {
         for msg in msgs {
             messages.push(MessageProtobufModel {
-                message_id: msg.1.message_id,
-                created: msg.1.created,
-                data: msg.1.data,
-                headers: msg.1.headers,
+                message_id: msg.message_id,
+                created: msg.created,
+                data: msg.data,
+                headers: msg.headers,
             });
         }
     }
@@ -64,14 +70,22 @@ pub async fn get_v1(
 ) -> Vec<Vec<u8>> {
     let mut zip_builder = CompressedPageBuilder::new();
 
-    let mut messages_reader = MessagesReader::new(app.clone(), topic_data.clone(), from_id, to_id);
+    let mut messages_reader = MessagesReader::new(
+        app.clone(),
+        topic_data.clone(),
+        ReadCondition::Range {
+            from_id,
+            to_id: Some(to_id),
+            max_amount: None,
+        },
+    );
 
     let mut messages = 0;
 
     let mut used_messages = 0;
 
     while let Some(msgs) = messages_reader.get_next_chunk().await {
-        for msg in msgs.values() {
+        for msg in &msgs {
             let mut buffer = Vec::new();
             msg.serialize(&mut buffer).unwrap();
             zip_builder

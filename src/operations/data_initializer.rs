@@ -5,7 +5,7 @@ use rust_extensions::StopWatch;
 
 use crate::{
     app::{file_name_generators::SYSTEM_FILE_NAME, AppContext},
-    message_pages::{utils::get_active_pages, MessagePageId},
+    uncompressed_page::{get_active_pages, UncompressedPageId},
 };
 
 pub async fn init(app: Arc<AppContext>) {
@@ -20,7 +20,7 @@ pub async fn init(app: Arc<AppContext>) {
             continue;
         }
 
-        let current_page_id = MessagePageId::from_message_id(topic_snapshot.message_id);
+        let current_page_id = UncompressedPageId::from_message_id(topic_snapshot.message_id);
 
         let active_pages = get_active_pages(topic_snapshot);
 

@@ -1,6 +1,6 @@
-use crate::message_pages::MESSAGES_PER_PAGE;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
+use crate::uncompressed_page::MESSAGES_PER_PAGE;
 
 use futures_core::Stream;
 use std::pin::Pin;
@@ -25,13 +25,10 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
-        let message = crate::operations::get_message_by_id(
-            self.app.as_ref(),
-            req.topic_id.as_ref(),
-            req.message_id,
-        )
-        .await
-        .unwrap();
+        let message =
+            crate::operations::get_message_by_id(&self.app, req.topic_id.as_ref(), req.message_id)
+                .await
+                .unwrap();
 
         if message.is_none() {
             let result = super::compressed_page_compiler::get_none_message();

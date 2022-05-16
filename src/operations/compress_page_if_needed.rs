@@ -1,39 +1,34 @@
 use my_service_bus_shared::MessageId;
 
 use crate::{
-    app::AppContext,
-    message_pages::{
-        CompressedClusterId, CompressedPageId, UncompressedPage, MESSAGES_PER_COMPRESSED_PAGE,
-    },
-    topic_data::TopicData,
+    app::AppContext, message_pages::CompressedClusterId, sub_page::SubPageId,
+    topic_data::TopicData, uncompressed_page::*,
 };
 
+//TODO - Somehow unit test it
 pub async fn compress_page_if_needed(
     app: &AppContext,
     topic_data: &TopicData,
-
-    compressed_page_id: &CompressedPageId,
     uncompressed_page: &UncompressedPage,
+    sub_page_id: &SubPageId,
+    topic_message_id: MessageId,
 ) {
-    let cluster_id = CompressedClusterId::from_compressed_page_id(&compressed_page_id);
+    let compressed_cluster_id = CompressedClusterId::from_sub_page_id(sub_page_id);
 
-    let cluset = super::get_compressed_cluster_to_write(app, topic_data, &cluster_id).await;
+    let cluster =
+        super::get_compressed_cluster_to_write(app, topic_data, &compressed_cluster_id).await;
 
-    if cluset.has_compressed_page(compressed_page_id).await {
+    if cluster.has_compressed_page(sub_page_id).await {
         return;
     }
 
-    let from_id = compressed_page_id.get_first_message_id();
+    let first_message_id_of_next_page = sub_page_id.get_first_message_id_of_next_page();
 
-    let to_id = from_id + (MESSAGES_PER_COMPRESSED_PAGE as MessageId) - 1;
+    if topic_message_id <= first_message_id_of_next_page {
+        return;
+    }
 
-    let messages_to_compress = uncompressed_page.get_range_incl_to_id(from_id, to_id).await;
-
-    let mut clusters = topic_data.compressed_clusters.lock().await;
-
-    let cluster = clusters.get_mut(&cluster_id.value).unwrap();
-
-    cluster
-        .save_cluser_page(messages_to_compress.as_slice())
-        .await;
+    if let Some(sub_page) = uncompressed_page.get_sub_page(sub_page_id).await {
+        cluster.save_cluser_page(sub_page.as_ref()).await;
+    }
 }

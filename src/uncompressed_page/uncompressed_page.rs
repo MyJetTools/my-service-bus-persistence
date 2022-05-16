@@ -1,18 +1,15 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 use rust_extensions::StopWatch;
 use tokio::sync::Mutex;
 
-use crate::{message_pages::MessagePageId, page_blob_random_access::PageBlobRandomAccess};
+use crate::{
+    page_blob_random_access::PageBlobRandomAccess,
+    sub_page::{SubPage, SubPageId},
+};
 
-use super::{NewMessages, UncompressedPageData};
+use super::{NewMessages, PageMetrics, UncompressedPageData, UncompressedPageId};
 
 pub struct FlushToStorageResult {
     pub duration: Duration,
@@ -23,12 +20,10 @@ pub struct FlushToStorageResult {
 
 pub struct UncompressedPage {
     page_data: Mutex<UncompressedPageData>,
-    pub page_id: MessagePageId,
+    pub page_id: UncompressedPageId,
     pub new_messages: NewMessages,
-    pub messages_count: AtomicUsize,
-    pub write_position: AtomicUsize,
-    pub has_skipped_messages: AtomicBool, //TODO Plug has skipped messages
-    pub messages_amount_to_save: AtomicUsize,
+
+    pub metrics: PageMetrics,
 }
 
 impl UncompressedPage {
@@ -45,53 +40,20 @@ impl UncompressedPage {
 
         Self {
             page_data: Mutex::new(uncompressed_page),
-            page_id: MessagePageId::new(page_id),
-
+            page_id: UncompressedPageId::new(page_id),
             new_messages: NewMessages::new(),
-            messages_count: AtomicUsize::new(messages_count),
-            has_skipped_messages: AtomicBool::new(false),
-            write_position: AtomicUsize::new(write_position),
-            messages_amount_to_save: AtomicUsize::new(0),
+            metrics: PageMetrics::new(messages_count, write_position),
         }
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         let amount = self.new_messages.add_messages(messages).await;
-        self.messages_amount_to_save.store(amount, Ordering::SeqCst);
+        self.metrics.update_messages_amount_to_save(amount);
+        self.metrics.update_last_access_to_now();
     }
 
-    pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
-        let mut page_data_access = self.page_data.lock().await;
-        page_data_access.get(message_id).await
-    }
-
-    pub async fn get_all(
-        &self,
-        current_message_id: Option<MessageId>,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let mut page_data_access = self.page_data.lock().await;
-        return page_data_access.get_all(current_message_id).await;
-    }
-    pub async fn get_range_incl_to_id(
-        &self,
-        from_id: MessageId,
-        to_id: MessageId,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let mut page_data_access = self.page_data.lock().await;
-        return page_data_access
-            .get_range_incl_to_id(from_id, to_id, None)
-            .await;
-    }
-
-    pub async fn read_from_message_id(
-        &self,
-        from_message_id: MessageId,
-        max_amount: usize,
-    ) -> Vec<Arc<MessageProtobufModel>> {
-        let mut page_data_access = self.page_data.lock().await;
-        return page_data_access
-            .read_from_message_id(from_message_id, max_amount)
-            .await;
+    pub async fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
+        todo!("Implement");
     }
 
     pub async fn flush_to_storage(&self, max_persist_size: usize) -> Option<FlushToStorageResult> {
@@ -116,8 +78,8 @@ impl UncompressedPage {
                 .persist_messages(messages_to_persist.as_slice())
                 .await;
 
-            self.messages_count
-                .store(write_access.toc.get_messages_count(), Ordering::SeqCst);
+            self.metrics
+                .update_messages_count(write_access.toc.get_messages_count());
 
             let write_pos = write_access.toc.get_write_position();
             println!(
@@ -126,7 +88,7 @@ impl UncompressedPage {
                 messages_to_persist.len()
             );
 
-            self.write_position.store(write_pos, Ordering::SeqCst);
+            self.metrics.update_write_position(write_pos);
 
             result
         };
@@ -136,7 +98,7 @@ impl UncompressedPage {
             .confirm_persisted(messages_to_persist.as_slice())
             .await;
 
-        self.messages_amount_to_save.store(amount, Ordering::SeqCst);
+        self.metrics.update_messages_amount_to_save(amount);
 
         sw.pause();
 

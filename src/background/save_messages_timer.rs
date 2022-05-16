@@ -39,7 +39,10 @@ impl MyTimerTick for SaveMessagesTimer {
 
             flush_minute_index_data(topic_data.as_ref()).await;
 
-            let pages_with_data_to_save = topic_data.pages_list.get_pages_with_data_to_save().await;
+            let pages_with_data_to_save = topic_data
+                .uncompressed_pages_list
+                .get_pages_with_data_to_save()
+                .await;
 
             for page in pages_with_data_to_save {
                 if let Some(result) = page.flush_to_storage(MAX_PERSIST_SIZE).await {
