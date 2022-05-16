@@ -1,18 +1,17 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
+use crate::compressed_page::*;
+
 use crate::{
     app::AppContext,
-    message_pages::CompressedClusterId,
     sub_page::{SubPage, SubPageId},
     topic_data::TopicData,
     uncompressed_page::UncompressedPageId,
 };
 
 use super::{ReadCondition, ReadFromCompressedClusters, ReadFromUncompressedPage};
-
-pub const ITERATION_CHUNK: i64 = 1000;
 
 pub struct MessagesReader {
     pub app: Arc<AppContext>,
@@ -45,7 +44,7 @@ impl MessagesReader {
         let compressed_cluster_id = CompressedClusterId::from_message_id(self.current_message_id);
         let uncompressed_page_id = UncompressedPageId::from_message_id(self.current_message_id);
 
-        self.init_if_needed(compressed_cluster_id, uncompressed_page_id)
+        self.read_subpage_if_needed(compressed_cluster_id, uncompressed_page_id)
             .await;
 
         let (sub_page, message_id, _) = self.get_next_sub_page_with_messages().await?;
@@ -53,7 +52,7 @@ impl MessagesReader {
         sub_page.get_message(message_id).await
     }
 
-    async fn init_if_needed(
+    async fn read_subpage_if_needed(
         &mut self,
         compressed_cluster_id: CompressedClusterId,
         uncompressed_page_id: UncompressedPageId,
@@ -116,13 +115,13 @@ impl MessagesReader {
                 CompressedClusterId::from_message_id(self.current_message_id);
             let uncompressed_page_id = UncompressedPageId::from_message_id(self.current_message_id);
 
-            self.init_if_needed(compressed_cluster_id, uncompressed_page_id)
+            self.read_subpage_if_needed(compressed_cluster_id, uncompressed_page_id)
                 .await;
 
             let sub_page_id = SubPageId::from_message_id(self.current_message_id);
 
             if let Some(current_uncompressed_page) = &self.current_uncompressed_page {
-                if let Some(sub_page) = current_uncompressed_page.get_sub_page(&sub_page_id) {
+                if let Some(sub_page) = current_uncompressed_page.get_sub_page(&sub_page_id).await {
                     let from_message_id = self.current_message_id;
                     let to_message_id = sub_page_id.get_first_message_id_of_next_page() - 1;
                     self.current_message_id = to_message_id + 1;
@@ -131,11 +130,18 @@ impl MessagesReader {
             }
 
             if let Some(current_compressed_cluster) = &self.current_compressed_cluster {
-                if let Some(sub_page) = current_compressed_cluster.get_sub_page(&sub_page_id) {
+                if let Some(sub_page) = current_compressed_cluster
+                    .get_sub_page(
+                        &sub_page_id,
+                        self.topic_data.topic_id.as_str(),
+                        self.app.logs.as_ref(),
+                    )
+                    .await
+                {
                     let from_message_id = self.current_message_id;
                     let to_message_id = sub_page_id.get_first_message_id_of_next_page() - 1;
                     self.current_message_id = to_message_id + 1;
-                    return Some((sub_page, from_message_id, to_message_id));
+                    return Some((Arc::new(sub_page), from_message_id, to_message_id));
                 }
             }
 
@@ -155,33 +161,5 @@ impl MessagesReader {
                 return result;
             }
         }
-    }
-}
-
-fn to_btree_map(pages: Vec<MessageProtobufModel>) -> BTreeMap<MessageId, MessageProtobufModel> {
-    let mut result = BTreeMap::new();
-
-    for page in pages {
-        result.insert(page.message_id, page);
-    }
-
-    result
-}
-
-fn get_end_of_the_chunk_message_id(from_message_id: MessageId) -> MessageId {
-    let result = from_message_id / ITERATION_CHUNK as i64;
-    return (result + 1) * ITERATION_CHUNK as i64 - 1;
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    pub fn test_get_end_of_the_chunk_message_id() {
-        assert_eq!(999, get_end_of_the_chunk_message_id(500));
-        assert_eq!(1999, get_end_of_the_chunk_message_id(1000));
-
-        assert_eq!(999, get_end_of_the_chunk_message_id(999));
     }
 }

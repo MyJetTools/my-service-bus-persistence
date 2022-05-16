@@ -40,6 +40,10 @@ impl ReadInterval {
 
         Some(result)
     }
+
+    pub fn get_message_ids(&self) -> Vec<MessageId> {
+        self.messages.keys().cloned().collect()
+    }
 }
 
 pub struct ReadIntervalsCompiler {

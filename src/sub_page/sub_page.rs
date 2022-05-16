@@ -6,32 +6,11 @@ use tokio::sync::Mutex;
 
 use crate::toc::PayloadNo;
 
-pub enum MessageStatus {
-    Loaded(MessageProtobufModel),
-    Missing,
-}
-
-impl MessageStatus {
-    pub fn get_message_content(&self) -> Option<&MessageProtobufModel> {
-        match self {
-            MessageStatus::Loaded(message) => Some(message),
-            MessageStatus::Missing => None,
-        }
-    }
-}
-
-impl MessageStatus {
-    pub fn get_message(&self) -> Option<&MessageProtobufModel> {
-        match self {
-            MessageStatus::Loaded(result) => Some(result),
-            MessageStatus::Missing => None,
-        }
-    }
-}
+use super::SubPageMessagesIterator;
 
 pub struct SubPage {
     pub sub_page_id: SubPageId,
-    pub messages: Mutex<BTreeMap<i64, MessageStatus>>,
+    pub messages: Mutex<BTreeMap<i64, MessageProtobufModel>>,
     pub created: DateTimeAsMicroseconds,
 }
 
@@ -44,20 +23,25 @@ impl SubPage {
         }
     }
 
-    pub async fn add_message(&self, message: MessageProtobufModel) {
-        let mut messages = self.messages.lock().await;
-        messages.insert(message.message_id, MessageStatus::Loaded(message));
+    pub fn restored(sub_page_id: SubPageId, messages: BTreeMap<i64, MessageProtobufModel>) -> Self {
+        Self {
+            sub_page_id,
+            messages: Mutex::new(messages),
+            created: DateTimeAsMicroseconds::now(),
+        }
     }
 
-    pub async fn add_missing(&self, message_id: MessageId) {
+    pub async fn add_messages(&self, new_messages: Vec<MessageProtobufModel>) {
         let mut messages = self.messages.lock().await;
-        messages.insert(message_id, MessageStatus::Missing);
+
+        for message in new_messages {
+            messages.insert(message.message_id, message);
+        }
     }
 
     pub async fn get_message(&self, message_id: MessageId) -> Option<MessageProtobufModel> {
         let messages = self.messages.lock().await;
         let result = messages.get(&message_id)?;
-        let result = result.get_message()?;
         Some(result.clone())
     }
     pub async fn get_messages(
@@ -70,9 +54,7 @@ impl SubPage {
 
         for message_id in from_id..=to_id {
             if let Some(msg) = messages.get(&message_id) {
-                if let MessageStatus::Loaded(msg) = msg {
-                    result.add(msg.clone());
-                }
+                result.add(msg.clone());
             }
         }
 
@@ -98,7 +80,7 @@ impl SubPageId {
     }
 
     pub fn get_first_message_id(&self) -> MessageId {
-        let result = self.value * SUB_PAGE_MESSAGES_AMOUNT; //TODO - Unit Test it
+        let result = self.value * SUB_PAGE_MESSAGES_AMOUNT;
         result as MessageId
     }
 
@@ -110,6 +92,10 @@ impl SubPageId {
     pub fn get_payload_no(&self, subpages_per_file: usize) -> PayloadNo {
         let cluster_id = self.value / subpages_per_file;
         PayloadNo::new(self.value - cluster_id * subpages_per_file)
+    }
+
+    pub fn iterate_through_messages(&self) -> SubPageMessagesIterator {
+        SubPageMessagesIterator::new(self)
     }
 }
 

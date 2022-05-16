@@ -47,13 +47,22 @@ impl UncompressedPage {
     }
 
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
-        let amount = self.new_messages.add_messages(messages).await;
+        let amount = self.new_messages.add_messages(messages.as_slice()).await;
         self.metrics.update_messages_amount_to_save(amount);
         self.metrics.update_last_access_to_now();
+
+        let mut page_data = self.page_data.lock().await;
+        page_data.add_messages(messages).await;
     }
 
     pub async fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
-        todo!("Implement");
+        let page_data = self.page_data.lock().await;
+        page_data.get_sub_page(sub_page_id)
+    }
+
+    pub async fn get_or_restore_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
+        let mut page_data = self.page_data.lock().await;
+        page_data.get_or_restore_sub_page(sub_page_id).await
     }
 
     pub async fn flush_to_storage(&self, max_persist_size: usize) -> Option<FlushToStorageResult> {

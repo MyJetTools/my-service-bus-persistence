@@ -30,9 +30,9 @@ impl ReadCondition {
         read_messages_amount: usize,
     ) -> bool {
         match self {
-            ReadCondition::SingleMessage(message_id) => read_messages_amount > 0,
+            ReadCondition::SingleMessage(_) => read_messages_amount > 0,
             ReadCondition::Range {
-                from_id,
+                from_id: _,
                 to_id,
                 max_amount,
             } => {

@@ -15,9 +15,8 @@ impl ReadFromUncompressedPage {
         Self { page, page_id }
     }
 
-    pub fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
+    pub async fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
         let page = self.page.as_ref()?;
-
-        todo!("Implement")
+        page.get_or_restore_sub_page(sub_page_id).await
     }
 }

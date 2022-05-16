@@ -10,6 +10,7 @@ impl PayloadNo {
     pub fn new(value: usize) -> Self {
         Self { value }
     }
+
     pub fn from_uncompressed_message_id(message_id: MessageId, page_id: PageId) -> Self {
         let value = message_id - page_id * MESSAGES_PER_PAGE;
 

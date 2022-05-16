@@ -1,16 +1,14 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_shared::{
-    page_compressor::{CompressedPageBuilder, CompressedPageReader, CompressedPageReaderError},
-    protobuf_models::MessageProtobufModel,
-    MessageId,
+use my_service_bus_shared::page_compressor::{
+    CompressedPageBuilder, CompressedPageReader, CompressedPageReaderError,
 };
 use tokio::sync::Mutex;
 
 use crate::{
     app::Logs,
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
-    sub_page::{MessageStatus, SubPage, SubPageId},
+    sub_page::{SubPage, SubPageId},
     toc::{ContentOffset, FileToc},
 };
 
@@ -66,10 +64,6 @@ impl CompressedCluster {
         data.toc.has_content(&payload_no)
     }
 
-    pub fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<SubPage> {
-        todo!("Implement")
-    }
-
     async fn get_compressed_page_payload(&self, sub_page_id: &SubPageId) -> Option<Vec<u8>> {
         let mut data = self.data.lock().await;
 
@@ -88,10 +82,10 @@ impl CompressedCluster {
         Some(content.as_slice().to_vec())
     }
 
-    pub async fn get_compressed_page_messages(
+    pub async fn get_sub_page(
         &self,
         sub_page_id: &SubPageId,
-    ) -> Result<Option<BTreeMap<MessageId, MessageProtobufModel>>, CompressedPageReaderError> {
+    ) -> Result<Option<SubPage>, CompressedPageReaderError> {
         let compressed_payload = self.get_compressed_page_payload(&sub_page_id).await;
 
         if compressed_payload.is_none() {
@@ -102,12 +96,12 @@ impl CompressedCluster {
 
         let mut compressed_page_reader = CompressedPageReader::new(compressed_payload)?;
 
-        let mut result = BTreeMap::new();
+        let mut messages = BTreeMap::new();
 
         while let Some(next_message) = compressed_page_reader.get_next_message()? {
             match prost::Message::decode(next_message.1.as_slice()) {
                 Ok(message) => {
-                    result.insert(next_message.0, message);
+                    messages.insert(next_message.0, message);
                 }
                 Err(err) => self.logs.add_error_str(
                     Some(self.topic_id.as_str()),
@@ -118,6 +112,7 @@ impl CompressedCluster {
             }
         }
 
+        let result = SubPage::restored(sub_page_id.clone(), messages);
         Ok(Some(result))
     }
 
@@ -133,14 +128,12 @@ impl CompressedCluster {
         {
             let messages_access = sub_page.messages.lock().await;
 
-            for message_status in messages_access.values() {
-                if let MessageStatus::Loaded(message) = message_status {
-                    let mut payload = Vec::new();
-                    prost::Message::encode(message, &mut payload).unwrap();
-                    compressed_page_builder
-                        .add_message(message.message_id, payload.as_slice())
-                        .unwrap();
-                }
+            for message in messages_access.values() {
+                let mut payload = Vec::new();
+                prost::Message::encode(message, &mut payload).unwrap();
+                compressed_page_builder
+                    .add_message(message.message_id, payload.as_slice())
+                    .unwrap();
             }
         }
 

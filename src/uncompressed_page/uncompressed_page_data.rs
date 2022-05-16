@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
 
@@ -8,7 +11,10 @@ use crate::{
     toc::*,
 };
 
-use super::{toc::*, utils::MESSAGES_PER_PAGE, PayloadsToUploadContainer};
+use super::{
+    read_intervals_compiler::ReadIntervalsCompiler, toc::*, utils::MESSAGES_PER_PAGE,
+    PayloadsToUploadContainer,
+};
 
 pub struct MinMax {
     pub min: MessageId,
@@ -68,9 +74,57 @@ impl UncompressedPageData {
         }
     }
 
-    pub fn get_message_offset(&self, message_id: MessageId) -> ContentOffset {
-        let payload_no = PayloadNo::from_uncompressed_message_id(message_id, self.page_id);
-        self.toc.get_position(&payload_no)
+    pub fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
+        let result = self.sub_pages.get(&sub_page_id.value)?;
+        Some(result.clone())
+    }
+
+    pub async fn add_messages(&mut self, messages: Vec<MessageProtobufModel>) {
+        let mut messages_by_sub_page = HashMap::new();
+        for message in messages {
+            let sub_page_id = SubPageId::from_message_id(message.message_id);
+
+            if messages_by_sub_page.contains_key(&sub_page_id.value) {
+                messages_by_sub_page.insert(sub_page_id.value, Vec::new());
+            }
+
+            messages_by_sub_page
+                .get_mut(&sub_page_id.value)
+                .unwrap()
+                .push(message);
+        }
+
+        for (sub_page_id, messages) in messages_by_sub_page {
+            if !self.sub_pages.contains_key(&sub_page_id) {
+                self.sub_pages.insert(
+                    sub_page_id,
+                    Arc::new(SubPage::new(SubPageId::new(sub_page_id))),
+                );
+
+                self.sub_pages
+                    .get_mut(&sub_page_id)
+                    .unwrap()
+                    .add_messages(messages)
+                    .await;
+            }
+        }
+    }
+
+    pub async fn get_or_restore_sub_page(
+        &mut self,
+        sub_page_id: &SubPageId,
+    ) -> Option<Arc<SubPage>> {
+        if let Some(result_from_memory) = self.sub_pages.get(&sub_page_id.value) {
+            return Some(result_from_memory.clone());
+        }
+
+        if let Some(sub_page) = self.restore_sub_page(sub_page_id).await {
+            let sub_page = Arc::new(sub_page);
+            self.sub_pages.insert(sub_page_id.value, sub_page.clone());
+            return Some(sub_page);
+        }
+
+        None
     }
 
     fn update_min_max(&mut self, message_id: MessageId) {
@@ -81,77 +135,43 @@ impl UncompressedPageData {
         }
     }
 
-    pub async fn add_message(&mut self, msg: MessageProtobufModel) {
-        self.update_min_max(msg.message_id);
+    async fn restore_sub_page(&mut self, sub_page_id: &SubPageId) -> Option<SubPage> {
+        let mut intervals_compiler = ReadIntervalsCompiler::new();
 
-        let sub_page_id = SubPageId::from_message_id(msg.message_id);
+        let first_message_id = sub_page_id.get_first_message_id();
 
-        if !self.sub_pages.contains_key(&sub_page_id.value) {
-            self.sub_pages
-                .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
+        let mut payload_no =
+            PayloadNo::from_uncompressed_message_id(first_message_id, self.page_id);
+        for message_id in sub_page_id.iterate_through_messages() {
+            let offset = self.toc.get_position(&payload_no);
+            intervals_compiler.add_new_interval(message_id, offset);
+            payload_no.value += 1;
         }
 
-        self.sub_pages
-            .get(&sub_page_id.value)
-            .unwrap()
-            .add_message(msg)
-            .await;
-    }
+        let mut messages = BTreeMap::new();
 
-    async fn load_message(&mut self, message_id: MessageId) {
-        let toc_offset = self.get_message_offset(message_id);
-
-        if !toc_offset.has_data(self.max_message_size_protection) {
-            return;
-        }
-
-        let sub_page_id = SubPageId::from_message_id(message_id);
-
-        if toc_offset.last_position() > self.page_blob.get_blob_size(None).await {
-            if !self.sub_pages.contains_key(&sub_page_id.value) {
-                self.sub_pages
-                    .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
-            }
-            self.sub_pages
-                .get(&sub_page_id.value)
-                .unwrap()
-                .add_missing(message_id)
+        for interval in &intervals_compiler.intervals {
+            let payload = self
+                .page_blob
+                .read_from_position(interval.start_pos, interval.len)
                 .await;
-            return;
-        }
 
-        let result = self
-            .page_blob
-            .read_from_position(toc_offset.offset, toc_offset.size)
-            .await;
+            for message_id in interval.get_message_ids() {
+                let payload = intervals_compiler.read_payload(message_id, payload.as_slice());
 
-        self.restore_message(message_id, result.as_slice()).await;
-    }
-
-    async fn restore_message(
-        &mut self,
-        message_id: MessageId,
-        payload: &[u8],
-    ) -> Option<Arc<SubPage>> {
-        let sub_page_id = SubPageId::from_message_id(message_id);
-
-        if !self.sub_pages.contains_key(&sub_page_id.value) {
-            self.sub_pages
-                .insert(sub_page_id.value, Arc::new(SubPage::new(sub_page_id)));
-        }
-
-        let sub_page = self.sub_pages.get(&sub_page_id.value).unwrap();
-        match prost::Message::decode(payload) {
-            Ok(msg) => {
-                sub_page.add_message(msg).await;
-            }
-            Err(err) => {
-                println!("Can not decode message{}", err);
-                sub_page.add_missing(message_id).await;
+                match prost::Message::decode(payload) {
+                    Ok(msg) => {
+                        self.update_min_max(message_id);
+                        messages.insert(message_id, msg);
+                    }
+                    Err(err) => {
+                        println!("Can not decode message{}", err);
+                    }
+                }
             }
         }
 
-        return Some(sub_page.clone());
+        Some(SubPage::restored(sub_page_id.clone(), messages))
     }
 
     pub async fn persist_messages(

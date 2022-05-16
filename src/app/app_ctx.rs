@@ -11,12 +11,13 @@ use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
-    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
-    message_pages::{CompressedCluster, CompressedClusterId},
+    compressed_page::*,
+    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils, YearlyIndexByMinute},
     page_blob_random_access::PageBlobRandomAccess,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     topic_data::TopicsDataList,
+    typing::Year,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
@@ -73,11 +74,7 @@ impl AppContext {
     }
 
     pub fn get_max_payload_size(&self) -> usize {
-        1024 * 1024 * 3 //TODO - сделать настройку
-    }
-
-    pub fn get_max_message_size(&self) -> usize {
-        1024 * 1024 * 5 //TODO - сделать настройку
+        self.settings.max_message_size
     }
 
     pub fn get_env_info(&self) -> String {
@@ -150,7 +147,11 @@ impl AppContext {
             .unwrap();
     }
 
-    pub async fn create_index_storage(&self, topic_id: &str, year: u32) -> IndexByMinuteStorage {
+    pub async fn open_or_create_yearly_index_storage(
+        &self,
+        topic_id: &str,
+        year: Year,
+    ) -> YearlyIndexByMinute {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
         let azure_storage = AzurePageBlobStorage::new(
@@ -166,7 +167,34 @@ impl AppContext {
         )
         .await;
 
-        IndexByMinuteStorage::new(page_blob_random_access)
+        YearlyIndexByMinute::new(year, IndexByMinuteStorage::new(page_blob_random_access)).await
+    }
+
+    pub async fn open_yearly_index_storage_if_exists(
+        &self,
+        topic_id: &str,
+        year: Year,
+    ) -> Option<YearlyIndexByMinute> {
+        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob_random_access = PageBlobRandomAccess::open_if_exists(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await?;
+
+        let result =
+            YearlyIndexByMinute::new(year, IndexByMinuteStorage::new(page_blob_random_access))
+                .await;
+
+        Some(result)
     }
 
     pub async fn open_or_create_compressed_cluster(

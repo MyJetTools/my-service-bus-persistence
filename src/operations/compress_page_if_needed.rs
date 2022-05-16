@@ -1,9 +1,8 @@
 use my_service_bus_shared::MessageId;
 
-use crate::{
-    app::AppContext, message_pages::CompressedClusterId, sub_page::SubPageId,
-    topic_data::TopicData, uncompressed_page::*,
-};
+use crate::compressed_page::*;
+
+use crate::{app::AppContext, sub_page::SubPageId, topic_data::TopicData, uncompressed_page::*};
 
 //TODO - Somehow unit test it
 pub async fn compress_page_if_needed(

@@ -1,6 +1,6 @@
 use my_service_bus_shared::page_id::PageId;
 
-use crate::message_pages::CompressedClusterId;
+use crate::compressed_page::*;
 
 pub const SYSTEM_FILE_NAME: &str = "system";
 

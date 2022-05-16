@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
-use crate::{app::AppContext, uncompressed_page::UncompressedPageId};
+use crate::app::AppContext;
 
 use super::{
     read_page::{MessagesReader, ReadCondition},
@@ -15,8 +15,6 @@ pub async fn get_message_by_id(
     message_id: MessageId,
 ) -> Result<Option<MessageProtobufModel>, OperationError> {
     let topic_data = super::topics::get_topic(app, topic_id).await?;
-
-    let page_id = UncompressedPageId::from_message_id(message_id);
 
     let mut messages_reader = MessagesReader::new(
         app.clone(),

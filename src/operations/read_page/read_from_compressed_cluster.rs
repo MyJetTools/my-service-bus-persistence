@@ -1,9 +1,9 @@
-use std::sync::Arc;
-
+use crate::compressed_page::*;
 use crate::{
-    message_pages::{CompressedCluster, CompressedClusterId},
+    app::Logs,
     sub_page::{SubPage, SubPageId},
 };
+use std::sync::Arc;
 
 pub struct ReadFromCompressedClusters {
     compressed_cluster: Option<Arc<CompressedCluster>>,
@@ -21,11 +21,25 @@ impl ReadFromCompressedClusters {
         }
     }
 
-    pub fn get_sub_page(&self, sub_page_id: &SubPageId) -> Option<Arc<SubPage>> {
+    pub async fn get_sub_page(
+        &self,
+        sub_page_id: &SubPageId,
+        topic_id: &str,
+        logs: &Logs,
+    ) -> Option<SubPage> {
         let compressed_cluster = self.compressed_cluster.as_ref()?;
 
-        let result = compressed_cluster.get_sub_page(sub_page_id)?;
-
-        return Some(Arc::new(result));
+        match compressed_cluster.get_sub_page(sub_page_id).await {
+            Ok(result) => result,
+            Err(err) => {
+                logs.add_error_str(
+                    Some(topic_id),
+                    "Reading Compressed subpage",
+                    "Can not read compressed subpage".to_string(),
+                    format!("{:?}", err),
+                );
+                None
+            }
+        }
     }
 }

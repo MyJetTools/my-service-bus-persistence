@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use tokio::sync::Mutex;
 
-use crate::{
-    index_by_minute::YearlyIndexByMinute, message_pages::CompressedCluster, uncompressed_page::*,
-};
+use crate::compressed_page::*;
+
+use crate::{index_by_minute::YearlyIndexByMinute, uncompressed_page::*};
 
 use super::topic_data_metrics::TopicDataMetrics;
 

@@ -1,10 +1,6 @@
+use crate::compressed_page::*;
+use crate::{app::AppContext, topic_data::TopicData};
 use std::sync::Arc;
-
-use crate::{
-    app::AppContext,
-    message_pages::{CompressedCluster, CompressedClusterId},
-    topic_data::TopicData,
-};
 
 pub async fn get_compressed_cluster_to_read(
     app: &AppContext,

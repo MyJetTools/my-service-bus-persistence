@@ -54,7 +54,9 @@ async fn init_yearly_index(
     index_by_minute: &mut HashMap<u32, YearlyIndexByMinute>,
     year: u32,
 ) {
-    let storage = app.create_index_storage(topic_id, year).await;
-    let yearly_index_by_minute = YearlyIndexByMinute::new(year, storage).await;
+    let yearly_index_by_minute = app
+        .open_or_create_yearly_index_storage(topic_id, year)
+        .await;
+
     index_by_minute.insert(year, yearly_index_by_minute);
 }
