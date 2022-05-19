@@ -300,7 +300,6 @@ pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Optio
 #[cfg(test)]
 mod test {
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-    use my_service_bus_shared::bcl::BclDateTime;
     use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use crate::{
@@ -345,14 +344,14 @@ mod test {
 
         let msg_to_upload0 = MessageProtobufModel {
             message_id: 100_001,
-            created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+            created: DateTimeAsMicroseconds::now().unix_microseconds,
             data: vec![1, 2, 3],
             headers: vec![],
         };
 
         let msg_to_upload1 = MessageProtobufModel {
             message_id: 100_002,
-            created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+            created: DateTimeAsMicroseconds::now().unix_microseconds,
             data: vec![1, 2, 3],
             headers: vec![],
         };
@@ -416,7 +415,7 @@ mod test {
             for _ in 0..10000 {
                 let msg_to_upload = MessageProtobufModel {
                     message_id,
-                    created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+                    created: DateTimeAsMicroseconds::now().unix_microseconds,
                     data: format!("CONTENT: {:20}", message_id).into_bytes(),
                     headers: vec![],
                 };

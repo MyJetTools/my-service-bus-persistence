@@ -7,7 +7,6 @@ use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
-//TODO - Check None message
 pub fn get_none_message() -> MessageContentGrpcModel {
     MessageContentGrpcModel {
         created: DateTimeAsMicroseconds::now().unix_microseconds,
