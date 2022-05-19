@@ -2,42 +2,6 @@ syntax = "proto3";
 import "google/protobuf/empty.proto";
 package persistence;
 
-message TimeSpan {
-  enum TimeSpanScale {
-     DAYS = 0;
-     HOURS = 1;
-     MINUTES = 2;
-     SECONDS = 3;
-     MILLISECONDS = 4;
-     TICKS = 5;
-     MINMAX = 15;
-  }
-  sint64 value = 1;
-  persistence.TimeSpan.TimeSpanScale scale = 2;
-}
-
-message DateTime {
-  enum TimeSpanScale {
-     DAYS = 0;
-     HOURS = 1;
-     MINUTES = 2;
-     SECONDS = 3;
-     MILLISECONDS = 4;
-     TICKS = 5;
-     MINMAX = 15;
-  }
-  enum DateTimeKind {
-     UNSPECIFIED = 0;
-     UTC = 1;
-     LOCAL = 2;
-  }
-  sint64 value = 1;
-  persistence.DateTime.TimeSpanScale scale = 2;
-  persistence.DateTime.DateTimeKind kind = 3;
-}
-
-/////////////////
-
 enum QueueTypePersistenceGrpcEnum {
    Permanent = 0;
    AutoDelete = 1;
@@ -75,12 +39,12 @@ service MyServiceBusQueuePersistenceGrpcService {
 
 message GetHistoryByDateGrpcRequest {
   string TopicId = 1;
-  persistence.DateTime FromDateTime = 2;
+  int64 FromDateTime = 2;
 }
 
 message MessageContentGrpcModel {
   int64 MessageId = 1;
-  persistence.DateTime Created = 2;
+  int64 Created = 2;
   bytes Data = 3;
   repeated persistence.MessageContentMetaDataItem MetaData = 4;
 }
@@ -115,14 +79,9 @@ message GetMessagesPageGrpcRequest {
   int32 Version = 5;
 }
 
-message DeleteTopicRequest{
-  string TopicId = 1;
-}
-
 service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
    rpc GetPageCompressed(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.CompressedMessageChunkModel);
    rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
-   rpc DeleteTopic(persistence.DeleteTopicRequest) returns (google.protobuf.Empty);
 }
 

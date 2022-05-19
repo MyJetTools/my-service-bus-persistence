@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use my_service_bus_shared::{bcl::BclToUnixMicroseconds, protobuf_models::MessageProtobufModel};
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{
     app::AppContext,
@@ -39,13 +40,10 @@ fn extract_year_and_minute_within_year(
     app: &AppContext,
     msg: &MessageProtobufModel,
 ) -> Option<(MinuteWithinYear, u32)> {
-    if let Some(created) = &msg.created {
-        if let Ok(dt) = created.to_date_time() {
-            return Some(app.index_by_minute_utils.get_minute_within_the_year(dt));
-        }
-    }
-
-    None
+    return Some(
+        app.index_by_minute_utils
+            .get_minute_within_the_year(DateTimeAsMicroseconds::new(msg.created)),
+    );
 }
 
 async fn init_yearly_index(

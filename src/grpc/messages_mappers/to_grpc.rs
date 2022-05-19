@@ -1,19 +1,11 @@
-use my_service_bus_shared::{
-    bcl::BclDateTime,
-    protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel},
-};
+use my_service_bus_shared::protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel};
 
 use crate::persistence_grpc::*;
 
 pub fn to_message(src: &MessageProtobufModel) -> MessageContentGrpcModel {
-    let created: Option<DateTime> = match src.created {
-        Some(created) => Some(created.into()),
-        None => None,
-    };
-
     MessageContentGrpcModel {
         data: src.data.clone(),
-        created,
+        created: src.created,
         message_id: src.message_id,
         meta_data: src
             .headers
@@ -35,16 +27,6 @@ impl Into<MessageContentMetaDataItem> for MessageMetaDataProtobufModel {
         MessageContentMetaDataItem {
             key: self.key,
             value: self.value,
-        }
-    }
-}
-
-impl Into<DateTime> for BclDateTime {
-    fn into(self) -> DateTime {
-        DateTime {
-            kind: self.kind,
-            value: self.value,
-            scale: self.scale,
         }
     }
 }

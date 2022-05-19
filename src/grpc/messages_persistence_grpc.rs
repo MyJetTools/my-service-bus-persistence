@@ -142,12 +142,4 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         return Ok(tonic::Response::new(()));
     }
-
-    async fn delete_topic(
-        &self,
-        _: tonic::Request<DeleteTopicRequest>,
-    ) -> Result<tonic::Response<()>, tonic::Status> {
-        todo!("Not Implemented yet");
-        //   return Ok(tonic::Response::new(()));
-    }
 }
