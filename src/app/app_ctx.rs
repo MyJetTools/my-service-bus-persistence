@@ -32,30 +32,22 @@ pub struct AppContext {
 
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
-    pub queue_connection: AzureStorageConnection,
+    pub queue_connection: Arc<AzureStorageConnection>,
     pub messages_connection: Arc<AzureStorageConnection>,
     pub shutting_down: Arc<AtomicBool>,
     pub initialized: AtomicBool,
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
-
-    messages_conn_string: Arc<AzureStorageConnection>,
 }
 
 impl AppContext {
     pub async fn new(settings: SettingsModel) -> AppContext {
         let logs = Arc::new(Logs::new());
-        let messages_connection = Arc::new(AzureStorageConnection::from_conn_string(
-            settings.messages_connection_string.as_str(),
-        ));
+        let messages_connection = Arc::new(settings.create_messages_connection_string());
 
-        let queue_connection =
-            AzureStorageConnection::from_conn_string(settings.queues_connection_string.as_str());
+        let queue_connection = Arc::new(settings.create_queue_connection_string());
 
         let topics_repo = settings.get_topics_snapshot_repository().await;
-
-        let messages_conn_string =
-            AzureStorageConnection::from_conn_string(settings.messages_connection_string.as_str());
 
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
@@ -69,12 +61,25 @@ impl AppContext {
             initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
-            messages_conn_string: Arc::new(messages_conn_string),
+        }
+    }
+
+    pub fn get_delete_topic_secret_key(&self) -> &str {
+        match &self.settings {
+            SettingsModel::Production(prod_settins) => {
+                prod_settins.delete_topic_secret_key.as_str()
+            }
+            #[cfg(test)]
+            SettingsModel::Test => "123",
         }
     }
 
     pub fn get_max_payload_size(&self) -> usize {
-        self.settings.max_message_size
+        match &self.settings {
+            SettingsModel::Production(prod_settins) => prod_settins.max_message_size,
+            #[cfg(test)]
+            SettingsModel::Test => 1024,
+        }
     }
 
     pub fn get_env_info(&self) -> String {
@@ -98,27 +103,6 @@ impl AppContext {
         self.initialized.load(Ordering::SeqCst)
     }
 
-    pub async fn open_uncompressed_page_storage_if_exists(
-        &self,
-        topic_id: &str,
-        page_id: &PageId,
-    ) -> Option<PageBlobRandomAccess> {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
-
-        let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
-            topic_id.to_string(),
-            blob_name,
-        )
-        .await;
-
-        PageBlobRandomAccess::open_if_exists(
-            azure_storage,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
-        .await
-    }
-
     pub async fn open_or_create_uncompressed_page_storage(
         &self,
         topic_id: &str,
@@ -127,7 +111,7 @@ impl AppContext {
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.messages_connection.clone(),
             topic_id.to_string(),
             blob_name,
         )
@@ -141,7 +125,7 @@ impl AppContext {
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
-        self.messages_conn_string
+        self.messages_connection
             .create_container_if_not_exist(topic_folder)
             .await
             .unwrap();
@@ -155,7 +139,7 @@ impl AppContext {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
         let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.messages_connection.clone(),
             topic_id.to_string(),
             blob_name,
         )
@@ -178,7 +162,7 @@ impl AppContext {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
         let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.messages_connection.clone(),
             topic_id.to_string(),
             blob_name,
         )
@@ -205,7 +189,7 @@ impl AppContext {
         let blob_name = super::file_name_generators::generate_cluster_blob_name(&cluster_id);
 
         let azure_page_blob_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.messages_connection.clone(),
             topic_id.to_string(),
             blob_name,
         )
@@ -227,6 +211,15 @@ impl AppContext {
         .await
     }
 
+    pub async fn delete_uncompressed_page_blob(&self, topic_id: &str, page_id: PageId) {
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+
+        self.messages_connection
+            .delete_blob(topic_id, blob_name.as_str())
+            .await
+            .unwrap();
+    }
+
     pub async fn open_compressed_cluster_if_exists(
         &self,
         topic_id: &str,
@@ -235,7 +228,7 @@ impl AppContext {
         let blob_name = super::file_name_generators::generate_cluster_blob_name(&cluster_id);
 
         let azure_page_blob_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.messages_connection.clone(),
             topic_id.to_string(),
             blob_name,
         )
@@ -258,13 +251,25 @@ impl AppContext {
         .into()
     }
 
-    pub(crate) async fn delete_uncompressed_page_blob(&self, topic_id: &str, page_id: PageId) {
+    pub async fn open_uncompressed_page_storage_if_exists(
+        &self,
+        topic_id: &str,
+        page_id: &PageId,
+    ) -> Option<PageBlobRandomAccess> {
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
-        self.messages_conn_string
-            .delete_blob(topic_id, blob_name.as_str())
-            .await
-            .unwrap();
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_connection.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        PageBlobRandomAccess::open_if_exists(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await
     }
 }
 

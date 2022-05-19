@@ -111,9 +111,16 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let grpc_contract =
             super::messages_mappers::unzip_and_deserialize(&mut request.into_inner()).await?;
 
+        let max_message_id_from_payload = grpc_contract.get_max_message_id();
+
+        if max_message_id_from_payload.is_none() {
+            panic!("We have Save Messages invoke, but no messages are in the payload");
+        }
+
         let topic_data = crate::operations::get_topic_data_to_publish_messages(
             self.app.as_ref(),
             grpc_contract.topic_id.as_str(),
+            max_message_id_from_payload.unwrap(),
         )
         .await;
 
@@ -124,7 +131,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 page_id,
                 messages,
             )
-            .await
+            .await;
         }
 
         return Ok(tonic::Response::new(()));

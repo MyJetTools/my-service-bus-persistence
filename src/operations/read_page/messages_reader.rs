@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
 
+use crate::app::AppContext;
 use crate::compressed_page::*;
 
 use crate::{
-    app::AppContext,
     sub_page::{SubPage, SubPageId},
     topic_data::TopicData,
     uncompressed_page::UncompressedPageId,
@@ -14,7 +14,7 @@ use crate::{
 use super::{ReadCondition, ReadFromCompressedClusters, ReadFromUncompressedPage};
 
 pub struct MessagesReader {
-    pub app: Arc<AppContext>,
+    app: Arc<AppContext>,
     topic_data: Arc<TopicData>,
     current_uncompressed_page: Option<ReadFromUncompressedPage>,
     current_compressed_cluster: Option<ReadFromCompressedClusters>,
@@ -161,5 +161,96 @@ impl MessagesReader {
                 return result;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use my_service_bus_shared::{bcl::BclDateTime, protobuf_models::MessageProtobufModel};
+    use rust_extensions::date_time::DateTimeAsMicroseconds;
+
+    use crate::{app::AppContext, operations::read_page::ReadCondition, settings::SettingsModel};
+
+    use super::MessagesReader;
+
+    #[tokio::test]
+    async fn test_empty_blobs() {
+        const TOPIC_ID: &str = "test";
+
+        let settings_model = SettingsModel::create_for_test_environment();
+
+        let app = Arc::new(AppContext::new(settings_model).await);
+
+        let topic_data =
+            crate::operations::get_topic_data_to_publish_messages(app.as_ref(), TOPIC_ID, 1).await;
+
+        let read_condition = ReadCondition::SingleMessage(1);
+        let mut topic_data = MessagesReader::new(app, topic_data, read_condition);
+
+        let result = topic_data.get_message().await;
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_we_have_exact_message_in_uncompressed_page_but_not_in_storage() {
+        const TOPIC_ID: &str = "test";
+        let settings_model = SettingsModel::create_for_test_environment();
+        let app = Arc::new(AppContext::new(settings_model).await);
+
+        let topic_data =
+            crate::operations::get_topic_data_to_publish_messages(app.as_ref(), TOPIC_ID, 1).await;
+
+        let new_messages = vec![MessageProtobufModel {
+            message_id: 1,
+            created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+            data: vec![0u8, 1u8, 2u8],
+            headers: vec![],
+        }];
+
+        crate::operations::new_messages(app.as_ref(), topic_data.as_ref(), 0, new_messages).await;
+
+        let read_condition = ReadCondition::SingleMessage(1);
+        let mut messages_reader = MessagesReader::new(app, topic_data, read_condition);
+
+        let result = messages_reader.get_message().await;
+
+        assert!(result.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_we_have_exact_message_in_storage_only() {
+        const TOPIC_ID: &str = "test";
+
+        let settings_model = SettingsModel::create_for_test_environment();
+        let app = Arc::new(AppContext::new(settings_model).await);
+
+        let topic_data =
+            crate::operations::get_topic_data_to_publish_messages(app.as_ref(), TOPIC_ID, 1).await;
+
+        let new_messages = vec![MessageProtobufModel {
+            message_id: 1,
+            created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+            data: vec![0u8, 1u8, 2u8],
+            headers: vec![],
+        }];
+
+        let page =
+            crate::operations::new_messages(app.as_ref(), topic_data.as_ref(), 0, new_messages)
+                .await;
+
+        page.flush_to_storage(1024 * 1024).await;
+
+        //Let's Assume we GC our page
+        topic_data.uncompressed_pages_list.remove_page(0).await;
+
+        let read_condition = ReadCondition::SingleMessage(1);
+        let mut messages_reader = MessagesReader::new(app, topic_data, read_condition);
+
+        let result = messages_reader.get_message().await;
+
+        assert!(result.is_some());
     }
 }

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use my_service_bus_shared::MessageId;
 use tokio::sync::RwLock;
 
 use super::TopicData;
@@ -26,21 +27,25 @@ impl TopicsDataList {
         read_access.values().map(|v| v.clone()).collect()
     }
 
-    pub async fn create_topic_data(&self, topic_id: &str) -> bool {
+    pub async fn create_topic_data(&self, topic_id: &str, max_message_id: MessageId) -> bool {
         let mut write_access = self.data.write().await;
 
         if write_access.contains_key(topic_id) {
             return false;
         }
 
-        let topic_data = Arc::new(TopicData::new(topic_id));
+        let topic_data = Arc::new(TopicData::new(topic_id, max_message_id));
         write_access.insert(topic_id.to_string(), topic_data);
         return true;
     }
 
-    pub async fn init_topic_data(&self, topic_id: &str) -> Arc<TopicData> {
+    pub async fn init_topic_data(
+        &self,
+        topic_id: &str,
+        max_message_id: MessageId,
+    ) -> Arc<TopicData> {
         let mut write_access = self.data.write().await;
-        let topic_data = Arc::new(TopicData::new(topic_id));
+        let topic_data = Arc::new(TopicData::new(topic_id, max_message_id));
         write_access.insert(topic_id.to_string(), topic_data.clone());
         topic_data
     }

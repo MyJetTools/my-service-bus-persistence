@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::page_id::PageId;
+use my_service_bus_shared::MessageId;
 use rust_extensions::StopWatch;
 
-use crate::{
-    app::{file_name_generators::SYSTEM_FILE_NAME, AppContext},
-    uncompressed_page::{get_active_pages, UncompressedPageId},
-};
+use crate::app::{file_name_generators::SYSTEM_FILE_NAME, AppContext};
 
 pub async fn init(app: Arc<AppContext>) {
     let topics_snapshots = app.topics_snapshot.get().await;
@@ -20,21 +17,12 @@ pub async fn init(app: Arc<AppContext>) {
             continue;
         }
 
-        let current_page_id = UncompressedPageId::from_message_id(topic_snapshot.message_id);
-
-        let active_pages = get_active_pages(topic_snapshot);
-
-        for page_id in active_pages.values() {
-            println!("Restoring {}/{}", topic_snapshot.topic_id, page_id);
-
-            restore_page(
-                app.clone(),
-                page_id.clone(),
-                page_id >= &current_page_id.value,
-                topic_snapshot.topic_id.to_string(),
-            )
-            .await;
-        }
+        restore_page(
+            app.clone(),
+            topic_snapshot.topic_id.as_str(),
+            topic_snapshot.message_id,
+        )
+        .await;
     }
 
     sw.pause();
@@ -48,40 +36,23 @@ pub async fn init(app: Arc<AppContext>) {
     app.set_initialized();
 }
 
-async fn restore_page(
-    app: Arc<AppContext>,
-    page_id: PageId,
-    is_page_current: bool,
-    topic_id: String,
-) {
+async fn restore_page(app: Arc<AppContext>, topic_id: &str, message_id: MessageId) {
     let mut sw = StopWatch::new();
     sw.start();
 
     app.logs.add_info_string(
-        Some(topic_id.as_str()),
+        Some(topic_id),
         "Initialization",
-        format!("Loading messages #{}", page_id),
+        format!("Restoring topic {}", topic_id),
     );
 
-    let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
-
-    if is_page_current {
-        crate::operations::restore_page::open_or_create(app.as_ref(), topic_data.as_ref(), page_id)
-            .await;
-    } else {
-        crate::operations::restore_page::open_uncompressed_if_exists(
-            app.as_ref(),
-            topic_data.as_ref(),
-            page_id,
-        )
-        .await;
-    }
+    let topic_data = app.topics_list.init_topic_data(topic_id, message_id).await;
 
     sw.pause();
 
     app.logs.add_info_string(
-        Some(topic_id.as_str()),
+        Some(topic_id),
         "Initialization",
-        format!("Loaded messages #{} in {:?}", page_id, sw.duration()),
+        format!("Topic {} is restored  in {:?}", topic_id, sw.duration()),
     );
 }

@@ -21,8 +21,8 @@ mod uncompressed_page;
 use crate::{
     app::AppContext,
     background::{
-        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
-        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer,
+        metrics_updater::MetricsUpdater, presist_gc_and_compress::PersitGcAndCompressTimer,
+        save_min_index::SaveMinIndexTimer, topics_snapshot_saver::TopicsSnapshotSaverTimer,
     },
     settings::SettingsModel,
 };
@@ -35,24 +35,23 @@ pub mod persistence_grpc {
 
 #[tokio::main]
 async fn main() {
-    let settings = SettingsModel::read().await;
+    let settings = SettingsModel::create_for_production_environment().await;
 
     let app = AppContext::new(settings).await;
 
     let app = Arc::new(app);
 
     let mut timer_3s = MyTimer::new(Duration::from_secs(3));
-    timer_3s.register_timer(
-        "SaveMessagesTimer",
-        Arc::new(SaveMessagesTimer::new(app.clone())),
-    );
 
     timer_3s.register_timer(
         "TopicsSnapshotSaver",
         Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
     );
 
-    timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
+    timer_3s.register_timer(
+        "PersistGcAndCompress",
+        Arc::new(PersitGcAndCompressTimer::new(app.clone())),
+    );
     timer_3s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
     timer_3s.register_timer(
         "SaveMinIndexTimer",

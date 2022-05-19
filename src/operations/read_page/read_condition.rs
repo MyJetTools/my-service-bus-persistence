@@ -30,7 +30,9 @@ impl ReadCondition {
         read_messages_amount: usize,
     ) -> bool {
         match self {
-            ReadCondition::SingleMessage(_) => read_messages_amount > 0,
+            ReadCondition::SingleMessage(message_id) => {
+                read_messages_amount > 0 || current_message_id > *message_id
+            }
             ReadCondition::Range {
                 from_id: _,
                 to_id,
@@ -49,5 +51,23 @@ impl ReadCondition {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ReadCondition;
+
+    #[test]
+    pub fn test_single_message() {
+        let read_condition: ReadCondition = ReadCondition::SingleMessage(1);
+
+        assert_eq!(false, read_condition.we_reached_the_end(0, 0));
+
+        assert_eq!(true, read_condition.we_reached_the_end(1, 1));
+
+        assert_eq!(false, read_condition.we_reached_the_end(1, 0));
+
+        assert_eq!(true, read_condition.we_reached_the_end(2, 0));
     }
 }

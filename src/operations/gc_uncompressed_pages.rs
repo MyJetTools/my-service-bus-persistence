@@ -9,7 +9,7 @@ use super::OperationError;
 
 pub async fn gc_uncompressed_pages(
     app: &AppContext,
-    topic_data: Arc<TopicData>,
+    topic_data: &Arc<TopicData>,
 
     active_pages: &[UncompressedPageId],
     topic_message_id: MessageId,

@@ -84,7 +84,7 @@ impl UncompressedPageData {
         for message in messages {
             let sub_page_id = SubPageId::from_message_id(message.message_id);
 
-            if messages_by_sub_page.contains_key(&sub_page_id.value) {
+            if !messages_by_sub_page.contains_key(&sub_page_id.value) {
                 messages_by_sub_page.insert(sub_page_id.value, Vec::new());
             }
 

@@ -31,3 +31,33 @@ pub async fn compress_page_if_needed(
         cluster.save_cluser_page(sub_page.as_ref()).await;
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    use std::sync::Arc;
+
+    use my_service_bus_shared::{bcl::BclDateTime, protobuf_models::MessageProtobufModel};
+    use rust_extensions::date_time::DateTimeAsMicroseconds;
+
+    use crate::{app::AppContext, settings::SettingsModel};
+
+    #[tokio::test]
+    async fn test_we_do_not_compress_yet() {
+        const TOPIC_ID: &str = "test";
+        let settings_model = SettingsModel::create_for_test_environment();
+        let app = Arc::new(AppContext::new(settings_model).await);
+
+        let topic_data =
+            crate::operations::get_topic_data_to_publish_messages(app.as_ref(), TOPIC_ID, 1).await;
+
+        let new_messages = vec![MessageProtobufModel {
+            message_id: 1,
+            created: Some(BclDateTime::from(DateTimeAsMicroseconds::now())),
+            data: vec![0u8, 1u8, 2u8],
+            headers: vec![],
+        }];
+
+        crate::operations::new_messages(app.as_ref(), topic_data.as_ref(), 0, new_messages).await;
+    }
+}

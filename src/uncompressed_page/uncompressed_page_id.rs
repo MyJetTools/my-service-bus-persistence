@@ -1,5 +1,7 @@
 use my_service_bus_shared::{page_id::PageId, MessageId};
 
+use crate::sub_page::SubPageId;
+
 use super::utils::MESSAGES_PER_PAGE;
 
 #[derive(Clone, Copy)]
@@ -19,5 +21,9 @@ impl UncompressedPageId {
 
     pub fn get_first_message_id(&self) -> MessageId {
         self.value * MESSAGES_PER_PAGE
+    }
+
+    pub fn from_sub_page_id(sub_page_id: &SubPageId) -> Self {
+        todo!("Implement");
     }
 }

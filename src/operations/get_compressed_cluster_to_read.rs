@@ -1,5 +1,6 @@
+use crate::app::AppContext;
 use crate::compressed_page::*;
-use crate::{app::AppContext, topic_data::TopicData};
+use crate::topic_data::TopicData;
 use std::sync::Arc;
 
 pub async fn get_compressed_cluster_to_read(

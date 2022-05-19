@@ -1,11 +1,18 @@
 use my_service_bus_shared::{page_compressor, protobuf_models::MessageProtobufModel};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::{grpc::contracts::NewMessagesProtobufContract, uncompressed_page::UncompressedPageId};
 
 pub struct NewMessagesGrpcContract {
     pub topic_id: String,
-    pub messages_by_page: HashMap<i64, Vec<MessageProtobufModel>>,
+    pub messages_by_page: BTreeMap<i64, Vec<MessageProtobufModel>>,
+}
+
+impl NewMessagesGrpcContract {
+    pub fn get_max_message_id(&self) -> Option<i64> {
+        let result = self.messages_by_page.keys().last()?;
+        Some(*result)
+    }
 }
 
 pub async fn unzip_and_deserialize(
@@ -28,7 +35,7 @@ pub async fn unzip_and_deserialize(
 
     let contract = NewMessagesProtobufContract::parse(unzipped.as_slice());
 
-    let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
+    let mut messages_by_page: BTreeMap<i64, Vec<MessageProtobufModel>> = BTreeMap::new();
 
     for msg in contract.messages {
         let page_id = UncompressedPageId::from_message_id(msg.message_id);

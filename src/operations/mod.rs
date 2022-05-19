@@ -1,5 +1,5 @@
 mod compress_page_if_needed;
-mod compress_previous_page;
+
 pub mod data_initializer;
 mod error;
 mod gc_uncompressed_pages;
@@ -21,7 +21,6 @@ mod restore_page_error;
 mod topics;
 
 pub use compress_page_if_needed::compress_page_if_needed;
-pub use compress_previous_page::compress_previous_page;
 pub use error::OperationError;
 pub use gc_uncompressed_pages::gc_uncompressed_pages;
 pub use gc_yearly_index::gc_yearly_index;
