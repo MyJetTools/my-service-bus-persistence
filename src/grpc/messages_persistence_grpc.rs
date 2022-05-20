@@ -18,6 +18,10 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         Box<dyn Stream<Item = Result<CompressedMessageChunkModel, Status>> + Send + Sync + 'static>,
     >;
 
+    type GetPageStream = Pin<
+        Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
+    >;
+
     async fn get_message(
         &self,
         request: tonic::Request<GetMessageGrpcRequest>,
@@ -105,6 +109,49 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             for chunk in zip_payload {
                 let grpc_contract = CompressedMessageChunkModel { chunk };
                 tx.send(Ok(grpc_contract)).await.unwrap();
+            }
+        });
+
+        Ok(tonic::Response::new(Box::pin(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        )))
+    }
+
+    async fn get_page(
+        &self,
+        request: tonic::Request<crate::persistence_grpc::GetMessagesPageGrpcRequest>,
+    ) -> Result<tonic::Response<Self::GetPageStream>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let req = request.into_inner();
+
+        let app = self.app.clone();
+
+        let (tx, rx) = mpsc::channel(4);
+
+        tokio::spawn(async move {
+            let current_message_id = app
+                .topics_snapshot
+                .get_current_message_id(req.topic_id.as_ref())
+                .await
+                .unwrap();
+
+            let data_by_topic = app.topics_list.get(&req.topic_id).await;
+            if data_by_topic.is_none() {
+                return;
+            }
+
+            let topic_data = data_by_topic.unwrap();
+
+            let page_id = MessagePageId::new(req.page_no);
+
+            let page =
+                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
+                    .await;
+
+            for msg in page.get_all(Some(current_message_id)).await {
+                let grpc_contract = Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
+                tx.send(grpc_contract).await.unwrap();
             }
         });
 

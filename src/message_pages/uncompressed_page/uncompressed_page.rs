@@ -118,11 +118,6 @@ impl UncompressedPage {
                 .store(write_access.toc.get_messages_count(), Ordering::SeqCst);
 
             let write_pos = write_access.toc.get_write_position();
-            println!(
-                "Write pos {}. Messages: {}",
-                write_pos,
-                messages_to_persist.len()
-            );
 
             self.write_position.store(write_pos, Ordering::SeqCst);
 

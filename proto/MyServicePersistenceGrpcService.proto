@@ -82,6 +82,7 @@ message GetMessagesPageGrpcRequest {
 service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
    rpc GetPageCompressed(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.CompressedMessageChunkModel);
+   rpc GetPage(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.MessageContentGrpcModel);
    rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
 }
 
