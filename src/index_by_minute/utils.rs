@@ -81,9 +81,9 @@ impl IndexByMinuteUtils {
 
     pub fn get_minute_within_the_year(
         &self,
-        dt_millis: DateTimeAsMicroseconds,
+        dt_micros: DateTimeAsMicroseconds,
     ) -> (MinuteWithinYear, u32) {
-        let d = dt_millis.to_chrono_utc();
+        let d = dt_micros.to_chrono_utc();
 
         let month = d.month();
         let day = d.day();

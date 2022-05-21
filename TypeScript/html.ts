@@ -71,7 +71,7 @@ class HtmlRenderer {
         })) {
 
             let badges = '';
-            for (let loadedPage of topic.loadedPages) {
+            for (let loadedPage of topic.loadedPages.sort((a, b) => a.pageId > b.pageId ? 1 : -1)) {
                 badges += '<div>';
 
 
@@ -83,9 +83,6 @@ class HtmlRenderer {
                 } else {
                     theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
                 }
-
-
-
 
                 badges += this.compileTable([theBadge, 'WritePos: ' + this.formatNumber(loadedPage.writePosition)]) +
                     '<div class="progress">' +

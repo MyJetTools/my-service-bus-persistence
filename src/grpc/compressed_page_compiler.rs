@@ -3,12 +3,13 @@ use my_service_bus_shared::{
     protobuf_models::{MessageProtobufModel, MessagesProtobufModel},
     MessageId,
 };
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
 
 pub fn get_none_message() -> MessageContentGrpcModel {
     MessageContentGrpcModel {
-        created: None,
+        created: DateTimeAsMicroseconds::now().unix_microseconds,
         data: Vec::new(),
         meta_data: Vec::new(),
         message_id: -1,

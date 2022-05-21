@@ -1,6 +1,6 @@
 [package]
 name = "my-sb-persistence"
-version = "1.1.7"
+version = "2.2.1"
 authors = ["Andrey <amigin@gmail.com>"]
 edition = "2021"
 
@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 my-azure-storage-sdk = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-azure-storage.git" }
-my-service-bus-shared = { branch = "0.1.1", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
+my-service-bus-shared = { branch = "0.2.0", git = "https://github.com/MyJetTools/my-service-bus-shared.git" }
 
 my-http-server = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server.git" }
 my-http-server-swagger = { branch = "0.2.3", git = "https://github.com/MyJetTools/my-http-server-swagger.git" }
