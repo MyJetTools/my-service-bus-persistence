@@ -30,16 +30,24 @@ impl MyTimerTick for SaveMessagesTimer {
                     "Saving messages",
                     format!("Topic data {} is not found. Creating it", topic.topic_id),
                 );
-                topic_data =
-                    crate::operations::init_new_topic(self.app.as_ref(), topic.topic_id.as_str())
-                        .await;
+
+                topic_data = crate::operations::init_new_topic(
+                    self.app.as_ref(),
+                    topic.topic_id.as_str(),
+                    topic.message_id,
+                )
+                .await
+                .into();
             }
 
             let topic_data = topic_data.unwrap();
 
             flush_minute_index_data(topic_data.as_ref()).await;
 
-            let pages_with_data_to_save = topic_data.pages_list.get_pages_with_data_to_save().await;
+            let pages_with_data_to_save = topic_data
+                .uncompressed_pages_list
+                .get_pages_with_data_to_save()
+                .await;
 
             for page in pages_with_data_to_save {
                 if let Some(result) = page.flush_to_storage(MAX_PERSIST_SIZE).await {

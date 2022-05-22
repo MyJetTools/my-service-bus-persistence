@@ -1,7 +1,7 @@
 use std::usize;
 
 use crate::{
-    app::AppContext, message_pages::MESSAGES_PER_PAGE, topic_data::TopicData,
+    app::AppContext, topic_data::TopicData, uncompressed_page::MESSAGES_PER_PAGE,
     utils::duration_to_string,
 };
 use my_service_bus_shared::protobuf_models::{
@@ -169,16 +169,16 @@ impl StatusModel {
 async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
     let mut result: Vec<LoadedPageModel> = Vec::new();
 
-    for page in topic_data.pages_list.get_all().await {
-        let count = page.get_messages_count();
+    for page in topic_data.uncompressed_pages_list.get_all().await {
+        let count = page.metrics.get_messages_count();
         let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
 
         let item = LoadedPageModel {
-            page_id: page.get_page_id(),
+            page_id: page.page_id.value,
             percent: percent as usize,
             count,
-            has_skipped_messages: page.has_skipped_messages(),
-            write_position: page.get_write_position(),
+            has_skipped_messages: page.metrics.get_has_skipped_messages(),
+            write_position: page.metrics.get_write_position(),
         };
 
         result.push(item);
@@ -197,7 +197,7 @@ async fn get_topics_model(
     cache_by_topic: &TopicData,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {
-    let active_pages = crate::message_pages::utils::get_active_pages(snapshot);
+    let active_pages = crate::uncompressed_page::utils::get_active_pages(snapshot);
 
     let last_save_moment_since = now.duration_since(cache_by_topic.metrics.get_last_saved_moment());
 

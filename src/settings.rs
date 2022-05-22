@@ -9,31 +9,44 @@ use crate::{
     toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository,
 };
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SettingsModel {
-    #[serde(rename = "QueuesConnectionString")]
-    pub queues_connection_string: String,
-    #[serde(rename = "MessagesConnectionString")]
-    pub messages_connection_string: String,
-    #[serde(rename = "LoadBlobPagesSize")]
-    pub load_blob_pages_size: usize,
-    #[serde(rename = "FlushQueuesSnapshotFreq")]
-    pub flush_queues_snapshot_freq: String,
-    #[serde(rename = "FlushMessagesFreq")]
-    pub flush_messages_freq: String,
-    #[serde(rename = "MaxResponseRecordsAmount")]
-    pub max_response_records_amount: usize,
-    #[serde(rename = "DeleteTopicSecretKey")]
-    pub delete_topic_secret_key: String,
-
-    #[serde(rename = "MaxMessageSize")]
-    pub max_message_size: usize,
+pub enum SettingsModel {
+    Production(SettingsModelData),
+    #[cfg(test)]
+    Test,
 }
 
 impl SettingsModel {
+    pub async fn create_for_production_environment() -> Self {
+        Self::Production(SettingsModelData::read().await)
+    }
+
+    #[cfg(test)]
+    pub fn create_for_test_environment() -> Self {
+        Self::Test
+    }
+
+    pub fn create_messages_connection_string(&self) -> AzureStorageConnection {
+        match self {
+            SettingsModel::Production(prod_settings) => AzureStorageConnection::from_conn_string(
+                prod_settings.messages_connection_string.as_str(),
+            ),
+            #[cfg(test)]
+            SettingsModel::Test => AzureStorageConnection::new_in_memory(),
+        }
+    }
+
+    pub fn create_queue_connection_string(&self) -> AzureStorageConnection {
+        match self {
+            SettingsModel::Production(prod_settings) => AzureStorageConnection::from_conn_string(
+                prod_settings.queues_connection_string.as_str(),
+            ),
+            #[cfg(test)]
+            SettingsModel::Test => AzureStorageConnection::new_in_memory(),
+        }
+    }
+
     pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotBlobRepository {
-        let connection =
-            AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
+        let connection = self.create_queue_connection_string();
         let storage = AzurePageBlobStorage::new(
             Arc::new(connection),
             "topics".to_string(),
@@ -49,7 +62,29 @@ impl SettingsModel {
 
         TopicsSnapshotBlobRepository::new(blob_random_access)
     }
+}
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SettingsModelData {
+    #[serde(rename = "QueuesConnectionString")]
+    pub queues_connection_string: String,
+    #[serde(rename = "MessagesConnectionString")]
+    pub messages_connection_string: String,
+    #[serde(rename = "LoadBlobPagesSize")]
+    pub load_blob_pages_size: usize,
+    #[serde(rename = "FlushQueuesSnapshotFreq")]
+    pub flush_queues_snapshot_freq: String,
+    #[serde(rename = "FlushMessagesFreq")]
+    pub flush_messages_freq: String,
+    #[serde(rename = "MaxResponseRecordsAmount")]
+    pub max_response_records_amount: usize,
+    #[serde(rename = "DeleteTopicSecretKey")]
+    pub delete_topic_secret_key: String,
+    #[serde(rename = "MaxMessageSize")]
+    pub max_message_size: usize,
+}
+
+impl SettingsModelData {
     pub async fn read() -> Self {
         let filename = my_service_bus_shared::settings::get_settings_filename_path(
             ".myservicebus-persistence",
@@ -78,7 +113,7 @@ impl SettingsModel {
             }
         }
 
-        let mut result: SettingsModel = serde_yaml::from_slice(file_content.as_slice()).unwrap();
+        let mut result: Self = serde_yaml::from_slice(file_content.as_slice()).unwrap();
 
         if result.messages_connection_string.starts_with('~') {
             let home = std::env::var("HOME").unwrap();

@@ -33,7 +33,7 @@ async fn handle_request(
     _ctx: &mut HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     let message = crate::operations::get_message_by_id(
-        action.app.as_ref(),
+        &action.app,
         input_data.topic_id.as_str(),
         input_data.message_id,
     )

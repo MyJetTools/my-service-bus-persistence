@@ -6,15 +6,16 @@ use std::sync::{
 use my_azure_storage_sdk::{
     blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
 };
-use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
 use crate::{
-    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
+    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils, YearlyIndexByMinute},
     page_blob_random_access::PageBlobRandomAccess,
     settings::SettingsModel,
     toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     topic_data::TopicsDataList,
+    typing::Year,
+    uncompressed_page::UncompressedPageId,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
@@ -29,8 +30,7 @@ pub struct AppContext {
 
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
-    pub queue_connection: AzureStorageConnection,
-    pub messages_connection: Arc<AzureStorageConnection>,
+
     pub shutting_down: Arc<AtomicBool>,
     pub initialized: AtomicBool,
     pub metrics_keeper: PrometheusMetrics,
@@ -42,17 +42,9 @@ pub struct AppContext {
 impl AppContext {
     pub async fn new(settings: SettingsModel) -> AppContext {
         let logs = Arc::new(Logs::new());
-        let messages_connection = Arc::new(AzureStorageConnection::from_conn_string(
-            settings.messages_connection_string.as_str(),
-        ));
-
-        let queue_connection =
-            AzureStorageConnection::from_conn_string(settings.queues_connection_string.as_str());
+        let messages_conn_string = Arc::new(settings.create_messages_connection_string());
 
         let topics_repo = settings.get_topics_snapshot_repository().await;
-
-        let messages_conn_string =
-            AzureStorageConnection::from_conn_string(settings.messages_connection_string.as_str());
 
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
@@ -60,13 +52,11 @@ impl AppContext {
             topics_list: TopicsDataList::new(),
             settings,
 
-            messages_connection,
-            queue_connection,
             shutting_down: Arc::new(AtomicBool::new(false)),
             initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
-            messages_conn_string: Arc::new(messages_conn_string),
+            messages_conn_string,
         }
     }
 
@@ -74,8 +64,12 @@ impl AppContext {
         1024 * 1024 * 3 //TODO - сделать настройку
     }
 
-    pub fn get_max_message_size(&self) -> usize {
-        1024 * 1024 * 5 //TODO - сделать настройку
+    pub fn get_api_key(&self) -> &str {
+        match &self.settings {
+            SettingsModel::Production(prod_settings) => &prod_settings.delete_topic_secret_key,
+            #[cfg(test)]
+            SettingsModel::Test => "123",
+        }
     }
 
     pub fn get_env_info(&self) -> String {
@@ -102,7 +96,7 @@ impl AppContext {
     pub async fn open_uncompressed_page_storage_if_exists(
         &self,
         topic_id: &str,
-        page_id: &PageId,
+        page_id: &UncompressedPageId,
     ) -> Option<PageBlobRandomAccess> {
         let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
 
@@ -123,9 +117,9 @@ impl AppContext {
     pub async fn open_or_create_uncompressed_page_storage(
         &self,
         topic_id: &str,
-        page_id: &PageId,
+        page_id: &UncompressedPageId,
     ) -> PageBlobRandomAccess {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
             self.messages_conn_string.clone(),
@@ -165,6 +159,33 @@ impl AppContext {
         .await;
 
         IndexByMinuteStorage::new(page_blob_random_access)
+    }
+
+    pub async fn open_yearly_index_storage_if_exists(
+        &self,
+        topic_id: &str,
+        year: Year,
+    ) -> Option<YearlyIndexByMinute> {
+        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
+        )
+        .await;
+
+        let page_blob_random_access = PageBlobRandomAccess::open_if_exists(
+            azure_storage,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
+        .await?;
+
+        let result =
+            YearlyIndexByMinute::new(year, IndexByMinuteStorage::new(page_blob_random_access))
+                .await;
+
+        Some(result)
     }
 }
 

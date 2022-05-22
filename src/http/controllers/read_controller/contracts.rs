@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use my_http_server_swagger::{MyHttpInput, MyHttpObjectStructure};
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
@@ -33,10 +31,10 @@ pub struct GetMessagesResponseModel {
 }
 
 impl GetMessagesResponseModel {
-    pub fn create(messages: Vec<Arc<MessageProtobufModel>>) -> Self {
+    pub fn create(messages: &[MessageProtobufModel]) -> Self {
         let mut data = Vec::new();
 
-        for msg in &messages {
+        for msg in messages {
             data.push(MessageJsonModel::new(msg))
         }
 

@@ -1,9 +1,9 @@
-pub struct MessageContentOffset {
+pub struct ContentOffset {
     pub offset: usize,
     pub size: usize,
 }
 
-impl MessageContentOffset {
+impl ContentOffset {
     #[cfg(test)]
     pub fn new(offset: usize, size: usize) -> Self {
         Self { offset, size }

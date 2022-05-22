@@ -30,14 +30,14 @@ async fn handle_request(
     _ctx: &mut HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     let messages = crate::operations::get_messages_from_date(
-        action.app.as_ref(),
+        &action.app,
         input_data.topic_id.as_str(),
         DateTimeAsMicroseconds::parse_iso_string(input_data.from_date.as_str()).unwrap(),
         input_data.max_amount,
     )
     .await?;
 
-    let model = GetMessagesResponseModel::create(messages);
+    let model = GetMessagesResponseModel::create(&messages);
 
     HttpOutput::as_json(model).into_ok_result(true).into()
 }

@@ -1,20 +1,11 @@
 use zip::result::ZipError;
 
-use crate::message_pages::PageOperationError;
-
 #[derive(Debug)]
 pub enum OperationError {
     TopicNotFound(String),
-    PageOperationError(PageOperationError),
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
-}
-
-impl From<PageOperationError> for OperationError {
-    fn from(src: PageOperationError) -> Self {
-        Self::PageOperationError(src)
-    }
 }
 
 impl From<prost::DecodeError> for OperationError {

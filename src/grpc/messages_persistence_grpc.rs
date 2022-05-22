@@ -1,7 +1,7 @@
-use crate::grpc::compressed_page_compiler::MsgRange;
-use crate::message_pages::MessagePageId;
+use crate::operations::read_page::{MessagesReader, ReadCondition};
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
+use crate::uncompressed_page::{UncompressedPageId, MESSAGES_PER_PAGE};
 
 use futures_core::Stream;
 use std::pin::Pin;
@@ -30,13 +30,10 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
-        let message = crate::operations::get_message_by_id(
-            self.app.as_ref(),
-            req.topic_id.as_ref(),
-            req.message_id,
-        )
-        .await
-        .unwrap();
+        let message =
+            crate::operations::get_message_by_id(&self.app, req.topic_id.as_ref(), req.message_id)
+                .await
+                .unwrap();
 
         if message.is_none() {
             let result = super::compressed_page_compiler::get_none_message();
@@ -60,12 +57,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
-            let current_message_id = app
-                .topics_snapshot
-                .get_current_message_id(req.topic_id.as_ref())
-                .await
-                .unwrap();
-
             let data_by_topic = app.topics_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
                 return;
@@ -73,37 +64,34 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let topic_data = data_by_topic.unwrap();
 
-            let page_id = MessagePageId::new(req.page_no);
-
-            let page =
-                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
-                    .await;
-
-            let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
-                None
+            let (from_id, to_id) = if req.from_message_id <= 0 && req.to_message_id <= 0 {
+                let from_message_id = req.page_no * MESSAGES_PER_PAGE as i64;
+                let to_message_id = from_message_id + MESSAGES_PER_PAGE as i64 - 1;
+                (from_message_id, to_message_id)
             } else {
-                Some(MsgRange {
-                    msg_from: req.from_message_id,
-                    msg_to: req.to_message_id,
-                })
+                (req.from_message_id, req.to_message_id)
             };
 
             let max_payload_size = app.get_max_payload_size();
 
             let zip_payload = if req.version == 1 {
                 super::compressed_page_compiler::get_v1(
-                    topic_data.topic_id.as_str(),
-                    &page,
+                    app,
+                    topic_data,
                     max_payload_size,
-                    range,
-                    current_message_id,
+                    from_id,
+                    to_id,
                 )
                 .await
-                .unwrap()
             } else {
-                super::compressed_page_compiler::get_v0(&page, max_payload_size, current_message_id)
-                    .await
-                    .unwrap()
+                super::compressed_page_compiler::get_v0(
+                    app,
+                    topic_data,
+                    max_payload_size,
+                    from_id,
+                    to_id,
+                )
+                .await
             };
 
             for chunk in zip_payload {
@@ -130,12 +118,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
-            let current_message_id = app
-                .topics_snapshot
-                .get_current_message_id(req.topic_id.as_ref())
-                .await
-                .unwrap();
-
             let data_by_topic = app.topics_list.get(&req.topic_id).await;
             if data_by_topic.is_none() {
                 return;
@@ -143,15 +125,21 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let topic_data = data_by_topic.unwrap();
 
-            let page_id = MessagePageId::new(req.page_no);
+            let read_condition = if req.from_message_id < req.to_message_id {
+                ReadCondition::as_from_to(req.from_message_id, req.to_message_id)
+            } else {
+                let from_id = req.page_no * MESSAGES_PER_PAGE;
+                let to_id = from_id + MESSAGES_PER_PAGE; //TODO - check if we have to include
+                ReadCondition::as_from_to(from_id, to_id)
+            };
 
-            let page =
-                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
-                    .await;
+            let mut messages_reader = MessagesReader::new(app, topic_data, read_condition);
 
-            for msg in page.get_all(Some(current_message_id)).await {
-                let grpc_contract = Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
-                tx.send(grpc_contract).await.unwrap();
+            while let Some(msgs) = messages_reader.get_next_chunk().await {
+                for msg in msgs {
+                    let grpc_contract = Ok(super::messages_mappers::to_grpc::to_message(&msg));
+                    tx.send(grpc_contract).await.unwrap();
+                }
             }
         });
 
@@ -178,13 +166,14 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         .await;
 
         for (page_id, messages) in grpc_contract.messages_by_page {
+            let uncompressed_page_id = UncompressedPageId::new(page_id);
             crate::operations::new_messages(
                 self.app.as_ref(),
                 topic_data.as_ref(),
-                page_id,
+                &uncompressed_page_id,
                 messages,
             )
-            .await
+            .await;
         }
 
         return Ok(tonic::Response::new(()));

@@ -1,7 +1,7 @@
 use my_service_bus_shared::{page_compressor, protobuf_models::MessageProtobufModel};
 use std::collections::HashMap;
 
-use crate::{grpc::contracts::NewMessagesProtobufContract, message_pages::MessagePageId};
+use crate::{grpc::contracts::NewMessagesProtobufContract, uncompressed_page::UncompressedPageId};
 
 pub struct NewMessagesGrpcContract {
     pub topic_id: String,
@@ -31,7 +31,7 @@ pub async fn unzip_and_deserialize(
     let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
 
     for msg in contract.messages {
-        let page_id = MessagePageId::from_message_id(msg.message_id);
+        let page_id = UncompressedPageId::from_message_id(msg.message_id);
 
         if !messages_by_page.contains_key(&page_id.value) {
             messages_by_page.insert(page_id.value, Vec::new());

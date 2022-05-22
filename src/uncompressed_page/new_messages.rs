@@ -15,11 +15,11 @@ impl NewMessages {
         }
     }
 
-    pub async fn add_messages(&self, messages: Vec<MessageProtobufModel>) -> usize {
+    pub async fn add_messages(&self, messages: &[MessageProtobufModel]) -> usize {
         let mut write_access = self.messages.lock().await;
 
         for message in messages {
-            write_access.insert(message.message_id, Arc::new(message));
+            write_access.insert(message.message_id, Arc::new(message.clone()));
         }
 
         write_access.len()

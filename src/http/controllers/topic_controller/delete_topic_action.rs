@@ -32,7 +32,7 @@ async fn handle_request(
     input_data: DeleteTopicHttpContract,
     _ctx: &HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
-    if action.app.settings.delete_topic_secret_key.as_str() != input_data.api_key {
+    if action.app.get_api_key() != input_data.api_key.as_str() {
         return Err(HttpFailResult::as_unauthorized(
             "Invalid Secret Key".to_string().into(),
         ));

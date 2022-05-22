@@ -4,7 +4,6 @@ mod app;
 mod grpc;
 mod http;
 mod index_by_minute;
-mod message_pages;
 mod operations;
 mod page_blob_random_access;
 mod settings;
@@ -14,8 +13,10 @@ mod topic_data;
 mod utils;
 use rust_extensions::MyTimer;
 use toipics_snapshot::current_snapshot::TopicsSnapshotData;
+
+mod toc;
 mod typing;
-mod uncompressed_page_storage;
+mod uncompressed_page;
 
 use crate::{
     app::AppContext,
@@ -34,7 +35,7 @@ pub mod persistence_grpc {
 
 #[tokio::main]
 async fn main() {
-    let settings = SettingsModel::read().await;
+    let settings = SettingsModel::create_for_production_environment().await;
 
     let app = AppContext::new(settings).await;
 
@@ -129,7 +130,11 @@ async fn check_queues_are_empty(app: &AppContext, snapshot: &TopicsSnapshotData)
 
             let topic_data = topic_data.unwrap();
 
-            if topic_data.pages_list.has_messages_to_save().await {
+            if topic_data
+                .uncompressed_pages_list
+                .has_messages_to_save()
+                .await
+            {
                 has_data_to_sync = Some(topic_data.as_ref().topic_id.to_string());
             }
         }
