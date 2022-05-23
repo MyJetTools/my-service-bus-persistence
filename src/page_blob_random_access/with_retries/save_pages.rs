@@ -66,7 +66,7 @@ async fn save_by_chunks(
 
         page_no += max_pages_chunk;
         content_pages_amount -= max_pages_chunk;
-        start_pos += end_pos;
+        start_pos = end_pos;
     }
 
     if content_pages_amount > 0 {
