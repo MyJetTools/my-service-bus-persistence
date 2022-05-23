@@ -48,8 +48,9 @@ async fn save_by_chunks(
 
     println!("Saving by chunks. Content Len: {}", content.len());
 
+    let mut start_pos = 0;
+
     while content_pages_amount > max_pages_chunk {
-        let start_pos = page_no * BLOB_PAGE_SIZE;
         let end_pos = start_pos + max_pages_chunk * BLOB_PAGE_SIZE;
 
         let payload_to_save = &content[start_pos..end_pos];
@@ -65,10 +66,10 @@ async fn save_by_chunks(
 
         page_no += max_pages_chunk;
         content_pages_amount -= max_pages_chunk;
+        start_pos += end_pos;
     }
 
     if content_pages_amount > 0 {
-        let start_pos = page_no * BLOB_PAGE_SIZE;
         let end_pos = start_pos + content_pages_amount * BLOB_PAGE_SIZE;
 
         println!(
