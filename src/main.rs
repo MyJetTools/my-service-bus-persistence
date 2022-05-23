@@ -40,11 +40,14 @@ async fn main() {
 
     let app = Arc::new(app);
 
-    let mut timer_3s = MyTimer::new(Duration::from_secs(3));
-    timer_3s.register_timer(
+    let mut timer_1s = MyTimer::new(Duration::from_secs(1));
+    timer_1s.register_timer(
         "SaveMessagesTimer",
         Arc::new(SaveMessagesTimer::new(app.clone())),
     );
+    timer_1s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
+
+    let mut timer_3s = MyTimer::new(Duration::from_secs(3));
 
     timer_3s.register_timer(
         "TopicsSnapshotSaver",
@@ -52,13 +55,14 @@ async fn main() {
     );
 
     timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
-    timer_3s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
+
     timer_3s.register_timer(
         "SaveMinIndexTimer",
         Arc::new(SaveMinIndexTimer::new(app.clone())),
     );
 
     timer_3s.start(app.clone(), app.clone());
+    timer_1s.start(app.clone(), app.clone());
 
     crate::http::start_up::setup_server(&app, 7123);
 
