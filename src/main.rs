@@ -60,6 +60,7 @@ async fn main() {
     );
 
     timer_3s.start(app.clone(), app.clone());
+    timer_1s.start(app.clone(), app.clone());
 
     crate::http::start_up::setup_server(&app, 7123);
 

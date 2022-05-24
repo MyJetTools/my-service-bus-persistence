@@ -103,11 +103,6 @@ impl UncompressedPage {
                 .update_messages_count(write_access.toc.get_messages_count());
 
             let write_pos = write_access.toc.get_write_position();
-            println!(
-                "Write pos {}. Messages: {}",
-                write_pos,
-                messages_to_persist.len()
-            );
 
             self.metrics.update_write_position(write_pos);
 
@@ -161,7 +156,12 @@ impl UncompressedPage {
         }
     }
 
-    pub async fn get_messages_to_save_amount(&self) -> usize {
-        todo!("Implement");
+    pub async fn auto_gc_subpages(&self) {
+        let mut write_access = self.page_data.lock().await;
+
+        while write_access.sub_pages.len() > 2 {
+            let key = *write_access.sub_pages.keys().next().unwrap();
+            write_access.sub_pages.remove(&key);
+        }
     }
 }

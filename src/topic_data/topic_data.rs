@@ -43,4 +43,12 @@ impl TopicData {
         self.current_message_id
             .load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    pub async fn auto_gc_sub_pages(&self) {
+        let pages = self.uncompressed_pages_list.get_all().await;
+
+        for page in pages {
+            page.auto_gc_subpages().await;
+        }
+    }
 }

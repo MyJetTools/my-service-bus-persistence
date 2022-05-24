@@ -206,8 +206,6 @@ impl UncompressedPageData {
 
             let payload_size = upload_container.payload.len();
 
-            println!("Payload Size: {}", payload_size);
-
             self.page_blob
                 .write_at_position(write_position, upload_container.payload.as_slice(), 8092)
                 .await;

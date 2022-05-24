@@ -45,7 +45,7 @@ async fn get_pages_to_gc(
     let mut pages_to_gc = LazyVec::new();
 
     for page in pages {
-        if page.get_messages_to_save_amount().await > 0 {
+        if page.new_messages.get_count().await > 0 {
             continue;
         }
 

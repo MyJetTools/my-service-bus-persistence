@@ -49,6 +49,8 @@ impl MyTimerTick for SaveAndGcMessagesTimer {
             }
 
             crate::operations::gc_yearly_index(self.app.as_ref(), topic_data.as_ref()).await;
+
+            topic_data.auto_gc_sub_pages().await;
         }
     }
 }
