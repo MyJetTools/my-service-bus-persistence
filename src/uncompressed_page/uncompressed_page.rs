@@ -160,4 +160,8 @@ impl UncompressedPage {
             }
         }
     }
+
+    pub async fn get_messages_to_save_amount(&self) -> usize {
+        todo!("Implement");
+    }
 }

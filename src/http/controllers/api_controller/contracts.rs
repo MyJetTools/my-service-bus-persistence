@@ -104,6 +104,9 @@ struct LoadedPageModel {
 
     #[serde(rename = "writePosition")]
     write_position: usize,
+
+    #[serde(rename = "toSave")]
+    to_save: usize,
 }
 
 impl LoadedPageModel {
@@ -121,6 +124,7 @@ impl LoadedPageModel {
                 sub_pages: page.sub_get_page_ids().await,
 
                 write_position: page.metrics.get_write_position(),
+                to_save: page.metrics.get_messages_amount_to_save(),
             };
 
             result.push(item);
@@ -197,25 +201,25 @@ impl StatusModel {
 
 async fn get_topics_model(
     snapshot: &TopicSnapshotProtobufModel,
-    cache_by_topic: &TopicData,
+    topic_data: &TopicData,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {
     let active_pages = crate::uncompressed_page::utils::get_active_pages(snapshot);
 
-    let last_save_moment_since = now.duration_since(cache_by_topic.metrics.get_last_saved_moment());
+    let last_save_moment_since = now.duration_since(topic_data.metrics.get_last_saved_moment());
 
-    let queue_size = cache_by_topic.get_messages_amount_to_save().await;
+    let queue_size = topic_data.get_messages_amount_to_save().await;
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
         message_id: snapshot.message_id,
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
-        loaded_pages: LoadedPageModel::create(cache_by_topic).await,
+        loaded_pages: LoadedPageModel::create(topic_data).await,
         queues: get_queues(&snapshot.queues),
-        last_save_chunk: cache_by_topic.metrics.get_last_saved_chunk(),
-        last_save_duration: duration_to_string(cache_by_topic.metrics.get_last_saved_duration()),
+        last_save_chunk: topic_data.metrics.get_last_saved_chunk(),
+        last_save_duration: duration_to_string(topic_data.metrics.get_last_saved_duration()),
         last_save_moment: duration_to_string(last_save_moment_since),
-        saved_message_id: cache_by_topic.metrics.get_last_saved_message_id(),
+        saved_message_id: topic_data.metrics.get_last_saved_message_id(),
         queue_size,
     }
 }

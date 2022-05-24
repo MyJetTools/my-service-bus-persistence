@@ -71,7 +71,7 @@ class HtmlRenderer {
                     theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
                 }
 
-                tableBuilder.append([theBadge, SubPagesWidget.renderPagesWidget(loadedPage), 'WritePos: ' + this.formatNumber(loadedPage.writePosition), ("Amount: " + loadedPage.count)]);
+                tableBuilder.append([theBadge, SubPagesWidget.renderPagesWidget(loadedPage), 'WritePos: ' + this.formatNumber(loadedPage.writePosition), ("Amount: " + loadedPage.count), ("ToSave: " + loadedPage.toSave)]);
 
             }
 

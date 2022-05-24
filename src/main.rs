@@ -22,8 +22,8 @@ use crate::{
     app::AppContext,
     settings::SettingsModel,
     timers::{
-        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
-        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveMessagesTimer,
+        metrics_updater::MetricsUpdater, save_min_index::SaveMinIndexTimer,
+        topics_snapshot_saver::TopicsSnapshotSaverTimer, SaveAndGcMessagesTimer,
     },
 };
 
@@ -42,8 +42,8 @@ async fn main() {
     let app = Arc::new(app);
     let mut timer_1s = MyTimer::new(Duration::from_secs(1));
     timer_1s.register_timer(
-        "SaveMessagesTimer",
-        Arc::new(SaveMessagesTimer::new(app.clone())),
+        "SaveAndGcMessagesTimer",
+        Arc::new(SaveAndGcMessagesTimer::new(app.clone())),
     );
     timer_1s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
 
@@ -54,7 +54,6 @@ async fn main() {
         Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
     );
 
-    timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
     timer_3s.register_timer(
         "SaveMinIndexTimer",
         Arc::new(SaveMinIndexTimer::new(app.clone())),

@@ -9,6 +9,7 @@ mod get_page_to_publish_messages;
 mod get_topic_data_to_publish_messages;
 pub mod index_by_minute;
 mod init_new_topic;
+mod persist_topic_pages;
 pub mod restore_uncompressed_page;
 
 mod get_message_by_id;
@@ -29,3 +30,4 @@ pub use restore_page_error::RestorePageError;
 
 pub use get_message_by_id::get_message_by_id;
 pub use get_messages_from_date::get_messages_from_date;
+pub use persist_topic_pages::persist_topic_pages;

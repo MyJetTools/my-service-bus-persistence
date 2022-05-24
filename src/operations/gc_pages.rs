@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_extensions::date_time::DateTimeAsMicroseconds;
+use rust_extensions::{date_time::DateTimeAsMicroseconds, lazy::LazyVec};
 
 use crate::{app::AppContext, topic_data::TopicData, uncompressed_page::UncompressedPageId};
 
@@ -11,13 +11,13 @@ pub async fn gc_pages(
     topic_data: Arc<TopicData>,
     active_pages: &[UncompressedPageId],
 ) -> Result<(), OperationError> {
-    let mut pages_to_gc = get_pages_to_gc(topic_data.as_ref(), active_pages).await;
+    let pages_to_gc = get_pages_to_gc(topic_data.as_ref(), active_pages).await;
 
-    if pages_to_gc.len() == 0 {
+    if pages_to_gc.is_none() {
         return Ok(());
     }
 
-    for page_to_gc in pages_to_gc.drain(..) {
+    for page_to_gc in pages_to_gc.unwrap().drain(..) {
         if let Some(_) = topic_data
             .uncompressed_pages_list
             .remove_page(page_to_gc)
@@ -34,22 +34,29 @@ pub async fn gc_pages(
     Ok(())
 }
 
-async fn get_pages_to_gc(topic: &TopicData, active_pages: &[UncompressedPageId]) -> Vec<i64> {
+async fn get_pages_to_gc(
+    topic: &TopicData,
+    active_pages: &[UncompressedPageId],
+) -> Option<Vec<i64>> {
     let now = DateTimeAsMicroseconds::now();
 
     let pages = topic.uncompressed_pages_list.get_all().await;
 
-    let mut pages_to_gc = Vec::new();
+    let mut pages_to_gc = LazyVec::new();
 
     for page in pages {
+        if page.get_messages_to_save_amount().await > 0 {
+            continue;
+        }
+
         if active_pages
             .iter()
             .all(|itm| itm.value != page.page_id.value)
         {
             if now.seconds_before(page.as_ref().metrics.get_last_access()) > 30 {
-                pages_to_gc.push(page.page_id.value);
+                pages_to_gc.add(page.page_id.value);
             }
         }
     }
-    pages_to_gc
+    pages_to_gc.get_result()
 }

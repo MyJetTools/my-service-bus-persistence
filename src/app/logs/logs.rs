@@ -70,28 +70,27 @@ impl Logs {
         tokio::spawn(write(self.items.clone(), item));
     }
 
-    /*
-       pub fn add_error(
-           &self,
-           topic_id: Option<&str>,
-           process: &str,
-           message: String,
-           err_ctx: String,
-       ) {
-           let date = DateTimeAsMicroseconds::now();
+    pub fn add_error(
+        &self,
+        topic_id: Option<&str>,
+        process: &str,
+        message: String,
+        err_ctx: String,
+    ) {
+        let date = DateTimeAsMicroseconds::now();
 
-           let item = LogItem {
-               topic_id: topic_id_to_string(topic_id),
-               date,
-               level: LogLevel::Error,
-               process: process.to_string(),
-               message,
-               err_ctx: Some(err_ctx),
-           };
+        let item = LogItem {
+            topic_id: topic_id_to_string(topic_id),
+            date,
+            level: LogLevel::Error,
+            process: process.to_string(),
+            message,
+            err_ctx: Some(err_ctx),
+        };
 
-           tokio::spawn(write(self.items.clone(), item));
-       }
-    */
+        tokio::spawn(write(self.items.clone(), item));
+    }
+
     pub fn add_fatal_error(&self, process: &str, err: String) {
         let date = DateTimeAsMicroseconds::now();
 
