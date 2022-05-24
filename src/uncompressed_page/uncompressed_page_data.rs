@@ -8,6 +8,7 @@ use my_service_bus_shared::{
     sub_page::{SubPage, SubPageId},
     MessageId,
 };
+use rust_extensions::{date_time::DateTimeAsMicroseconds, StopWatch};
 
 use crate::{
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
@@ -133,9 +134,10 @@ impl UncompressedPageData {
         }
     }
 
-    async fn restore_sub_page(&mut self, sub_page_id: &SubPageId) -> Option<SubPage> {
+    pub async fn restore_sub_page(&mut self, sub_page_id: &SubPageId) -> Option<SubPage> {
+        let mut sw = StopWatch::new();
+        sw.start();
         let mut intervals_compiler = ReadIntervalsCompiler::new();
-
         let first_message_id = sub_page_id.get_first_message_id();
 
         let mut payload_no =
@@ -154,6 +156,12 @@ impl UncompressedPageData {
                 .read_from_position(interval.start_pos, interval.len)
                 .await;
 
+            println!(
+                "{}: Restored subpage: {}",
+                DateTimeAsMicroseconds::now().to_rfc3339(),
+                sub_page_id.value,
+            );
+
             for message_id in interval.get_message_ids() {
                 let payload = intervals_compiler.read_payload(message_id, payload.as_slice());
 
@@ -168,6 +176,10 @@ impl UncompressedPageData {
                 }
             }
         }
+
+        sw.pause();
+
+        println!("I/O operations is taken: {:?}", sw.duration());
 
         Some(SubPage::restored(sub_page_id.clone(), messages))
     }

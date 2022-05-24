@@ -94,17 +94,45 @@ struct LoadedPageModel {
     #[serde(rename = "pageId")]
     page_id: i64,
 
-    #[serde(rename = "hasSkipped")]
-    has_skipped_messages: bool,
+    #[serde(rename = "subPages")]
+    sub_pages: Vec<i16>,
+
+    count: usize,
 
     #[serde(rename = "percent")]
     percent: usize,
 
-    #[serde(rename = "count")]
-    count: usize,
-
     #[serde(rename = "writePosition")]
     write_position: usize,
+}
+
+impl LoadedPageModel {
+    async fn create(topic_data: &TopicData) -> Vec<LoadedPageModel> {
+        let mut result: Vec<LoadedPageModel> = Vec::new();
+
+        for page in topic_data.uncompressed_pages_list.get_all().await {
+            let count = page.metrics.get_messages_count();
+            let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
+
+            let item = LoadedPageModel {
+                page_id: page.page_id.value,
+                percent: percent as usize,
+                count,
+                sub_pages: page.sub_get_page_ids().await,
+
+                write_position: page.metrics.get_write_position(),
+            };
+
+            result.push(item);
+        }
+
+        result.sort_by(|a, b| match a.page_id > b.page_id {
+            true => return std::cmp::Ordering::Greater,
+            _ => return std::cmp::Ordering::Less,
+        });
+
+        result
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -166,31 +194,6 @@ impl StatusModel {
         return model;
     }
 }
-async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
-    let mut result: Vec<LoadedPageModel> = Vec::new();
-
-    for page in topic_data.uncompressed_pages_list.get_all().await {
-        let count = page.metrics.get_messages_count();
-        let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
-
-        let item = LoadedPageModel {
-            page_id: page.page_id.value,
-            percent: percent as usize,
-            count,
-            has_skipped_messages: page.metrics.get_has_skipped_messages(),
-            write_position: page.metrics.get_write_position(),
-        };
-
-        result.push(item);
-    }
-
-    result.sort_by(|a, b| match a.page_id > b.page_id {
-        true => return std::cmp::Ordering::Greater,
-        _ => return std::cmp::Ordering::Less,
-    });
-
-    result
-}
 
 async fn get_topics_model(
     snapshot: &TopicSnapshotProtobufModel,
@@ -207,7 +210,7 @@ async fn get_topics_model(
         topic_id: snapshot.topic_id.to_string(),
         message_id: snapshot.message_id,
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
-        loaded_pages: get_loaded_pages(cache_by_topic).await,
+        loaded_pages: LoadedPageModel::create(cache_by_topic).await,
         queues: get_queues(&snapshot.queues),
         last_save_chunk: cache_by_topic.metrics.get_last_saved_chunk(),
         last_save_duration: duration_to_string(cache_by_topic.metrics.get_last_saved_duration()),

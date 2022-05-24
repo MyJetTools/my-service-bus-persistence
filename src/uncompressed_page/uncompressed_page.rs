@@ -5,7 +5,7 @@ use my_service_bus_shared::{
     sub_page::{SubPage, SubPageId},
     MessageId,
 };
-use rust_extensions::StopWatch;
+use rust_extensions::{lazy::LazyVec, StopWatch};
 use tokio::sync::Mutex;
 
 use crate::page_blob_random_access::PageBlobRandomAccess;
@@ -62,6 +62,21 @@ impl UncompressedPage {
         page_data.get_or_restore_sub_page(sub_page_id).await
     }
 
+    pub async fn sub_get_page_ids(&self) -> Vec<i16> {
+        let mut result = Vec::new();
+
+        let page_data = self.page_data.lock().await;
+
+        let first_sub_page_id = self.page_id.get_first_sub_page_id();
+
+        for sub_page_no in page_data.sub_pages.keys() {
+            let id = sub_page_no - first_sub_page_id.value;
+            result.push(id as i16);
+        }
+
+        result
+    }
+
     pub async fn flush_to_storage(&self, max_persist_size: usize) -> Option<FlushToStorageResult> {
         let mut sw = StopWatch::new();
         sw.start();
@@ -115,5 +130,34 @@ impl UncompressedPage {
             last_saved_message_id,
         }
         .into()
+    }
+
+    pub async fn gc_sub_pages(
+        &self,
+        current_page_id: &SubPageId,
+        except_this_page: Option<&SubPageId>,
+    ) {
+        let mut write_access = self.page_data.lock().await;
+
+        let mut pages_to_gc = LazyVec::new();
+
+        for key in write_access.sub_pages.keys() {
+            if *key == current_page_id.value {
+                continue;
+            }
+
+            if let Some(except_this_page) = except_this_page {
+                if *key == except_this_page.value {
+                    continue;
+                }
+            }
+            pages_to_gc.add(*key);
+        }
+
+        if let Some(pages_to_gc) = pages_to_gc.get_result() {
+            for page_to_gc in &pages_to_gc {
+                write_access.sub_pages.remove(page_to_gc);
+            }
+        }
     }
 }

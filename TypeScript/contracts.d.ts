@@ -18,7 +18,7 @@ interface ILoadedPage {
     percent: number,
     count: number,
     writePosition: number;
-
+    subPages: number[]
 }
 
 interface ITopicQueue {

@@ -1,4 +1,6 @@
-use my_service_bus_shared::{page_id::PageId, sub_page::SubPageId, MessageId};
+use my_service_bus_shared::sub_page::SubPageId;
+
+use my_service_bus_shared::{page_id::PageId, sub_page::SUB_PAGE_MESSAGES_AMOUNT, MessageId};
 
 use crate::toc::PayloadNo;
 
@@ -19,10 +21,12 @@ impl UncompressedPageId {
         }
     }
 
-    pub fn get_first_message_id(&self) -> MessageId {
-        self.value * MESSAGES_PER_PAGE
+    pub fn get_first_sub_page_id(&self) -> SubPageId {
+        let result = (self.value * MESSAGES_PER_PAGE) as usize / SUB_PAGE_MESSAGES_AMOUNT;
+        SubPageId::new(result)
     }
 
+    #[cfg(test)]
     pub fn from_sub_page_id(sub_page_id: &SubPageId) -> Self {
         Self::from_message_id(sub_page_id.get_first_message_id())
     }

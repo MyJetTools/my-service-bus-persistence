@@ -54,12 +54,21 @@ impl MessagesReader {
             };
 
         if update_uncompressed_page {
-            let uncompressed_page = crate::operations::restore_uncompressed_page::open_if_exists(
-                self.app.as_ref(),
-                self.topic_data.as_ref(),
-                &uncompressed_page_id,
-            )
-            .await;
+            let uncompressed_page = if let Some(page) = self
+                .topic_data
+                .uncompressed_pages_list
+                .get(&uncompressed_page_id)
+                .await
+            {
+                Some(page)
+            } else {
+                crate::operations::restore_uncompressed_page::open_if_exists(
+                    self.app.as_ref(),
+                    self.topic_data.as_ref(),
+                    &uncompressed_page_id,
+                )
+                .await
+            };
 
             self.current_uncompressed_page = Some(ReadFromUncompressedPage::new(
                 uncompressed_page,
@@ -86,7 +95,10 @@ impl MessagesReader {
             let sub_page_id = SubPageId::from_message_id(self.current_message_id);
 
             if let Some(current_uncompressed_page) = &self.current_uncompressed_page {
-                if let Some(sub_page) = current_uncompressed_page.get_sub_page(&sub_page_id).await {
+                if let Some(sub_page) = current_uncompressed_page
+                    .get_sub_page(self.topic_data.as_ref(), &sub_page_id)
+                    .await
+                {
                     let from_message_id = self.current_message_id;
                     let to_message_id = sub_page_id.get_first_message_id_of_next_page() - 1;
                     self.current_message_id = to_message_id + 1;

@@ -21,14 +21,6 @@ impl ContentOffset {
         Self { offset, size }
     }
 
-    pub fn has_data(&self, max_message_size: usize) -> bool {
-        if self.offset == 0 {
-            return true;
-        }
-
-        return self.size <= max_message_size;
-    }
-
     pub fn last_position(&self) -> usize {
         self.offset + self.size
     }

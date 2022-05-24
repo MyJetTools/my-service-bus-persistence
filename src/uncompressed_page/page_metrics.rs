@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
@@ -6,7 +6,6 @@ pub struct PageMetrics {
     last_access: AtomicI64,
     messages_count: AtomicUsize,
     write_position: AtomicUsize,
-    has_skipped_messages: AtomicBool, //TODO Plug has skipped messages
     messages_amount_to_save: AtomicUsize,
 }
 
@@ -15,14 +14,9 @@ impl PageMetrics {
         Self {
             last_access: AtomicI64::new(DateTimeAsMicroseconds::now().unix_microseconds),
             messages_count: AtomicUsize::new(messages_count),
-            has_skipped_messages: AtomicBool::new(false),
             write_position: AtomicUsize::new(write_position),
             messages_amount_to_save: AtomicUsize::new(0),
         }
-    }
-
-    pub fn get_has_skipped_messages(&self) -> bool {
-        self.has_skipped_messages.load(Ordering::Relaxed)
     }
 
     pub fn get_messages_count(&self) -> usize {
