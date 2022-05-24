@@ -50,17 +50,6 @@ class HtmlRenderer {
     }
 
 
-    private static compileTable(values: string[]): string {
-
-        let result = '<table style="width: 100%"><tr>';
-
-        for (let value of values) {
-            result += '<td>' + value + '</td>';
-        }
-
-        return result + '</tr></table>';
-
-    }
 
 
     private static renderLoadedPagesContent(topics: ITopicInfo[]): string {
@@ -70,10 +59,8 @@ class HtmlRenderer {
             return a.topicId > b.topicId ? 1 : -1
         })) {
 
-            let badges = '';
+            let tableBuilder = new TableBuilder();
             for (let loadedPage of topic.loadedPages.sort((a, b) => a.pageId > b.pageId ? 1 : -1)) {
-                badges += '<div>';
-
 
 
                 var theBadge = "";
@@ -84,11 +71,8 @@ class HtmlRenderer {
                     theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
                 }
 
-                badges += this.compileTable([theBadge, 'WritePos: ' + this.formatNumber(loadedPage.writePosition)]) +
-                    '<div class="progress">' +
-                    '<div class="progress-bar" role="progressbar" style="width: ' + loadedPage.percent + '%;" aria-valuenow="' + loadedPage.percent + '" aria-valuemin="0" aria-valuemax="100">' + loadedPage.count + '</div>' +
-                    '</div>' +
-                    '</div>';
+                tableBuilder.append([theBadge, SubPagesWidget.renderPagesWidget(loadedPage), 'WritePos: ' + this.formatNumber(loadedPage.writePosition), ("Amount: " + loadedPage.count)]);
+
             }
 
             let activePagesBadges = '';
@@ -101,7 +85,7 @@ class HtmlRenderer {
 
             result += '<tr style="font-size: 12px">' +
                 '<td>' + topic.topicId +
-                '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + badges + '</td>' +
+                '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + tableBuilder.getResult() + '</td>' +
                 '<td>' + queuesContent + '</td>' +
                 '<td><div>Current Id:' + topic.messageId + '</div><div>Last Saved:' + topic.savedMessageId + '</div><div>Last Save Chunk:' + topic.lastSaveChunk + '</div>' +
                 '<div>Last Save Duration:' + topic.lastSaveDur + '</div>' +
