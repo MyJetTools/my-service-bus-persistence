@@ -140,7 +140,7 @@ impl AppContext {
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
-        super::azure_storage_operations_with_retry::create_container_if_not_exists(
+        super::azure_storage_with_retries::create_container_if_not_exists(
             self.messages_conn_string.as_ref(),
             topic_folder,
         )

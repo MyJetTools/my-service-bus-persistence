@@ -17,3 +17,10 @@ DeleteTopicSecretKey: SecretKeyString
 ```
 Install rust: https://www.rust-lang.org/tools/install
 execute: **cargo run --release**
+
+
+## Changes
+
+2.2.4
+Timeouts on PageBlob operations are 5 sec
+Create container if not exists now is retried

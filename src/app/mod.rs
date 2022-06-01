@@ -1,6 +1,6 @@
 mod app_ctx;
 mod app_error;
-mod azure_storage_operations_with_retry;
+mod azure_storage_with_retries;
 
 pub mod file_name_generators;
 mod logs;
