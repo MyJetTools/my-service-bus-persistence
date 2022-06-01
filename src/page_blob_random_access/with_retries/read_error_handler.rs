@@ -18,7 +18,7 @@ pub async fn is_error_retrieable(
     let result = match &err {
         AzureStorageError::ContainerNotFound => {
             if let Some(init_pages_amount) = create_if_not_exists_init_pages_amount {
-                page_blob.create_container_if_not_exist().await.unwrap();
+                super::create_container_if_not_exist(page_blob).await;
                 page_blob
                     .create_if_not_exists(init_pages_amount)
                     .await

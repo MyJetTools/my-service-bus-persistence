@@ -1,3 +1,4 @@
+mod create_container_if_not_exist;
 mod download;
 mod get_blob_properties;
 mod get_blob_size;
@@ -6,6 +7,7 @@ mod read_pages;
 mod resize;
 mod save_pages;
 mod write_error_handler;
+pub use create_container_if_not_exist::create_container_if_not_exist;
 pub use download::download;
 pub use get_blob_properties::get_blob_properties;
 pub use get_blob_size::get_blob_size;

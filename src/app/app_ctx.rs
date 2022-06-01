@@ -3,9 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use my_azure_storage_sdk::{
-    blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
-};
+use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{ApplicationStates, MyTimerLogger};
 
@@ -142,10 +140,11 @@ impl AppContext {
     }
 
     pub async fn create_topic_folder(&self, topic_folder: &str) {
-        self.messages_conn_string
-            .create_container_if_not_exist(topic_folder)
-            .await
-            .unwrap();
+        super::azure_storage_operations_with_retry::create_container_if_not_exists(
+            self.messages_conn_string.as_ref(),
+            topic_folder,
+        )
+        .await;
     }
 
     pub async fn create_index_storage(&self, topic_id: &str, year: u32) -> IndexByMinuteStorage {
