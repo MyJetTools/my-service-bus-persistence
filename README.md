@@ -21,6 +21,6 @@ execute: **cargo run --release**
 
 ## Changes
 
-2.2.4
-Timeouts on PageBlob operations are 5 sec
-Create container if not exists now is retried
+### 2.2.4
+* Timeouts on PageBlob operations are 5 sec
+* Create container if not exists now is retried
