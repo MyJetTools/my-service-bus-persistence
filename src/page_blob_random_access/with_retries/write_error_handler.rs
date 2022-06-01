@@ -29,6 +29,7 @@ pub async fn is_error_retrieable(
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
         AzureStorageError::IoError(_) => RetryResult::RetryWithDelay(Duration::from_secs(1)),
+        AzureStorageError::Timeout => RetryResult::RetryWithDelay(Duration::from_secs(1)),
     };
 
     match result {
