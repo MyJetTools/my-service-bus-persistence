@@ -149,7 +149,13 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
                     .await;
 
-            for msg in page.get_all(Some(current_message_id)).await {
+            let messages = if req.from_message_id >= 0 && req.to_message_id >= 0 {
+                page.get_range(req.from_message_id, req.to_message_id).await
+            } else {
+                page.get_all(Some(current_message_id)).await
+            };
+
+            for msg in messages {
                 let grpc_contract = Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
                 tx.send(grpc_contract).await.unwrap();
             }
