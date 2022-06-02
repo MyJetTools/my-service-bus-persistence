@@ -24,3 +24,4 @@ execute: **cargo run --release**
 ### 2.2.4
 * Timeouts on PageBlob operations are 5 sec
 * Create container if not exists now is retried
+* Now we can read range of messages as well
