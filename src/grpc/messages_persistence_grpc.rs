@@ -22,6 +22,17 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
     >;
 
+    async fn get_version(
+        &self,
+        _request: tonic::Request<()>,
+    ) -> Result<tonic::Response<MyServerBusPersistenceVersion>, tonic::Status> {
+        let result = MyServerBusPersistenceVersion {
+            version: crate::app::APP_VERSION.to_string(),
+        };
+
+        return Ok(tonic::Response::new(result));
+    }
+
     async fn get_message(
         &self,
         request: tonic::Request<GetMessageGrpcRequest>,
@@ -149,16 +160,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
                     .await;
 
-            let messages = if req.from_message_id >= 0 && req.to_message_id >= 0 {
-                page.get_range(req.from_message_id, req.to_message_id).await
+            if req.from_message_id >= 0 && req.to_message_id >= 0 {
+                for msg in page.get_range(req.from_message_id, req.to_message_id).await {
+                    let grpc_contract =
+                        Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
+                    tx.send(grpc_contract).await.unwrap();
+                }
             } else {
-                page.get_all(Some(current_message_id)).await
+                for msg in page.get_all(Some(current_message_id)).await {
+                    let grpc_contract =
+                        Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
+                    tx.send(grpc_contract).await.unwrap();
+                }
             };
-
-            for msg in messages {
-                let grpc_contract = Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
-                tx.send(grpc_contract).await.unwrap();
-            }
         });
 
         Ok(tonic::Response::new(Box::pin(
@@ -176,6 +190,36 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let grpc_contract =
             super::messages_mappers::unzip_and_deserialize(&mut request.into_inner()).await?;
+
+        let topic_data = crate::operations::get_topic_data_to_publish_messages(
+            self.app.as_ref(),
+            grpc_contract.topic_id.as_str(),
+        )
+        .await;
+
+        for (page_id, messages) in grpc_contract.messages_by_page {
+            crate::operations::new_messages(
+                self.app.as_ref(),
+                topic_data.as_ref(),
+                page_id,
+                messages,
+            )
+            .await
+        }
+
+        return Ok(tonic::Response::new(()));
+    }
+
+    async fn save_messages_uncompressed(
+        &self,
+        request: tonic::Request<
+            tonic::Streaming<crate::persistence_grpc::UnCompressedMessageChunkModel>,
+        >,
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let grpc_contract =
+            super::messages_mappers::deserialize_uncompressed(&mut request.into_inner()).await?;
 
         let topic_data = crate::operations::get_topic_data_to_publish_messages(
             self.app.as_ref(),

@@ -1,4 +1,4 @@
+mod new_messages_deserializer;
 pub mod to_domain;
 pub mod to_grpc;
-mod unzip_and_deserialize;
-pub use unzip_and_deserialize::unzip_and_deserialize;
+pub use new_messages_deserializer::{deserialize_uncompressed, unzip_and_deserialize};
