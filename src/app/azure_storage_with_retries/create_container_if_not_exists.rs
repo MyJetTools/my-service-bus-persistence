@@ -44,6 +44,7 @@ fn handle_retry_error(err: AzureStorageError, attempt_no: usize) -> Result<(), A
             return Err(err);
         }
         my_azure_storage_sdk::AzureStorageError::Timeout => {}
+        my_azure_storage_sdk::AzureStorageError::InvalidResourceName => {}
         AzureStorageError::UnknownError { msg } => {
             return Err(AzureStorageError::UnknownError { msg });
         }

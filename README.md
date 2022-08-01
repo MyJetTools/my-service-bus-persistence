@@ -25,3 +25,10 @@ execute: **cargo run --release**
 * Timeouts on PageBlob operations are 5 sec
 * Create container if not exists now is retried
 * Now we can read range of messages as well
+
+### 2.2.5
+Server can return Version by GRPC;
+Uncompressed messages can be post to save
+
+### 2.2.6
+Timeouts on GrpcOperations

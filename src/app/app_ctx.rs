@@ -1,11 +1,14 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use my_service_bus_shared::page_id::PageId;
-use rust_extensions::{ApplicationStates, MyTimerLogger};
+use rust_extensions::{AppStates, ApplicationStates};
 
 use crate::{
     index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
@@ -22,6 +25,7 @@ pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
 
 pub struct AppContext {
+    pub app_states: Arc<AppStates>,
     pub topics_snapshot: CurrentTopicsSnapshot,
     pub logs: Arc<Logs>,
 
@@ -35,6 +39,7 @@ pub struct AppContext {
     pub index_by_minute_utils: IndexByMinuteUtils,
 
     messages_conn_string: Arc<AzureStorageConnection>,
+    pub grpc_timeout: Duration,
 }
 
 impl AppContext {
@@ -65,6 +70,8 @@ impl AppContext {
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
             messages_conn_string: Arc::new(messages_conn_string),
+            app_states: Arc::new(AppStates::create_un_initialized()),
+            grpc_timeout: Duration::from_secs(5),
         }
     }
 
@@ -174,17 +181,5 @@ impl ApplicationStates for AppContext {
 
     fn is_shutting_down(&self) -> bool {
         self.is_shutting_down()
-    }
-}
-
-impl MyTimerLogger for AppContext {
-    fn write_info(&self, timer_id: String, message: String) {
-        self.logs
-            .add_info(None, format!("Timer: {}", timer_id).as_str(), message);
-    }
-
-    fn write_error(&self, timer_id: String, message: String) {
-        self.logs
-            .add_fatal_error(format!("Timer: {}", timer_id).as_str(), message);
     }
 }

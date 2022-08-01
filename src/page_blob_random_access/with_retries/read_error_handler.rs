@@ -45,6 +45,7 @@ pub async fn is_error_retrieable(
             RetryResult::RetryWithDelay(Duration::from_secs(1))
         }
         AzureStorageError::ContainerAlreadyExists => RetryResult::ErrorIt,
+        AzureStorageError::InvalidResourceName => RetryResult::ErrorIt,
         AzureStorageError::InvalidPageRange => RetryResult::RetryWithDelay(Duration::from_secs(1)),
         AzureStorageError::RequestBodyTooLarge => RetryResult::ErrorIt,
         AzureStorageError::UnknownError { msg: _ } => RetryResult::ErrorIt,

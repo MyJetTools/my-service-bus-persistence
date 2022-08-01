@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_extensions::date_time::DateTimeAsMicroseconds;
+use rust_extensions::{date_time::DateTimeAsMicroseconds, Logger};
 use tokio::sync::RwLock;
 
 use super::LogsCluster;
@@ -8,6 +8,7 @@ use super::LogsCluster;
 #[derive(Debug, Clone)]
 pub enum LogLevel {
     Info,
+    Warning,
     Error,
     FatalError,
 }
@@ -16,6 +17,7 @@ impl LogLevel {
     fn as_str(&self) -> &str {
         match self {
             LogLevel::Info => "Info",
+            LogLevel::Warning => "Warning",
             LogLevel::Error => "Error",
             LogLevel::FatalError => "FalalError",
         }
@@ -48,6 +50,20 @@ impl Logs {
             topic_id: topic_id_to_string(topic_id),
             date,
             level: LogLevel::Info,
+            process: process.to_string(),
+            message: message,
+            err_ctx: None,
+        };
+
+        tokio::spawn(write(self.items.clone(), item));
+    }
+
+    pub fn add_warning(&self, topic_id: Option<&str>, process: &str, message: String) {
+        let date = DateTimeAsMicroseconds::now();
+        let item = LogItem {
+            topic_id: topic_id_to_string(topic_id),
+            date,
+            level: LogLevel::Warning,
             process: process.to_string(),
             message: message,
             err_ctx: None,
@@ -164,4 +180,22 @@ async fn write(logs: Arc<RwLock<LogsCluster>>, item: LogItem) {
     }
 
     wirte_access.push(item);
+}
+
+impl Logger for Logs {
+    fn write_info(&self, process: String, message: String, _ctx: Option<String>) {
+        self.add_info(None, process.as_str(), message);
+    }
+
+    fn write_warning(&self, process: String, message: String, _ctx: Option<String>) {
+        self.add_warning(None, process.as_str(), message);
+    }
+
+    fn write_error(&self, process: String, message: String, ctx: Option<String>) {
+        self.add_error_str(None, process.as_str(), message, format!("{:?}", ctx));
+    }
+
+    fn write_fatal_error(&self, process: String, message: String, _ctx: Option<String>) {
+        self.add_fatal_error(process.as_str(), message);
+    }
 }

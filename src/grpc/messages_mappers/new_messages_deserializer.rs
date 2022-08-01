@@ -1,5 +1,5 @@
 use my_service_bus_shared::{page_compressor, protobuf_models::MessageProtobufModel};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{grpc::contracts::NewMessagesProtobufContract, message_pages::MessagePageId};
 
@@ -10,11 +10,14 @@ pub struct NewMessagesGrpcContract {
 
 pub async fn unzip_and_deserialize(
     req: &mut tonic::Streaming<crate::persistence_grpc::CompressedMessageChunkModel>,
+    timeout: Duration,
 ) -> Result<NewMessagesGrpcContract, tonic::Status> {
     let mut payload: Vec<u8> = Vec::new();
 
     loop {
-        let next = req.message().await?;
+        let future = req.message();
+
+        let next = tokio::time::timeout(timeout, future).await.unwrap()?;
 
         if next.is_none() {
             break;
@@ -50,11 +53,14 @@ pub async fn unzip_and_deserialize(
 
 pub async fn deserialize_uncompressed(
     req: &mut tonic::Streaming<crate::persistence_grpc::UnCompressedMessageChunkModel>,
+    timeout: Duration,
 ) -> Result<NewMessagesGrpcContract, tonic::Status> {
     let mut payload: Vec<u8> = Vec::new();
 
     loop {
-        let next = req.message().await?;
+        let future = req.message();
+
+        let next = tokio::time::timeout(timeout, future).await.unwrap()?;
 
         if next.is_none() {
             break;

@@ -211,7 +211,7 @@ async fn get_topics_model(
         queues: get_queues(&snapshot.queues),
         last_save_chunk: cache_by_topic.metrics.get_last_saved_chunk(),
         last_save_duration: duration_to_string(cache_by_topic.metrics.get_last_saved_duration()),
-        last_save_moment: duration_to_string(last_save_moment_since),
+        last_save_moment: duration_to_string(last_save_moment_since.as_positive_or_zero()),
         saved_message_id: cache_by_topic.metrics.get_last_saved_message_id(),
         queue_size,
     }

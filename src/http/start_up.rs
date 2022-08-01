@@ -21,5 +21,5 @@ pub fn setup_server(app: &Arc<AppContext>, port: u16) {
     http_server.add_middleware(controllers);
 
     http_server.add_middleware(Arc::new(StaticFilesMiddleware::new(None)));
-    http_server.start(app.clone());
+    http_server.start(app.app_states.clone(), app.logs.clone());
 }

@@ -61,8 +61,8 @@ async fn main() {
         Arc::new(SaveMinIndexTimer::new(app.clone())),
     );
 
-    timer_3s.start(app.clone(), app.clone());
-    timer_1s.start(app.clone(), app.clone());
+    timer_3s.start(app.app_states.clone(), app.logs.clone());
+    timer_1s.start(app.app_states.clone(), app.logs.clone());
 
     crate::http::start_up::setup_server(&app, 7123);
 

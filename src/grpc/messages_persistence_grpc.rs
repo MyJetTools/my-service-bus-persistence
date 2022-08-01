@@ -67,7 +67,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let req = request.into_inner();
 
         let app = self.app.clone();
-
+        let grpc_timeout = self.app.grpc_timeout;
         let (tx, rx) = mpsc::channel(4);
 
         tokio::spawn(async move {
@@ -119,7 +119,13 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             for chunk in zip_payload {
                 let grpc_contract = CompressedMessageChunkModel { chunk };
-                tx.send(Ok(grpc_contract)).await.unwrap();
+
+                let future = tx.send(Ok(grpc_contract));
+
+                tokio::time::timeout(grpc_timeout, future)
+                    .await
+                    .unwrap()
+                    .unwrap();
             }
         });
 
@@ -137,6 +143,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let req = request.into_inner();
 
         let app = self.app.clone();
+        let grpc_timeout = self.app.grpc_timeout;
 
         let (tx, rx) = mpsc::channel(4);
 
@@ -164,13 +171,23 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 for msg in page.get_range(req.from_message_id, req.to_message_id).await {
                     let grpc_contract =
                         Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
-                    tx.send(grpc_contract).await.unwrap();
+                    let future = tx.send(grpc_contract);
+
+                    tokio::time::timeout(grpc_timeout, future)
+                        .await
+                        .unwrap()
+                        .unwrap();
                 }
             } else {
                 for msg in page.get_all(Some(current_message_id)).await {
                     let grpc_contract =
                         Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
-                    tx.send(grpc_contract).await.unwrap();
+                    let future = tx.send(grpc_contract);
+
+                    tokio::time::timeout(grpc_timeout, future)
+                        .await
+                        .unwrap()
+                        .unwrap();
                 }
             };
         });
@@ -188,8 +205,11 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     ) -> Result<tonic::Response<()>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
-        let grpc_contract =
-            super::messages_mappers::unzip_and_deserialize(&mut request.into_inner()).await?;
+        let grpc_contract = super::messages_mappers::unzip_and_deserialize(
+            &mut request.into_inner(),
+            self.app.grpc_timeout,
+        )
+        .await?;
 
         let topic_data = crate::operations::get_topic_data_to_publish_messages(
             self.app.as_ref(),
@@ -218,8 +238,11 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     ) -> Result<tonic::Response<()>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
-        let grpc_contract =
-            super::messages_mappers::deserialize_uncompressed(&mut request.into_inner()).await?;
+        let grpc_contract = super::messages_mappers::deserialize_uncompressed(
+            &mut request.into_inner(),
+            self.app.grpc_timeout,
+        )
+        .await?;
 
         let topic_data = crate::operations::get_topic_data_to_publish_messages(
             self.app.as_ref(),
