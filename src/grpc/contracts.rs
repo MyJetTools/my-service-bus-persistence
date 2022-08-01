@@ -18,13 +18,13 @@ impl NewMessagesProtobufContract {
 }
 
 pub fn check_flags(app: &AppContext) -> Result<(), tonic::Status> {
-    if !app.is_initialized() {
+    if !app.app_states.is_initialized() {
         return Err(tonic::Status::cancelled(
             "Application is not initialized yet",
         ));
     }
 
-    if app.is_shutting_down() {
+    if app.app_states.is_shutting_down() {
         return Err(tonic::Status::cancelled("Shutting down"));
     }
 

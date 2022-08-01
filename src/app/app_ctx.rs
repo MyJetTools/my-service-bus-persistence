@@ -1,14 +1,8 @@
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use my_service_bus_shared::page_id::PageId;
-use rust_extensions::{AppStates, ApplicationStates};
+use rust_extensions::AppStates;
 
 use crate::{
     index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
@@ -33,8 +27,7 @@ pub struct AppContext {
     pub settings: SettingsModel,
     pub queue_connection: AzureStorageConnection,
     pub messages_connection: Arc<AzureStorageConnection>,
-    pub shutting_down: Arc<AtomicBool>,
-    pub initialized: AtomicBool,
+
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
 
@@ -65,8 +58,6 @@ impl AppContext {
 
             messages_connection,
             queue_connection,
-            shutting_down: Arc::new(AtomicBool::new(false)),
-            initialized: AtomicBool::new(false),
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
             messages_conn_string: Arc::new(messages_conn_string),
@@ -90,18 +81,6 @@ impl AppContext {
             Ok(info) => info,
             Err(err) => format!("{:?}", err),
         }
-    }
-
-    pub fn is_shutting_down(&self) -> bool {
-        self.shutting_down.load(Ordering::Relaxed)
-    }
-
-    pub fn set_initialized(&self) {
-        self.initialized.store(true, Ordering::SeqCst);
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.initialized.load(Ordering::SeqCst)
     }
 
     pub async fn open_uncompressed_page_storage_if_exists(
@@ -171,15 +150,5 @@ impl AppContext {
         .await;
 
         IndexByMinuteStorage::new(page_blob_random_access)
-    }
-}
-
-impl ApplicationStates for AppContext {
-    fn is_initialized(&self) -> bool {
-        self.initialized.load(Ordering::Relaxed)
-    }
-
-    fn is_shutting_down(&self) -> bool {
-        self.is_shutting_down()
     }
 }

@@ -26,8 +26,6 @@ use crate::{
     },
 };
 
-use tokio::signal;
-
 pub mod persistence_grpc {
     tonic::include_proto!("persistence");
 }
@@ -66,41 +64,17 @@ async fn main() {
 
     crate::http::start_up::setup_server(&app, 7123);
 
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, app.shutting_down.clone()).unwrap();
+    tokio::spawn(operations::data_initializer::init(app.clone()));
 
-    tokio::spawn(run_app(app.clone()));
+    tokio::spawn(grpc::server::start(app.clone(), 7124));
 
-    let shut_down_task = tokio::spawn(shut_down(app.clone()));
+    app.app_states.wait_until_shutdown().await;
 
-    signal::ctrl_c().await.unwrap();
-
-    println!("Detected ctrl+c");
-
-    app.as_ref()
-        .shutting_down
-        .store(true, std::sync::atomic::Ordering::Release);
-
-    shut_down_task.await.unwrap();
-}
-
-async fn run_app(app: Arc<AppContext>) {
-    let init_handler = tokio::spawn(operations::data_initializer::init(app.clone()));
-
-    let grpc_server_task = tokio::spawn(grpc::server::start(app.clone(), 7124));
-
-    grpc_server_task.await.unwrap().unwrap();
-    init_handler.await.unwrap();
+    shut_down(app).await;
 }
 
 async fn shut_down(app: Arc<AppContext>) {
     let duration = Duration::from_secs(1);
-
-    while !app.as_ref().is_shutting_down() {
-        tokio::time::sleep(duration).await;
-    }
-
-    println!("Shutting down application");
-
     println!("Waiting until we flush all the queues and messages");
     tokio::time::sleep(duration).await;
 

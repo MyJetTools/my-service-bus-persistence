@@ -45,7 +45,7 @@ pub async fn init(app: Arc<AppContext>) {
         format!("Application is initialized in {:?}", sw.duration()),
     );
 
-    app.set_initialized();
+    app.app_states.set_initialized();
 }
 
 async fn restore_page(

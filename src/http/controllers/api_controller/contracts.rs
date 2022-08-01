@@ -149,7 +149,7 @@ impl StatusModel {
         sys_info.refresh_all();
 
         let model = StatusModel {
-            initialing: match app.is_initialized() {
+            initialing: match app.app_states.is_initialized() {
                 true => None,
                 false => Some(true),
             },
