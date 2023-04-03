@@ -10,7 +10,8 @@ use super::contracts::*;
     method: "DELETE",
     route: "/Topic",
     input_data: "DeleteTopicHttpContract",
-    description: "Delete Topic",
+    description: "Deletes Topic",
+    summary: "Delete Topic",
     controller: "Queues",
     result:[
         {status_code: 202, description: "Topic is deleted"},

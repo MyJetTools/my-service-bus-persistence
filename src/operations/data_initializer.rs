@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use my_service_bus_shared::page_id::PageId;
-use rust_extensions::StopWatch;
+use rust_extensions::{Logger, StopWatch};
 
 use crate::{
-    app::{file_name_generators::SYSTEM_FILE_NAME, AppContext},
-    message_pages::{utils::get_active_pages, MessagePageId},
+    app::{file_name_generators::SYSTEM_FILE_NAME, AppContext, LogLevel},
+    message_pages::utils::get_active_pages,
 };
 
 pub async fn init(app: Arc<AppContext>) {
@@ -20,7 +20,7 @@ pub async fn init(app: Arc<AppContext>) {
             continue;
         }
 
-        let current_page_id = MessagePageId::from_message_id(topic_snapshot.message_id);
+        let current_page_id: PageId = topic_snapshot.get_message_id().into();
 
         let active_pages = get_active_pages(topic_snapshot);
 
@@ -29,8 +29,8 @@ pub async fn init(app: Arc<AppContext>) {
 
             restore_page(
                 app.clone(),
-                page_id.clone(),
-                page_id >= &current_page_id.value,
+                *page_id,
+                page_id.get_value() >= current_page_id.get_value(),
                 topic_snapshot.topic_id.to_string(),
             )
             .await;
@@ -39,10 +39,10 @@ pub async fn init(app: Arc<AppContext>) {
 
     sw.pause();
 
-    app.logs.add_info_string(
-        None,
-        "Initialization",
+    app.logs.write_info(
+        "Initialization".to_string(),
         format!("Application is initialized in {:?}", sw.duration()),
+        None,
     );
 
     app.app_states.set_initialized();
@@ -57,8 +57,9 @@ async fn restore_page(
     let mut sw = StopWatch::new();
     sw.start();
 
-    app.logs.add_info_string(
-        Some(topic_id.as_str()),
+    app.logs.write_by_topic(
+        LogLevel::Info,
+        topic_id.to_string(),
         "Initialization",
         format!("Loading messages #{}", page_id),
     );
@@ -79,8 +80,9 @@ async fn restore_page(
 
     sw.pause();
 
-    app.logs.add_info_string(
-        Some(topic_id.as_str()),
+    app.logs.write_by_topic(
+        LogLevel::Info,
+        topic_id,
         "Initialization",
         format!("Loaded messages #{} in {:?}", page_id, sw.duration()),
     );

@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use rust_extensions::{date_time::DateTimeAsMicroseconds, MyTimerTick};
 
-use crate::{app::AppContext, topic_data::TopicData};
+use crate::{
+    app::{AppContext, LogLevel},
+    topic_data::TopicData,
+};
 
 const MAX_PERSIST_SIZE: usize = 1024 * 1024 * 4;
 
@@ -25,8 +28,9 @@ impl MyTimerTick for SaveMessagesTimer {
             let mut topic_data = self.app.topics_list.get(&topic.topic_id).await;
 
             if topic_data.is_none() {
-                self.app.logs.add_info(
-                    Some(topic.topic_id.as_str()),
+                self.app.logs.write_by_topic(
+                    LogLevel::Info,
+                    topic.topic_id.to_string(),
                     "Saving messages",
                     format!("Topic data {} is not found. Creating it", topic.topic_id),
                 );
@@ -57,7 +61,7 @@ impl MyTimerTick for SaveMessagesTimer {
 
                     topic_data
                         .metrics
-                        .update_last_saved_message_id(result.last_saved_message_id);
+                        .update_last_saved_message_id(result.last_saved_message_id.get_value());
                 }
             }
         }

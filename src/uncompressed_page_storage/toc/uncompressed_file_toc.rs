@@ -1,5 +1,7 @@
 use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
 
+use crate::uncompressed_page_storage::FileNo;
+
 use super::MessageContentOffset;
 
 pub const TOC_SIZE_IN_PAGES: usize = 1563;
@@ -34,7 +36,7 @@ impl UncompressedFileToc {
 
     fn init_write_position(&mut self) {
         for file_no in 0..100_000 {
-            let pos = self.get_position(file_no);
+            let pos = self.get_position(FileNo::new(file_no));
             let last_position = pos.last_position();
 
             if last_position > self.write_position {
@@ -72,9 +74,8 @@ impl UncompressedFileToc {
         return Some(toc_pos / 512);
     }
 
-    pub fn get_position(&self, file_no: usize) -> MessageContentOffset {
-        let toc_pos = file_no * 8;
-        MessageContentOffset::deserialize(&self.toc_data[toc_pos..toc_pos + 8])
+    pub fn get_position(&self, file_no: FileNo) -> MessageContentOffset {
+        MessageContentOffset::deserialize(file_no.get_toc_range(&self.toc_data))
     }
 
     pub fn has_content(&self, file_no: usize) -> bool {
@@ -121,7 +122,7 @@ mod test {
 
             assert_eq!(res_page_no.unwrap(), file_no * 8 / 512);
 
-            let result = toc.get_position(file_no);
+            let result = toc.get_position(FileNo::new(file_no));
 
             assert_eq!(src_offset.offset, result.offset);
             assert_eq!(src_offset.size, result.size);

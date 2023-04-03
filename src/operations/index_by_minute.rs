@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
-use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{
     app::AppContext,
@@ -31,7 +30,7 @@ pub async fn new_messages(
             index_by_minute
                 .get_mut(&year)
                 .unwrap()
-                .update_minute_index_if_new(&minute_within_year, msg.message_id);
+                .update_minute_index_if_new(&minute_within_year, msg.get_message_id());
         }
     }
 }
@@ -42,7 +41,7 @@ fn extract_year_and_minute_within_year(
 ) -> Option<(MinuteWithinYear, u32)> {
     return Some(
         app.index_by_minute_utils
-            .get_minute_within_the_year(DateTimeAsMicroseconds::new(msg.created)),
+            .get_minute_within_the_year(msg.get_created()),
     );
 }
 

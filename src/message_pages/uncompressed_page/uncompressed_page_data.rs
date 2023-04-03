@@ -1,37 +1,18 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
 use crate::{
-    message_pages::MESSAGES_PER_PAGE,
     page_blob_random_access::{PageBlobPageId, PageBlobRandomAccess},
-    uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc},
+    uncompressed_page_storage::{
+        toc::{MessageContentOffset, UncompressedFileToc},
+        FileNo,
+    },
+    utils::MinMax,
 };
 
 use super::{read_intervals_compiler::ReadIntervalsCompiler, PayloadsToUploadContainer};
-
-pub struct MinMax {
-    pub min: MessageId,
-    pub max: MessageId,
-}
-
-impl MinMax {
-    pub fn new(message_id: MessageId) -> Self {
-        MinMax {
-            min: message_id,
-            max: message_id,
-        }
-    }
-    pub fn update(&mut self, message_id: MessageId) {
-        if self.min > message_id {
-            self.min = message_id;
-        }
-
-        if self.max < message_id {
-            self.max = message_id;
-        }
-    }
-}
 
 pub enum MessageStatus {
     Loaded(Arc<MessageProtobufModel>),
@@ -51,7 +32,7 @@ pub struct UncompressedPageData {
     pub page_id: PageId,
     pub toc: UncompressedFileToc,
     pub messages: BTreeMap<i64, MessageStatus>,
-    pub min_max: Option<MinMax>,
+    min_max: Option<MinMax>,
     pub page_blob: PageBlobRandomAccess,
     pub max_message_size_protection: usize,
 }
@@ -77,22 +58,22 @@ impl UncompressedPageData {
     }
 
     pub fn get_message_offset(&self, message_id: MessageId) -> MessageContentOffset {
-        let file_no = message_id - self.page_id * MESSAGES_PER_PAGE;
-        self.toc.get_position(file_no as usize)
+        let file_no = FileNo::from_message_id(message_id, self.page_id);
+        self.toc.get_position(file_no)
     }
 
-    fn update_min_max(&mut self, message_id: MessageId) {
+    fn update_min_max(&mut self, message_id: impl Into<MessageId>) {
         if let Some(ref mut min_max) = self.min_max {
-            min_max.update(message_id);
+            min_max.update(message_id.into());
         } else {
-            self.min_max = Some(MinMax::new(message_id));
+            self.min_max = Some(MinMax::new(message_id.into()));
         }
     }
 
     pub fn add_message(&mut self, msg: Arc<MessageProtobufModel>) {
-        self.update_min_max(msg.message_id);
+        self.update_min_max(msg.get_message_id());
         self.messages
-            .insert(msg.message_id, MessageStatus::Loaded(msg));
+            .insert(msg.get_message_id().get_value(), MessageStatus::Loaded(msg));
     }
 
     async fn load_message(&mut self, message_id: MessageId) {
@@ -103,7 +84,8 @@ impl UncompressedPageData {
         }
 
         if toc_offset.last_position() > self.page_blob.get_blob_size(None).await {
-            self.messages.insert(message_id, MessageStatus::Missing);
+            self.messages
+                .insert(message_id.into(), MessageStatus::Missing);
             return;
         }
 
@@ -128,7 +110,8 @@ impl UncompressedPageData {
             }
             Err(err) => {
                 println!("Can not decode message{}", err);
-                self.messages.insert(message_id, MessageStatus::Missing);
+                self.messages
+                    .insert(message_id.into(), MessageStatus::Missing);
             }
         }
 
@@ -136,11 +119,11 @@ impl UncompressedPageData {
     }
 
     pub async fn get(&mut self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
-        if !self.messages.contains_key(&message_id) {
+        if !self.messages.contains_key(message_id.as_ref()) {
             self.load_message(message_id).await;
         }
 
-        let result = self.messages.get(&message_id)?;
+        let result = self.messages.get(message_id.as_ref())?;
         result.get_message_content()
     }
 
@@ -157,8 +140,9 @@ impl UncompressedPageData {
             let mut last_saved_message_id = 0;
 
             for msg_to_persist in messages_to_persist {
-                if msg_to_persist.message_id > last_saved_message_id {
-                    last_saved_message_id = msg_to_persist.message_id;
+                let msg_id_to_persist = msg_to_persist.get_message_id().get_value();
+                if msg_id_to_persist > last_saved_message_id {
+                    last_saved_message_id = msg_id_to_persist;
                 }
 
                 upload_container.append(msg_to_persist);
@@ -181,7 +165,7 @@ impl UncompressedPageData {
                     .await;
             }
 
-            (payload_size, last_saved_message_id)
+            (payload_size, last_saved_message_id.into())
         };
 
         self.toc.increase_write_position(payload_size);
@@ -193,9 +177,9 @@ impl UncompressedPageData {
         &mut self,
         current_message_id: Option<MessageId>,
     ) -> Vec<Arc<MessageProtobufModel>> {
-        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
+        let start_message_id = self.page_id.get_first_message_id();
 
-        let mut to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
+        let mut to_message_id = self.page_id.get_last_message_id();
 
         if let Some(current_message_id) = current_message_id {
             if to_message_id > current_message_id {
@@ -217,7 +201,7 @@ impl UncompressedPageData {
 
         let mut collected_messages_count = 0;
 
-        for message_id in from_id..=to_id {
+        for message_id in from_id.get_value()..=to_id.get_value() {
             if let Some(msg) = self.messages.get(&message_id) {
                 match msg {
                     MessageStatus::Loaded(msg) => {
@@ -227,13 +211,14 @@ impl UncompressedPageData {
                     MessageStatus::Missing => {}
                 }
             } else {
-                let message_offset = self.get_message_offset(message_id);
+                let message_offset = self.get_message_offset(message_id.into());
 
                 if message_offset.has_data(self.max_message_size_protection) {
-                    read_intervals.add_new_interval(message_id, message_offset);
+                    read_intervals.add_new_interval(message_id.into(), message_offset);
                     collected_messages_count += 1;
                 } else {
-                    self.messages.insert(message_id, MessageStatus::Missing);
+                    self.messages
+                        .insert(message_id.into(), MessageStatus::Missing);
                 }
             }
 
@@ -251,9 +236,11 @@ impl UncompressedPageData {
                 .await;
 
             for msg_id in interval.messages.keys() {
-                let message_payload = read_intervals.read_payload(*msg_id, full_payload.as_slice());
+                let message_id = msg_id.into();
+                let message_payload =
+                    read_intervals.read_payload(message_id, full_payload.as_slice());
 
-                if let Some(msg) = self.restore_message(*msg_id, message_payload) {
+                if let Some(msg) = self.restore_message(message_id, message_payload) {
                     result.push(msg);
                 }
             }
@@ -267,9 +254,7 @@ impl UncompressedPageData {
         from_message_id: MessageId,
         max_amount: usize,
     ) -> Vec<Arc<MessageProtobufModel>> {
-        let start_message_id = self.page_id * MESSAGES_PER_PAGE;
-
-        let to_message_id = start_message_id + MESSAGES_PER_PAGE - 1;
+        let to_message_id = self.page_id.get_last_message_id();
 
         return self
             .get_range(from_message_id, to_message_id, Some(max_amount))
@@ -280,15 +265,17 @@ impl UncompressedPageData {
 pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Option<MinMax> {
     let mut result: Option<MinMax> = None;
 
+    let mut message_id = page_id.get_first_message_id();
+
     for file_no in 0..100_000 {
         if toc.has_content(file_no) {
-            let message_id: MessageId = file_no as MessageId + page_id * MESSAGES_PER_PAGE;
-
             if let Some(ref mut min_max) = result {
                 min_max.update(message_id);
             } else {
                 result = Some(MinMax::new(message_id));
             }
+
+            message_id.increment();
         }
     }
 
@@ -298,6 +285,8 @@ pub fn get_min_max_from_toc(page_id: PageId, toc: &UncompressedFileToc) -> Optio
 #[cfg(test)]
 mod test {
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+    use my_service_bus_abstractions::AsMessageId;
+    use my_service_bus_shared::page_id::AsPageId;
     use rust_extensions::date_time::DateTimeAsMicroseconds;
 
     use crate::{
@@ -319,7 +308,7 @@ mod test {
             PageBlobRandomAccess::open_or_create(page_blob, 1024 * 1024).await;
 
         let mut uncompressed_data =
-            UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
+            UncompressedPageData::new(1.as_page_id(), page_blob_random_access, 1024 * 1024).await;
 
         let result = uncompressed_data.page_blob.download(None).await;
 
@@ -338,22 +327,21 @@ mod test {
             PageBlobRandomAccess::open_or_create(page_blob, 1024 * 1024).await;
 
         let mut uncompressed_page_data =
-            UncompressedPageData::new(1, page_blob_random_access, 1024 * 1024).await;
+            UncompressedPageData::new(1.as_page_id(), page_blob_random_access, 1024 * 1024).await;
 
-        let msg_to_upload0 = MessageProtobufModel {
-            message_id: 100_001,
-            created: DateTimeAsMicroseconds::now().unix_microseconds,
-            data: vec![1, 2, 3],
-            headers: vec![],
-        };
+        let msg_to_upload0 = MessageProtobufModel::new(
+            100_001.as_message_id(),
+            DateTimeAsMicroseconds::now(),
+            vec![1, 2, 3],
+            vec![],
+        );
 
-        let msg_to_upload1 = MessageProtobufModel {
-            message_id: 100_002,
-            created: DateTimeAsMicroseconds::now().unix_microseconds,
-            data: vec![1, 2, 3],
-            headers: vec![],
-        };
-
+        let msg_to_upload1 = MessageProtobufModel::new(
+            100_002i64.as_message_id(),
+            DateTimeAsMicroseconds::now(),
+            vec![1, 2, 3],
+            vec![],
+        );
         let items_to_upload = vec![Arc::new(msg_to_upload0), Arc::new(msg_to_upload1)];
 
         uncompressed_page_data
@@ -365,8 +353,12 @@ mod test {
             .load_pages(&PageBlobPageId::new(TOC_SIZE_IN_PAGES), 1, None)
             .await;
 
-        let mut uncompressed_page_data =
-            UncompressedPageData::new(1, uncompressed_page_data.page_blob, 1024 * 1024).await;
+        let mut uncompressed_page_data = UncompressedPageData::new(
+            1.as_page_id(),
+            uncompressed_page_data.page_blob,
+            1024 * 1024,
+        )
+        .await;
 
         let result2 = uncompressed_page_data
             .page_blob
@@ -375,8 +367,14 @@ mod test {
 
         assert_eq!(result, result2);
 
-        let result_message0 = uncompressed_page_data.get(100_001).await.unwrap();
-        let result_message1 = uncompressed_page_data.get(100_002).await.unwrap();
+        let result_message0 = uncompressed_page_data
+            .get(100_001.as_message_id())
+            .await
+            .unwrap();
+        let result_message1 = uncompressed_page_data
+            .get(100_002.as_message_id())
+            .await
+            .unwrap();
 
         assert_eq!(result_message0.data, items_to_upload[0].data);
         assert_eq!(result_message1.data, items_to_upload[1].data);
@@ -401,24 +399,24 @@ mod test {
         let page_blob_random_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
 
         let mut uncompressed_page_data =
-            UncompressedPageData::new(0, page_blob_random_access, 1024 * 1024).await;
+            UncompressedPageData::new(0.as_page_id(), page_blob_random_access, 1024 * 1024).await;
 
         let mut contents = Vec::new();
 
-        let mut message_id = 0;
+        let mut message_id = MessageId::new(0);
 
         for _ in 0..10 {
             let mut items_to_upload = Vec::new();
 
             for _ in 0..10000 {
-                let msg_to_upload = MessageProtobufModel {
+                let msg_to_upload = MessageProtobufModel::new(
                     message_id,
-                    created: DateTimeAsMicroseconds::now().unix_microseconds,
-                    data: format!("CONTENT: {:20}", message_id).into_bytes(),
-                    headers: vec![],
-                };
+                    DateTimeAsMicroseconds::now(),
+                    format!("CONTENT: {:20}", message_id).into_bytes(),
+                    vec![],
+                );
 
-                message_id += 1;
+                message_id.increment();
 
                 let mut content = Vec::new();
 

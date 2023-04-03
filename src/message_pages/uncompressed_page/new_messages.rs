@@ -19,7 +19,7 @@ impl NewMessages {
         let mut write_access = self.messages.lock().await;
 
         for message in messages {
-            write_access.insert(message.message_id, Arc::new(message));
+            write_access.insert(message.get_message_id().into(), Arc::new(message));
         }
 
         write_access.len()
@@ -47,7 +47,7 @@ impl NewMessages {
         let mut write_access = self.messages.lock().await;
 
         for message in messages {
-            write_access.remove(&message.message_id);
+            write_access.remove(message.get_message_id().as_ref());
         }
 
         write_access.len()

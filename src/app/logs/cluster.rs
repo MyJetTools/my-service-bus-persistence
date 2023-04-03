@@ -16,15 +16,12 @@ impl LogsCluster {
     }
 
     pub fn push(&mut self, itm: LogItem) {
-        if let Some(topic_id) = &itm.topic_id {
-            if !self.by_topic.contains_key(topic_id) {
-                self.by_topic.insert(topic_id.to_string(), Vec::new());
+        if let Some(ctx) = &itm.ctx {
+            if let Some(topic_id) = ctx.get("topicId") {
+                if !self.by_topic.contains_key(topic_id) {
+                    self.by_topic.insert(topic_id.to_string(), Vec::new());
+                }
             }
-
-            let mut by_topic = self.by_topic.get_mut(topic_id).unwrap();
-            by_topic.push(itm.clone());
-
-            gc(&mut by_topic);
         }
 
         self.all.push(itm);
@@ -32,8 +29,8 @@ impl LogsCluster {
     }
 }
 
-fn gc(wirte_access: &mut Vec<LogItem>) {
-    while wirte_access.len() > 100 {
-        wirte_access.remove(0);
+fn gc(write_access: &mut Vec<LogItem>) {
+    while write_access.len() > 100 {
+        write_access.remove(0);
     }
 }

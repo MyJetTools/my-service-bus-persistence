@@ -1,7 +1,9 @@
-use my_service_bus_shared::{page_compressor, protobuf_models::MessageProtobufModel};
+use my_service_bus_shared::{
+    page_compressor, page_id::PageId, protobuf_models::MessageProtobufModel,
+};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{grpc::contracts::NewMessagesProtobufContract, message_pages::MessagePageId};
+use crate::grpc::contracts::NewMessagesProtobufContract;
 
 pub struct NewMessagesGrpcContract {
     pub topic_id: String,
@@ -34,13 +36,13 @@ pub async fn unzip_and_deserialize(
     let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
 
     for msg in contract.messages {
-        let page_id = MessagePageId::from_message_id(msg.message_id);
+        let page_id = PageId::from_message_id(msg.get_message_id());
 
-        if !messages_by_page.contains_key(&page_id.value) {
-            messages_by_page.insert(page_id.value, Vec::new());
+        if !messages_by_page.contains_key(page_id.as_ref()) {
+            messages_by_page.insert(page_id.into(), Vec::new());
         }
 
-        let messages = messages_by_page.get_mut(&page_id.value).unwrap();
+        let messages = messages_by_page.get_mut(page_id.as_ref()).unwrap();
 
         messages.push(msg);
     }
@@ -75,13 +77,13 @@ pub async fn deserialize_uncompressed(
     let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
 
     for msg in contract.messages {
-        let page_id = MessagePageId::from_message_id(msg.message_id);
+        let page_id = PageId::from_message_id(msg.get_message_id());
 
-        if !messages_by_page.contains_key(&page_id.value) {
-            messages_by_page.insert(page_id.value, Vec::new());
+        if !messages_by_page.contains_key(page_id.as_ref()) {
+            messages_by_page.insert(page_id.get_value(), Vec::new());
         }
 
-        let messages = messages_by_page.get_mut(&page_id.value).unwrap();
+        let messages = messages_by_page.get_mut(page_id.as_ref()).unwrap();
 
         messages.push(msg);
     }

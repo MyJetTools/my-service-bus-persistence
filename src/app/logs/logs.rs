@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use rust_extensions::{date_time::DateTimeAsMicroseconds, Logger};
+use rust_extensions::{date_time::DateTimeAsMicroseconds, Logger, StrOrString};
 use tokio::sync::RwLock;
 
 use super::LogsCluster;
@@ -11,26 +11,38 @@ pub enum LogLevel {
     Warning,
     Error,
     FatalError,
+    Debug,
 }
 
 impl LogLevel {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             LogLevel::Info => "Info",
             LogLevel::Warning => "Warning",
             LogLevel::Error => "Error",
-            LogLevel::FatalError => "FalalError",
+            LogLevel::FatalError => "FatalError",
+            LogLevel::Debug => "Debug",
         }
     }
 }
 #[derive(Debug, Clone)]
 pub struct LogItem {
     pub date: DateTimeAsMicroseconds,
-    pub topic_id: Option<String>,
     pub level: LogLevel,
     pub process: String,
     pub message: String,
-    pub err_ctx: Option<String>,
+    pub ctx: Option<HashMap<String, String>>,
+}
+
+impl LogItem {
+    pub fn get_topic_id(&self) -> Option<&str> {
+        if let Some(ctx) = &self.ctx {
+            if let Some(topic_id) = ctx.get("topicId") {
+                return Some(topic_id);
+            }
+        }
+        return None;
+    }
 }
 
 pub struct Logs {
@@ -44,102 +56,45 @@ impl Logs {
         }
     }
 
-    pub fn add_info(&self, topic_id: Option<&str>, process: &str, message: String) {
-        let date = DateTimeAsMicroseconds::now();
-        let item = LogItem {
-            topic_id: topic_id_to_string(topic_id),
-            date,
-            level: LogLevel::Info,
-            process: process.to_string(),
-            message: message,
-            err_ctx: None,
-        };
-
-        tokio::spawn(write(self.items.clone(), item));
-    }
-
-    pub fn add_warning(&self, topic_id: Option<&str>, process: &str, message: String) {
-        let date = DateTimeAsMicroseconds::now();
-        let item = LogItem {
-            topic_id: topic_id_to_string(topic_id),
-            date,
-            level: LogLevel::Warning,
-            process: process.to_string(),
-            message: message,
-            err_ctx: None,
-        };
-
-        tokio::spawn(write(self.items.clone(), item));
-    }
-
-    pub fn add_info_string(&self, topic_id: Option<&str>, process: &str, message: String) {
-        let date = DateTimeAsMicroseconds::now();
-        let item = LogItem {
-            topic_id: topic_id_to_string(topic_id),
-            date,
-            level: LogLevel::Info,
-            process: process.to_string(),
-            message: message,
-            err_ctx: None,
-        };
-
-        tokio::spawn(write(self.items.clone(), item));
-    }
-
-    /*
-       pub fn add_error(
-           &self,
-           topic_id: Option<&str>,
-           process: &str,
-           message: String,
-           err_ctx: String,
-       ) {
-           let date = DateTimeAsMicroseconds::now();
-
-           let item = LogItem {
-               topic_id: topic_id_to_string(topic_id),
-               date,
-               level: LogLevel::Error,
-               process: process.to_string(),
-               message,
-               err_ctx: Some(err_ctx),
-           };
-
-           tokio::spawn(write(self.items.clone(), item));
-       }
-    */
-    pub fn add_fatal_error(&self, process: &str, err: String) {
-        let date = DateTimeAsMicroseconds::now();
-
-        let item = LogItem {
-            topic_id: None,
-            date,
-            level: LogLevel::FatalError,
-            process: process.to_string(),
-            message: format!("{:?}", err),
-            err_ctx: None,
-        };
-
-        tokio::spawn(write(self.items.clone(), item));
-    }
-
-    pub fn add_error_str(
+    pub fn write_by_topic(
         &self,
-        topic_id: Option<&str>,
-        process: &str,
-        message: String,
-        err_ctx: String,
+        level: LogLevel,
+        topic_id: impl Into<StrOrString<'static>>,
+        process: impl Into<StrOrString<'static>>,
+        message: impl Into<StrOrString<'static>>,
+    ) {
+        let mut ctx = HashMap::new();
+
+        ctx.insert("topicId".to_string(), topic_id.into().to_string());
+
+        let date = DateTimeAsMicroseconds::now();
+        let item = LogItem {
+            date,
+            level,
+            process: process.into().to_string(),
+            message: message.into().to_string(),
+            ctx: Some(ctx),
+        };
+
+        tokio::spawn(write(self.items.clone(), item));
+    }
+
+    pub fn write(
+        &self,
+        level: LogLevel,
+        process: impl Into<StrOrString<'static>>,
+        message: impl Into<StrOrString<'static>>,
+        ctx: Option<HashMap<String, String>>,
     ) {
         let date = DateTimeAsMicroseconds::now();
-
         let item = LogItem {
-            topic_id: topic_id_to_string(topic_id),
             date,
-            level: LogLevel::Error,
-            process: process.to_string(),
-            message: message,
-            err_ctx: Some(err_ctx),
+            level,
+            process: process.into().to_string(),
+            message: message.into().to_string(),
+            ctx,
         };
+
         tokio::spawn(write(self.items.clone(), item));
     }
 
@@ -155,47 +110,44 @@ impl Logs {
     }
 }
 
-fn topic_id_to_string(topic_id: Option<&str>) -> Option<String> {
-    let result = topic_id?;
-    return Some(result.to_string());
-}
-
-async fn write(logs: Arc<RwLock<LogsCluster>>, item: LogItem) {
-    let mut wirte_access = logs.write().await;
-
-    if let Some(topic_id) = &item.topic_id {
-        println!(
-            "{dt}: {level} Topic: {topic_id}. Message: {msg}",
-            dt = item.date.to_rfc3339(),
-            level = item.level.as_str(),
-            msg = item.message
-        );
-    } else {
-        println!(
-            "{dt}: {level} Message: {msg}",
-            dt = item.date.to_rfc3339(),
-            level = item.level.as_str(),
-            msg = item.message
-        );
-    }
-
-    wirte_access.push(item);
+async fn write(items: Arc<RwLock<LogsCluster>>, item: LogItem) {
+    let mut write_access = items.write().await;
+    write_access.push(item);
 }
 
 impl Logger for Logs {
-    fn write_info(&self, process: String, message: String, _ctx: Option<String>) {
-        self.add_info(None, process.as_str(), message);
+    fn write_info(&self, process: String, message: String, ctx: Option<HashMap<String, String>>) {
+        self.write(LogLevel::Info, process, message, ctx);
     }
 
-    fn write_warning(&self, process: String, message: String, _ctx: Option<String>) {
-        self.add_warning(None, process.as_str(), message);
+    fn write_warning(
+        &self,
+        process: String,
+        message: String,
+        ctx: Option<HashMap<String, String>>,
+    ) {
+        self.write(LogLevel::Warning, process, message, ctx);
     }
 
-    fn write_error(&self, process: String, message: String, ctx: Option<String>) {
-        self.add_error_str(None, process.as_str(), message, format!("{:?}", ctx));
+    fn write_error(&self, process: String, message: String, ctx: Option<HashMap<String, String>>) {
+        self.write(LogLevel::Error, process, message, ctx);
     }
 
-    fn write_fatal_error(&self, process: String, message: String, _ctx: Option<String>) {
-        self.add_fatal_error(process.as_str(), message);
+    fn write_fatal_error(
+        &self,
+        process: String,
+        message: String,
+        ctx: Option<HashMap<String, String>>,
+    ) {
+        self.write(LogLevel::FatalError, process, message, ctx);
+    }
+
+    fn write_debug_info(
+        &self,
+        process: String,
+        message: String,
+        ctx: Option<HashMap<String, String>>,
+    ) {
+        self.write(LogLevel::Debug, process, message, ctx);
     }
 }

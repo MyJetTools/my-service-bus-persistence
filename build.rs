@@ -1,3 +1,4 @@
 fn main() {
-    tonic_build::compile_protos("proto/MyServicePersistenceGrpcService.proto").unwrap();
+    let url = "https://raw.githubusercontent.com/MyJetTools/my-sb-proto-files/main/proto/";
+    ci_utils::sync_and_build_proto_file(url, "MyServicePersistenceGrpcService.proto");
 }

@@ -6,11 +6,11 @@ use std::{
     time::Duration,
 };
 
-use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
+use crate::page_blob_random_access::PageBlobRandomAccess;
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 use rust_extensions::StopWatch;
 use tokio::sync::Mutex;
-
-use crate::page_blob_random_access::PageBlobRandomAccess;
 
 use super::{NewMessages, UncompressedPageData};
 

@@ -5,7 +5,7 @@ use my_http_server_controllers::controllers::ControllersMiddleware;
 use crate::app::AppContext;
 
 pub fn build(app: &Arc<AppContext>) -> ControllersMiddleware {
-    let mut result = ControllersMiddleware::new();
+    let mut result = ControllersMiddleware::new(None, None);
 
     result.register_get_action(Arc::new(
         super::controllers::api_controller::IsAliveAction::new(app.clone()),

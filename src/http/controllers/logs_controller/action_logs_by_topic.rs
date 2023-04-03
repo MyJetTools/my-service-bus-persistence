@@ -44,7 +44,7 @@ async fn handle_request(
     let mut sb = StringBuilder::new();
 
     for log_item in logs {
-        let line = format!("{} {:?}", log_item.date.to_rfc3339(), log_item.level);
+        let line = format!("{} {}", log_item.date.to_rfc3339(), log_item.level.as_str());
         sb.append_line(&line);
 
         let line = format!("Process: {}", log_item.process);
@@ -52,8 +52,8 @@ async fn handle_request(
 
         sb.append_line(log_item.message.as_str());
 
-        if let Some(err_ctx) = log_item.err_ctx {
-            let line = format!("ErrCTX: {}", err_ctx);
+        if let Some(ctx) = &log_item.ctx {
+            let line = format!("Ctx: {:?}", ctx);
             sb.append_line(line.as_str());
         }
 
@@ -65,5 +65,5 @@ async fn handle_request(
     let line = format!("Rendered in {:?}", sw.duration());
     sb.append_line(line.as_str());
 
-    Ok(sb.to_string_utf8().unwrap().into())
+    Ok(sb.to_string_utf8().into())
 }

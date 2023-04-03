@@ -1,7 +1,5 @@
-use my_service_bus_shared::{
-    page_id::PageId, protobuf_models::MessageProtobufModel,
-    queue_with_intervals::QueueWithIntervals,
-};
+use my_service_bus_abstractions::queue_with_intervals::QueueWithIntervals;
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
 use crate::uncompressed_page_storage::toc::{MessageContentOffset, UncompressedFileToc};
 
@@ -36,8 +34,10 @@ impl<'s> PayloadsToUploadContainer<'s> {
             size,
         };
 
-        let file_no =
-            super::utils::get_file_no_inside_uncompressed_file(self.page_id, contract.message_id);
+        let file_no = super::utils::get_file_no_inside_uncompressed_file(
+            self.page_id,
+            contract.get_message_id(),
+        );
 
         if let Some(toc_page) = self.toc.update_file_position(file_no, &offset) {
             self.toc_pages.enqueue(toc_page as i64);

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use my_service_bus_shared::MessageId;
+use my_service_bus_abstractions::MessageId;
 
 use crate::uncompressed_page_storage::toc::MessageContentOffset;
 
 pub struct ReadInterval {
-    pub messages: HashMap<MessageId, MessageContentOffset>,
+    pub messages: HashMap<i64, MessageContentOffset>,
     pub start_pos: usize,
     pub len: usize,
 }
@@ -18,7 +18,7 @@ impl ReadInterval {
             len: offset.size,
         };
 
-        result.messages.insert(message_id, offset);
+        result.messages.insert(message_id.into(), offset);
 
         result
     }
@@ -28,11 +28,11 @@ impl ReadInterval {
 
     pub fn append(&mut self, offset: MessageContentOffset, message_id: MessageId) {
         self.len += offset.size;
-        self.messages.insert(message_id, offset);
+        self.messages.insert(message_id.into(), offset);
     }
 
     pub fn read_payload<'s>(&self, message_id: MessageId, payload: &'s [u8]) -> Option<&'s [u8]> {
-        let offset = self.messages.get(&message_id)?;
+        let offset = self.messages.get(message_id.as_ref())?;
 
         let start_offset = offset.offset - self.start_pos;
 
@@ -93,9 +93,9 @@ mod test {
     fn test_interval_join() {
         let mut read_interval_compilers = ReadIntervalsCompiler::new();
 
-        read_interval_compilers.add_new_interval(1, MessageContentOffset::new(0, 10));
-        read_interval_compilers.add_new_interval(2, MessageContentOffset::new(10, 5));
-        read_interval_compilers.add_new_interval(3, MessageContentOffset::new(15, 3));
+        read_interval_compilers.add_new_interval(1.into(), MessageContentOffset::new(0, 10));
+        read_interval_compilers.add_new_interval(2.into(), MessageContentOffset::new(10, 5));
+        read_interval_compilers.add_new_interval(3.into(), MessageContentOffset::new(15, 3));
 
         assert_eq!(1, read_interval_compilers.intervals.len());
     }
@@ -104,9 +104,9 @@ mod test {
     fn test_intervals_reading() {
         let mut read_interval_compilers = ReadIntervalsCompiler::new();
 
-        read_interval_compilers.add_new_interval(1, MessageContentOffset::new(2, 10));
-        read_interval_compilers.add_new_interval(2, MessageContentOffset::new(12, 5));
-        read_interval_compilers.add_new_interval(3, MessageContentOffset::new(17, 3));
+        read_interval_compilers.add_new_interval(1.into(), MessageContentOffset::new(2, 10));
+        read_interval_compilers.add_new_interval(2.into(), MessageContentOffset::new(12, 5));
+        read_interval_compilers.add_new_interval(3.into(), MessageContentOffset::new(17, 3));
 
         let payload0 = vec![1u8; 10];
         let payload1 = vec![2u8; 5];
@@ -119,9 +119,9 @@ mod test {
         payload.extend_from_slice(payload1.as_slice());
         payload.extend_from_slice(payload2.as_slice());
 
-        let result_payload0 = read_interval_compilers.read_payload(1, &payload[2..]);
-        let result_payload1 = read_interval_compilers.read_payload(2, &payload[2..]);
-        let result_payload2 = read_interval_compilers.read_payload(3, &payload[2..]);
+        let result_payload0 = read_interval_compilers.read_payload(1.into(), &payload[2..]);
+        let result_payload1 = read_interval_compilers.read_payload(2.into(), &payload[2..]);
+        let result_payload2 = read_interval_compilers.read_payload(3.into(), &payload[2..]);
 
         assert_eq!(payload0.as_slice(), result_payload0);
         assert_eq!(payload1.as_slice(), result_payload1);

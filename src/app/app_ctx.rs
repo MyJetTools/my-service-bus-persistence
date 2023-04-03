@@ -86,9 +86,9 @@ impl AppContext {
     pub async fn open_uncompressed_page_storage_if_exists(
         &self,
         topic_id: &str,
-        page_id: &PageId,
+        page_id: PageId,
     ) -> Option<PageBlobRandomAccess> {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
             self.messages_conn_string.clone(),
@@ -107,9 +107,9 @@ impl AppContext {
     pub async fn open_or_create_uncompressed_page_storage(
         &self,
         topic_id: &str,
-        page_id: &PageId,
+        page_id: PageId,
     ) -> PageBlobRandomAccess {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(&page_id);
+        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(page_id);
 
         let azure_storage = AzurePageBlobStorage::new(
             self.messages_conn_string.clone(),

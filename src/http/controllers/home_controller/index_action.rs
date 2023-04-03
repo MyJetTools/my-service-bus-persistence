@@ -18,7 +18,7 @@ async fn handle_request(
     _ctx: &my_http_server::HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     let content = format!(
-        r###"<html><head><title>{} MyServiceBusPersistence</title>
+        r###"<html><head><title>{ver} MyServiceBusPersistence</title>
         <link href="/css/bootstrap.css" type="text/css" rel="stylesheet" /><link href="/css/site.css?ver={rnd}" type="text/css" rel="stylesheet" /> <script src="/lib/jquery.js"></script><script src="/js/app.js?ver={rnd}"></script>
         </head><body></body></html>"###,
         ver = crate::app::APP_VERSION,

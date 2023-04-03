@@ -45,8 +45,8 @@ fn get_queues(queue_snapshot: &Vec<QueueSnapshotProtobufModel>) -> Vec<QueueStat
                 .ranges
                 .iter()
                 .map(|r| QueueRangeStatusModel {
-                    from_id: r.from_id,
-                    to_id: r.to_id,
+                    from_id: r.get_from_id().get_value(),
+                    to_id: r.get_to_id().get_value(),
                 })
                 .collect(),
         };
@@ -174,7 +174,7 @@ async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
         let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
 
         let item = LoadedPageModel {
-            page_id: page.get_page_id(),
+            page_id: page.get_page_id().get_value(),
             percent: percent as usize,
             count,
             has_skipped_messages: page.has_skipped_messages(),
@@ -205,7 +205,7 @@ async fn get_topics_model(
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
-        message_id: snapshot.message_id,
+        message_id: snapshot.get_message_id().get_value(),
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
         loaded_pages: get_loaded_pages(cache_by_topic).await,
         queues: get_queues(&snapshot.queues),

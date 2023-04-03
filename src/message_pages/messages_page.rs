@@ -1,6 +1,7 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::{page_id::PageId, protobuf_models::MessageProtobufModel};
 
 use crate::page_blob_random_access::PageBlobRandomAccess;
 

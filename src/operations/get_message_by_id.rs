@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, MessageId};
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::protobuf_models::MessageProtobufModel;
 
-use crate::{app::AppContext, message_pages::MessagePageId};
+use crate::app::AppContext;
 
 use super::OperationError;
 
@@ -13,9 +14,9 @@ pub async fn get_message_by_id(
 ) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
     let topic_data = super::topics::get_topic(app, topic_id).await?;
 
-    let page_id = MessagePageId::from_message_id(message_id);
+    let page_id = message_id.into();
 
-    let page = super::get_page_to_read(app, topic_data.as_ref(), &page_id).await;
+    let page = super::get_page_to_read(app, topic_data.as_ref(), page_id).await;
 
     Ok(page.get_message(message_id).await)
 }

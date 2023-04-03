@@ -15,8 +15,9 @@ pub async fn gc_yearly_index(app: &AppContext, topic_data: &TopicData) {
 
     while let Some(year_to_gc) = get_years_to_gc(&yearly_index, year) {
         yearly_index.remove(&year_to_gc);
-        app.logs.add_info(
-            Some(topic_data.topic_id.as_str()),
+        app.logs.write_by_topic(
+            crate::app::LogLevel::Info,
+            topic_data.topic_id.to_string(),
             "GC Yearly index",
             format!("Year index for year {} is GCed", year),
         )

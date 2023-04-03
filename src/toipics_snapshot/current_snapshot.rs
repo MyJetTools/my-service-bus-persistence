@@ -1,4 +1,5 @@
-use my_service_bus_shared::{protobuf_models::TopicsSnapshotProtobufModel, MessageId};
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use tokio::sync::{Mutex, RwLock};
 
 use super::blob_repository::TopicsSnapshotBlobRepository;
@@ -72,7 +73,7 @@ impl CurrentTopicsSnapshot {
 
         for topic in &read_access.snapshot.data {
             if topic.topic_id == topic_id {
-                return Some(topic.message_id);
+                return Some(topic.get_message_id());
             }
         }
 

@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use my_http_server_swagger::{MyHttpInput, MyHttpObjectStructure};
 use my_service_bus_shared::protobuf_models::MessageProtobufModel;
-use rust_extensions::date_time::DateTimeAsMicroseconds;
 use serde::{Deserialize, Serialize};
+
+use crate::utils::ToBase64;
 
 #[derive(MyHttpInput)]
 pub struct GetMessageByIdInputContract {
@@ -68,12 +69,10 @@ pub struct MessageJsonModel {
 
 impl MessageJsonModel {
     pub fn new(src: &MessageProtobufModel) -> Self {
-        let created = DateTimeAsMicroseconds::new(src.created).to_rfc3339();
-
         let result = Self {
-            id: src.message_id,
-            content: base64::encode(src.data.as_slice()),
-            created,
+            id: src.get_message_id().into(),
+            content: src.data.to_base64(),
+            created: src.get_created().to_rfc3339(),
         };
 
         result

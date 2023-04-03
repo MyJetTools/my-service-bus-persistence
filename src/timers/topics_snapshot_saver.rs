@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_extensions::MyTimerTick;
+use rust_extensions::{Logger, MyTimerTick};
 
 use crate::app::AppContext;
 
@@ -35,11 +35,13 @@ impl MyTimerTick for TopicsSnapshotSaverTimer {
         };
 
         if let Err(err) = result {
-            self.app.logs.add_error_str(
+            self.app.logs.write_error(
+                "Write Topics Snapshot".to_string(),
+                format!(
+                    "Can not snapshot with ID #{}. Err: {:?}",
+                    snapshot.snapshot_id, err
+                ),
                 None,
-                "Write Topics Snapshot",
-                format!("Can not snapshot iwth ID #{}", snapshot.snapshot_id),
-                format!("{:?}", err),
             );
         } else {
             self.app

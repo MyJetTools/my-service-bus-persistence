@@ -2,23 +2,23 @@ use my_service_bus_shared::protobuf_models::{MessageMetaDataProtobufModel, Messa
 
 use crate::persistence_grpc::*;
 
-pub fn to_message(src: &MessageProtobufModel) -> MessageContentGrpcModel {
-    MessageContentGrpcModel {
-        data: src.data.clone(),
-        created: src.created,
-        message_id: src.message_id,
-        meta_data: src
-            .headers
-            .iter()
-            .map(|itm| to_message_metadata(itm))
-            .collect(),
+impl<'s> Into<MessageContentGrpcModel> for &'s MessageProtobufModel {
+    fn into(self) -> MessageContentGrpcModel {
+        MessageContentGrpcModel {
+            data: self.data.clone(),
+            created: self.get_created().unix_microseconds,
+            message_id: self.get_message_id().into(),
+            meta_data: self.headers.iter().map(|itm| itm.into()).collect(),
+        }
     }
 }
 
-pub fn to_message_metadata(src: &MessageMetaDataProtobufModel) -> MessageContentMetaDataItem {
-    MessageContentMetaDataItem {
-        key: src.key.to_string(),
-        value: src.value.to_string(),
+impl<'s> Into<MessageContentMetaDataItem> for &'s MessageMetaDataProtobufModel {
+    fn into(self) -> MessageContentMetaDataItem {
+        MessageContentMetaDataItem {
+            key: self.key.to_string(),
+            value: self.value.to_string(),
+        }
     }
 }
 

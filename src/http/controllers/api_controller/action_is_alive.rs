@@ -33,9 +33,7 @@ pub async fn handle_request(
         env_info: action.app.get_env_info(),
     };
 
-    let result = HttpOutput::as_json(model).into_ok_result(true);
-
-    return Ok(result);
+    HttpOutput::as_json(model).into_ok_result(true)
 }
 
 #[derive(Serialize, Deserialize, Debug)]

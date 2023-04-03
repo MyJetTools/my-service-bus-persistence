@@ -1,24 +1,14 @@
+use my_service_bus_abstractions::{AsMessageId, MessageId};
 use my_service_bus_shared::{
     page_compressor::CompressedPageBuilder,
     protobuf_models::{MessageProtobufModel, MessagesProtobufModel},
-    MessageId,
 };
-use rust_extensions::date_time::DateTimeAsMicroseconds;
 
-use crate::{message_pages::MessagesPage, operations::OperationError, persistence_grpc::*};
-
-pub fn get_none_message() -> MessageContentGrpcModel {
-    MessageContentGrpcModel {
-        created: DateTimeAsMicroseconds::now().unix_microseconds,
-        data: Vec::new(),
-        meta_data: Vec::new(),
-        message_id: -1,
-    }
-}
+use crate::{message_pages::MessagesPage, operations::OperationError};
 
 pub struct MsgRange {
-    pub msg_from: i64,
-    pub msg_to: i64,
+    pub msg_from: MessageId,
+    pub msg_to: MessageId,
 }
 
 pub async fn get_v0(
@@ -30,12 +20,12 @@ pub async fn get_v0(
 
     let mut messages = Vec::with_capacity(arced_messages.len());
     for acred_message in arced_messages {
-        messages.push(MessageProtobufModel {
-            message_id: acred_message.message_id,
-            created: acred_message.created,
-            data: acred_message.data.clone(),
-            headers: acred_message.headers.clone(),
-        });
+        messages.push(MessageProtobufModel::new(
+            acred_message.get_message_id(),
+            acred_message.get_created(),
+            acred_message.data.clone(),
+            acred_message.headers.clone(),
+        ));
     }
 
     let messages = MessagesProtobufModel { messages };
@@ -58,7 +48,8 @@ pub async fn get_v1(
     current_message_id: MessageId,
 ) -> Result<Vec<Vec<u8>>, OperationError> {
     let messages_snapshot = if let Some(range) = range {
-        page.get_range(range.msg_from, range.msg_to).await
+        page.get_range(range.msg_from.as_message_id(), range.msg_to)
+            .await
     } else {
         page.get_all(Some(current_message_id)).await
     };
@@ -76,7 +67,7 @@ pub async fn get_v1(
     for msg in messages_snapshot {
         let mut buffer = Vec::new();
         msg.serialize(&mut buffer)?;
-        zip_builder.add_message(msg.message_id, buffer.as_slice())?;
+        zip_builder.add_message(msg.get_message_id(), buffer.as_slice())?;
         used_messages += 1;
 
         messages += 1;

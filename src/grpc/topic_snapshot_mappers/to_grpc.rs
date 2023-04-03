@@ -4,24 +4,27 @@ use my_service_bus_shared::protobuf_models::{
 
 use crate::persistence_grpc::*;
 
-// From Domain to Grpc-Contract
-pub fn to_topic_snapshot(src: &TopicSnapshotProtobufModel) -> TopicAndQueuesSnapshotGrpcModel {
-    TopicAndQueuesSnapshotGrpcModel {
-        topic_id: src.topic_id.to_string(),
-        message_id: src.message_id,
-        queue_snapshots: to_queue_snapshot_vec(src.queues.as_slice()),
+impl Into<TopicAndQueuesSnapshotGrpcModel> for &TopicSnapshotProtobufModel {
+    fn into(self) -> TopicAndQueuesSnapshotGrpcModel {
+        TopicAndQueuesSnapshotGrpcModel {
+            topic_id: self.topic_id.to_string(),
+            message_id: self.get_message_id().get_value(),
+            queue_snapshots: to_queue_snapshot_vec(self.queues.as_slice()),
+        }
     }
 }
 
-pub fn to_index_range(src: &QueueRangeProtobufModel) -> QueueIndexRangeGrpcModel {
-    QueueIndexRangeGrpcModel {
-        from_id: src.from_id,
-        to_id: src.to_id,
+impl Into<QueueIndexRangeGrpcModel> for &QueueRangeProtobufModel {
+    fn into(self) -> QueueIndexRangeGrpcModel {
+        QueueIndexRangeGrpcModel {
+            from_id: self.get_from_id().get_value(),
+            to_id: self.get_to_id().get_value(),
+        }
     }
 }
 
 pub fn to_index_range_vec(src: &[QueueRangeProtobufModel]) -> Vec<QueueIndexRangeGrpcModel> {
-    src.iter().map(|itm| to_index_range(itm)).collect()
+    src.iter().map(|itm| itm.into()).collect()
 }
 
 pub fn to_queue_snapshot(src: &QueueSnapshotProtobufModel) -> QueueSnapshotGrpcModel {

@@ -7,7 +7,8 @@ use std::sync::Arc;
 #[my_http_server_swagger::http_route(method:"GET",
 route:"/Read/ListFromDate",
 controller:"Read",
-description:"Read message by Id",
+description:"Reads message by Id",
+summary:"Read message by Id",
 input_data:"GetMessagesByIdInputContract",
 result:[
     {status_code: 200, description: "Found messages"},

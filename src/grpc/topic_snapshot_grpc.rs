@@ -33,9 +33,7 @@ impl MyServiceBusQueuePersistenceGrpcService for MyServicePersistenceGrpc {
             let result = app.topics_snapshot.get().await;
 
             for topic_snapshot in &result.snapshot.data {
-                let grpc_contract =
-                    super::topic_snapshot_mappers::to_grpc::to_topic_snapshot(topic_snapshot);
-                tx.send(Ok(grpc_contract)).await.unwrap();
+                tx.send(Ok(topic_snapshot.into())).await.unwrap();
             }
         });
 

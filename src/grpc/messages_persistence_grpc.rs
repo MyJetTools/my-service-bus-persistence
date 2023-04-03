@@ -1,9 +1,11 @@
 use crate::grpc::compressed_page_compiler::MsgRange;
-use crate::message_pages::MessagePageId;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
 
 use futures_core::Stream;
+use my_service_bus_abstractions::AsMessageId;
+use my_service_bus_shared::page_id::AsPageId;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tonic::Status;
@@ -44,17 +46,21 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let message = crate::operations::get_message_by_id(
             self.app.as_ref(),
             req.topic_id.as_ref(),
-            req.message_id,
+            req.message_id.into(),
         )
         .await
         .unwrap();
 
-        if message.is_none() {
-            let result = super::compressed_page_compiler::get_none_message();
-            return Ok(tonic::Response::new(result));
-        }
+        let result = match message {
+            Some(msg) => msg.as_ref().into(),
+            None => MessageContentGrpcModel {
+                created: DateTimeAsMicroseconds::now().unix_microseconds,
+                data: Vec::new(),
+                meta_data: Vec::new(),
+                message_id: -1,
+            },
+        };
 
-        let result = super::messages_mappers::to_grpc::to_message(message.as_ref().unwrap());
         return Ok(tonic::Response::new(result));
     }
 
@@ -84,18 +90,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let topic_data = data_by_topic.unwrap();
 
-            let page_id = MessagePageId::new(req.page_no);
-
-            let page =
-                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
-                    .await;
+            let page = crate::operations::get_page_to_read(
+                app.as_ref(),
+                topic_data.as_ref(),
+                req.page_no.as_page_id(),
+            )
+            .await;
 
             let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
                 None
             } else {
                 Some(MsgRange {
-                    msg_from: req.from_message_id,
-                    msg_to: req.to_message_id,
+                    msg_from: req.from_message_id.as_message_id(),
+                    msg_to: req.to_message_id.as_message_id(),
                 })
             };
 
@@ -161,16 +168,22 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
             let topic_data = data_by_topic.unwrap();
 
-            let page_id = MessagePageId::new(req.page_no);
-
-            let page =
-                crate::operations::get_page_to_read(app.as_ref(), topic_data.as_ref(), &page_id)
-                    .await;
+            let page = crate::operations::get_page_to_read(
+                app.as_ref(),
+                topic_data.as_ref(),
+                req.page_no.as_page_id(),
+            )
+            .await;
 
             if req.from_message_id >= 0 && req.to_message_id >= 0 {
-                for msg in page.get_range(req.from_message_id, req.to_message_id).await {
-                    let grpc_contract =
-                        Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
+                for msg in page
+                    .get_range(
+                        req.from_message_id.as_message_id(),
+                        req.to_message_id.as_message_id(),
+                    )
+                    .await
+                {
+                    let grpc_contract = Ok(msg.as_ref().into());
                     let future = tx.send(grpc_contract);
 
                     tokio::time::timeout(grpc_timeout, future)
@@ -180,8 +193,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
                 }
             } else {
                 for msg in page.get_all(Some(current_message_id)).await {
-                    let grpc_contract =
-                        Ok(super::messages_mappers::to_grpc::to_message(msg.as_ref()));
+                    let grpc_contract = Ok(msg.as_ref().into());
                     let future = tx.send(grpc_contract);
 
                     tokio::time::timeout(grpc_timeout, future)
@@ -221,7 +233,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             crate::operations::new_messages(
                 self.app.as_ref(),
                 topic_data.as_ref(),
-                page_id,
+                page_id.as_page_id(),
                 messages,
             )
             .await
@@ -254,7 +266,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             crate::operations::new_messages(
                 self.app.as_ref(),
                 topic_data.as_ref(),
-                page_id,
+                page_id.as_page_id(),
                 messages,
             )
             .await

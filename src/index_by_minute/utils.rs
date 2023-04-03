@@ -1,6 +1,8 @@
 use std::usize;
 
+//cSpell:disable
 use chrono::{Datelike, Timelike};
+//cSpell:enable
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use super::MinuteWithinYear;
@@ -113,13 +115,13 @@ mod tests {
 
         let (minute, _) = utils.get_minute_within_the_year(dt);
 
-        assert_eq!(0, minute.minute);
+        assert_eq!(0, minute.get_value());
 
         let dt = DateTimeAsMicroseconds::parse_iso_string("2021-01-01T00:00:01").unwrap();
 
         let (minute, _) = utils.get_minute_within_the_year(dt);
 
-        assert_eq!(0, minute.minute);
+        assert_eq!(0, minute.get_value());
 
         //First Minute
 
@@ -127,7 +129,7 @@ mod tests {
 
         let (minute, _) = utils.get_minute_within_the_year(dt);
 
-        assert_eq!(1, minute.minute);
+        assert_eq!(1, minute.get_value());
 
         //First Hour
 
@@ -135,7 +137,7 @@ mod tests {
 
         let (minute, _) = utils.get_minute_within_the_year(dt);
 
-        assert_eq!(60, minute.minute);
+        assert_eq!(60, minute.get_value());
 
         //First Hour
 
@@ -143,6 +145,6 @@ mod tests {
 
         let (minute, _) = utils.get_minute_within_the_year(dt);
 
-        assert_eq!(215090, minute.minute);
+        assert_eq!(215090, minute.get_value());
     }
 }

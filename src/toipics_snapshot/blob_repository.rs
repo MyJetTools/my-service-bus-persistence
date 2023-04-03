@@ -92,6 +92,7 @@ mod tests {
     use super::*;
 
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+    use my_service_bus_abstractions::AsMessageId;
     use my_service_bus_shared::protobuf_models::{
         TopicSnapshotProtobufModel, TopicsSnapshotProtobufModel,
     };
@@ -112,12 +113,11 @@ mod tests {
 
         let mut src = TopicsSnapshotProtobufModel { data: Vec::new() };
 
-        src.data.push(TopicSnapshotProtobufModel {
-            topic_id: "Test".to_string(),
-            message_id: 12,
-            not_used: 55,
-            queues: Vec::new(),
-        });
+        src.data.push(TopicSnapshotProtobufModel::new(
+            "Test".to_string(),
+            12.as_message_id(),
+            vec![],
+        ));
 
         repo.write(&src).await.unwrap();
 
@@ -126,6 +126,9 @@ mod tests {
         assert_eq!(src.data.len(), dest.data.len());
 
         assert_eq!(src.data[0].topic_id, dest.data[0].topic_id);
-        assert_eq!(src.data[0].message_id, dest.data[0].message_id);
+        assert_eq!(
+            src.data[0].get_message_id().get_value(),
+            dest.data[0].get_message_id().get_value()
+        );
     }
 }
