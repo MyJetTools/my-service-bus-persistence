@@ -2,6 +2,8 @@ use my_service_bus_shared::page_id::PageId;
 
 pub const SYSTEM_FILE_NAME: &str = "system";
 
+pub const SOFT_DELETE_METADATA_FILE_NAME: &str = ".deleted";
+
 pub fn generate_uncompressed_blob_name(page_id: PageId) -> String {
     return format!("{:019}.uncompressed", page_id.get_value());
 }

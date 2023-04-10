@@ -1,6 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
-use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+use my_azure_storage_sdk::{
+    block_blob::BlockBlobApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
+};
 use my_service_bus_shared::page_id::PageId;
 use rust_extensions::AppStates;
 

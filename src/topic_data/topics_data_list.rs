@@ -44,4 +44,9 @@ impl TopicsDataList {
         write_access.insert(topic_id.to_string(), topic_data.clone());
         topic_data
     }
+
+    pub async fn delete(&self, topic_id: &str) -> Option<Arc<TopicData>> {
+        let mut write_access = self.data.write().await;
+        write_access.remove(topic_id)
+    }
 }

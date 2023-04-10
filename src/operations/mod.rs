@@ -1,4 +1,5 @@
 pub mod data_initializer;
+mod delete_topic;
 mod error;
 mod gc_pages;
 mod gc_yearly_index;
@@ -16,6 +17,7 @@ mod new_messages;
 mod restore_page_error;
 mod topics;
 
+pub use delete_topic::*;
 pub use error::OperationError;
 pub use gc_pages::gc_pages;
 pub use gc_yearly_index::gc_yearly_index;

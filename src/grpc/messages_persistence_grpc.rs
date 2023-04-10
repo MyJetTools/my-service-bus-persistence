@@ -274,4 +274,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         return Ok(tonic::Response::new(()));
     }
+
+    async fn delete_topic(
+        &self,
+        request: tonic::Request<DeleteTopicGrpcRequest>,
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+        let request = request.into_inner();
+
+        crate::operations::delete_topic(
+            self.app.as_ref(),
+            &request.topic_id,
+            request.delete_after.into(),
+        )
+        .await;
+        return Ok(tonic::Response::new(()));
+    }
 }
