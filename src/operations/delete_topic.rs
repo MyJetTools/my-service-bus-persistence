@@ -28,4 +28,6 @@ pub async fn delete_topic(app: &AppContext, topic_id: &str, delete_after: DateTi
         .upload_block_blob(topic_id, SOFT_DELETE_METADATA_FILE_NAME, payload)
         .await
         .unwrap();
+
+    app.topics_list.delete(topic_id).await;
 }
