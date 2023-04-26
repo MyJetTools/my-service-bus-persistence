@@ -1,10 +1,10 @@
 use my_service_bus_abstractions::MessageId;
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::app::Logs;
 
-use super::blob_repository::TopicsSnapshotBlobRepository;
+use super::page_blob_storage::TopicsSnapshotPageBlobStorage;
 
 #[derive(Clone)]
 pub struct TopicsSnapshotData {
@@ -34,15 +34,15 @@ impl TopicsSnapshotData {
 
 pub struct CurrentTopicsSnapshot {
     data: RwLock<TopicsSnapshotData>,
-    pub blob: Mutex<TopicsSnapshotBlobRepository>,
+    pub blob: TopicsSnapshotPageBlobStorage,
 }
 
 impl CurrentTopicsSnapshot {
-    pub async fn new(mut blob: TopicsSnapshotBlobRepository) -> Self {
-        let snapshot = blob.read().await.unwrap();
+    pub async fn read_or_create(blob: TopicsSnapshotPageBlobStorage) -> Self {
+        let snapshot = blob.read_or_create_topics_snapshot().await.unwrap();
         Self {
             data: RwLock::new(TopicsSnapshotData::new(snapshot)),
-            blob: Mutex::new(blob),
+            blob,
         }
     }
 
@@ -94,10 +94,7 @@ impl CurrentTopicsSnapshot {
         let mut attempt_no = 0;
 
         loop {
-            let result = {
-                let mut blob_access = self.blob.lock().await;
-                blob_access.write(&snapshot.snapshot).await
-            };
+            let result = { self.blob.write_topics_snapshot(&snapshot.snapshot).await };
 
             if let Err(err) = result {
                 logs.write(

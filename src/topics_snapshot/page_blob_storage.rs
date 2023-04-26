@@ -1,23 +1,52 @@
-use std::{time::Duration, usize};
+use std::{sync::atomic::AtomicUsize, time::Duration, usize};
 
-use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
+use my_azure_storage_sdk::{
+    page_blob::{AzurePageBlobStorage, PageBlobContentToUpload},
+    AzureStorageError,
+};
 use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 
-pub struct TopicsSnapshotBlobRepository {
+pub struct TopicsSnapshotPageBlobStorage {
     page_blob: AzurePageBlobStorage,
+    size: AtomicUsize,
 }
 
-impl TopicsSnapshotBlobRepository {
+impl TopicsSnapshotPageBlobStorage {
     pub fn new(page_blob: AzurePageBlobStorage) -> Self {
-        Self { page_blob }
+        Self {
+            page_blob,
+            size: AtomicUsize::new(0),
+        }
     }
 
-    pub async fn read(&mut self) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
+    async fn update_size(&self, page_blob_content: &PageBlobContentToUpload) {
+        let current_size = self.size.load(std::sync::atomic::Ordering::SeqCst);
+
+        if current_size == page_blob_content.content_size() {
+            return;
+        }
+
+        self.page_blob
+            .resize(page_blob_content.get_size_in_pages())
+            .await
+            .unwrap();
+
+        self.size.store(
+            page_blob_content.content_size(),
+            std::sync::atomic::Ordering::SeqCst,
+        );
+    }
+
+    pub async fn read_or_create_topics_snapshot(
+        &self,
+    ) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
         let mut attempt_no = 0;
         loop {
             let download_result = self.page_blob.download().await;
             match download_result {
                 Ok(result) => {
+                    self.size
+                        .store(result.len(), std::sync::atomic::Ordering::SeqCst);
                     return Ok(deserialize_model(result.as_slice()));
                 }
                 Err(err) => {
@@ -43,8 +72,8 @@ impl TopicsSnapshotBlobRepository {
         }
     }
 
-    pub async fn write(
-        &mut self,
+    pub async fn write_topics_snapshot(
+        &self,
         model: &TopicsSnapshotProtobufModel,
     ) -> Result<(), AzureStorageError> {
         let mut data = Vec::new();
@@ -67,13 +96,47 @@ impl TopicsSnapshotBlobRepository {
 
         data[0..4].copy_from_slice(&len_as_bytes[0..4]);
 
-        self.page_blob.save_pages(0, data).await.unwrap();
+        let page_blob_content = PageBlobContentToUpload::new(data, 0);
 
-        Ok(())
+        loop {
+            let result = self
+                .page_blob
+                .save_pages(0, page_blob_content.clone())
+                .await;
+
+            if result.is_ok() {
+                return Ok(());
+            }
+
+            let err = result.unwrap_err();
+
+            match err {
+                AzureStorageError::InvalidPageRange => {
+                    self.update_size(&page_blob_content).await;
+                }
+
+                _ => return Err(err),
+            }
+        }
     }
 }
 
+#[async_trait::async_trait]
+pub trait TopicsSnapshotPageBlobExts {
+    async fn read_or_create_topics_snapshot(
+        &self,
+    ) -> Result<TopicsSnapshotProtobufModel, AzureStorageError>;
+
+    async fn write_topics_snapshot(
+        &self,
+        topics_snapshot: &TopicsSnapshotProtobufModel,
+    ) -> Result<(), AzureStorageError>;
+}
+
 fn deserialize_model(content: &[u8]) -> TopicsSnapshotProtobufModel {
+    if content.len() == 0 {
+        return TopicsSnapshotProtobufModel::default();
+    }
     let mut array = [0u8; 4];
     let slice = &content[..4];
 
@@ -121,25 +184,33 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        page_blob.create_container_if_not_exists().await.unwrap();
-        page_blob.create(0).await.unwrap();
+        let page_blob_storage = TopicsSnapshotPageBlobStorage::new(page_blob);
 
-        let mut repo = TopicsSnapshotBlobRepository::new(page_blob);
+        //   page_blob.create_container_if_not_exists().await.unwrap();
+        //    page_blob.create(0).await.unwrap();
 
         // Reading initial model
-        let _ = repo.read().await.unwrap();
+        let result = page_blob_storage
+            .read_or_create_topics_snapshot()
+            .await
+            .unwrap();
 
-        let mut src = TopicsSnapshotProtobufModel { data: Vec::new() };
+        assert_eq!(result.data.len(), 0);
 
-        src.data.push(TopicSnapshotProtobufModel::new(
-            "Test".to_string(),
-            12.as_message_id(),
-            vec![],
-        ));
+        let src = TopicsSnapshotProtobufModel {
+            data: vec![TopicSnapshotProtobufModel::new(
+                "Test".to_string(),
+                12.as_message_id(),
+                vec![],
+            )],
+        };
 
-        repo.write(&src).await.unwrap();
+        page_blob_storage.write_topics_snapshot(&src).await.unwrap();
 
-        let dest = repo.read().await.unwrap();
+        let dest = page_blob_storage
+            .read_or_create_topics_snapshot()
+            .await
+            .unwrap();
 
         assert_eq!(src.data.len(), dest.data.len());
 

@@ -4,7 +4,7 @@ use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnecti
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
-use crate::topics_snapshot::blob_repository::TopicsSnapshotBlobRepository;
+use crate::topics_snapshot::page_blob_storage::TopicsSnapshotPageBlobStorage;
 
 pub const IO_RETRIES: usize = 5;
 pub const DELAY_BETWEEN_IO_RETRIES: Duration = Duration::from_secs(1);
@@ -39,7 +39,7 @@ impl SettingsModel {
 }
 
 impl SettingsModel {
-    pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotBlobRepository {
+    pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotPageBlobStorage {
         let connection =
             AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
         let page_blob = AzurePageBlobStorage::new(
@@ -49,10 +49,8 @@ impl SettingsModel {
         )
         .await;
 
-        TopicsSnapshotBlobRepository::new(page_blob)
+        TopicsSnapshotPageBlobStorage::new(page_blob)
     }
-
-
 
     pub async fn read() -> Self {
         let filename = my_service_bus_shared::settings::get_settings_filename_path(

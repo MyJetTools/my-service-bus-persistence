@@ -52,7 +52,7 @@ impl AppContext {
         let topics_repo = settings.get_topics_snapshot_repository().await;
 
         AppContext {
-            topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
+            topics_snapshot: CurrentTopicsSnapshot::read_or_create(topics_repo).await,
             logs: logs.clone(),
             topics_list: TopicsDataList::new(),
             settings,
