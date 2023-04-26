@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::settings::*;
 use my_azure_page_blob_random_access::PageBlobRandomAccess;
 
 use tokio::sync::Mutex;
@@ -71,7 +70,7 @@ impl ArchiveStorageList {
         let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
 
         let result = page_blob
-            .get_blob_size_or_create_page_blob(TOC_SIZE, IO_RETRIES, DELAY_BETWEEN_IO_RETRIES)
+            .get_blob_size_or_create_page_blob(TOC_SIZE)
             .await
             .unwrap();
 
@@ -79,7 +78,7 @@ impl ArchiveStorageList {
             page_blob.resize(TOC_SIZE).await.unwrap();
         }
 
-        let archive_storage = ArchiveStorage::new(archive_file_no, page_blob);
+        let archive_storage = ArchiveStorage::open_or_create(archive_file_no, page_blob).await;
 
         let archive_storage = Arc::new(archive_storage);
 
@@ -101,9 +100,7 @@ impl ArchiveStorageList {
 
         let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
 
-        let blob_size = page_blob
-            .get_blob_size_with_retires(IO_RETRIES, DELAY_BETWEEN_IO_RETRIES)
-            .await;
+        let blob_size = page_blob.get_blob_size_with_retires().await;
 
         if blob_size.is_err() {
             return None;
@@ -115,7 +112,7 @@ impl ArchiveStorageList {
             return None;
         }
 
-        let archive_storage = ArchiveStorage::new(archive_file_no, page_blob);
+        let archive_storage = ArchiveStorage::open_if_exists(archive_file_no, page_blob).await?;
 
         let archive_storage = Arc::new(archive_storage);
 

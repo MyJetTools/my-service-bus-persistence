@@ -46,6 +46,12 @@ pub async fn restore_sub_page(
         .read_sub_page_payload(sub_page_id)
         .await?;
 
+    if compressed_payload.is_none() {
+        return Err(RestoreSubPageError::NotFound);
+    }
+
+    let compressed_payload = compressed_payload.unwrap();
+
     let result = SubPageInner::from_compressed_payload(sub_page_id, compressed_payload.as_slice())?;
 
     Ok(SubPage::restore_from_archive(result))

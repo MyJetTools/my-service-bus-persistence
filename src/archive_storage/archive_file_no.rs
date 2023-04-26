@@ -9,7 +9,7 @@ impl ArchiveFileNo {
     }
 
     pub fn from_sub_page_id(sub_page_id: SubPageId) -> Self {
-        Self(sub_page_id.get_value() / super::consts::ARCHIVE_SUB_PAGES_PER_FILE)
+        Self(sub_page_id.get_value() / super::consts::ARCHIVE_SUB_PAGES_PER_FILE as i64)
     }
 
     pub fn get_value(&self) -> i64 {
@@ -21,7 +21,7 @@ impl ArchiveFileNo {
     }
 
     pub fn get_first_sub_page_id(&self) -> SubPageId {
-        let result = self.get_value() * super::consts::ARCHIVE_SUB_PAGES_PER_FILE;
+        let result = self.get_value() * super::consts::ARCHIVE_SUB_PAGES_PER_FILE as i64;
         SubPageId::new(result)
     }
 

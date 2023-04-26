@@ -1,13 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
 use crate::topics_snapshot::page_blob_storage::TopicsSnapshotPageBlobStorage;
-
-pub const IO_RETRIES: usize = 5;
-pub const DELAY_BETWEEN_IO_RETRIES: Duration = Duration::from_secs(1);
 
 pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
 

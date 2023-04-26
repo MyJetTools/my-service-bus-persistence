@@ -39,7 +39,7 @@ async fn read(app: &AppContext, topic_id: &str, sub_page_id: SubPageId) -> Optio
 
     match payload {
         Ok(payload) => {
-            let sub_page = SubPageInner::from_compressed_payload(sub_page_id, payload.as_slice());
+            let sub_page = SubPageInner::from_compressed_payload(sub_page_id, payload?.as_slice());
 
             if let Err(err) = &sub_page {
                 app.logs.write_by_topic(

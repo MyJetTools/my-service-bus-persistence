@@ -2,7 +2,7 @@ use my_azure_page_blob_random_access::PageBlobRandomAccess;
 use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
 use my_service_bus_abstractions::MessageId;
 
-use crate::{azure_storage_with_retries::AzurePageBlobStorageWithRetries, settings::*};
+use crate::azure_storage_with_retries::AzurePageBlobStorageWithRetries;
 
 use super::{utils::MINUTE_INDEX_FILE_SIZE, MinuteWithinYear};
 pub static INIT_PAGES_SIZE: usize = MINUTE_INDEX_FILE_SIZE / BLOB_PAGE_SIZE;
@@ -27,9 +27,7 @@ pub trait IndexByMinutePageBlobExt {
 #[async_trait::async_trait]
 impl IndexByMinutePageBlobExt for PageBlobRandomAccess {
     async fn check_index_by_minute_blob(&self) -> Option<()> {
-        let result = self
-            .get_blob_size_with_retires(IO_RETRIES, DELAY_BETWEEN_IO_RETRIES)
-            .await;
+        let result = self.get_blob_size_with_retires().await;
 
         match result {
             Ok(file_size) => {
@@ -56,11 +54,7 @@ impl IndexByMinutePageBlobExt for PageBlobRandomAccess {
 
     async fn init_index_by_minute(&self) {
         let file_size = self
-            .get_blob_size_or_create_page_blob(
-                MINUTE_INDEX_FILE_SIZE,
-                IO_RETRIES,
-                DELAY_BETWEEN_IO_RETRIES,
-            )
+            .get_blob_size_or_create_page_blob(MINUTE_INDEX_FILE_SIZE)
             .await
             .unwrap();
 
