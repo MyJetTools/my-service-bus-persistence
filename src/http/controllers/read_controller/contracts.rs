@@ -34,10 +34,10 @@ pub struct GetMessagesResponseModel {
 }
 
 impl GetMessagesResponseModel {
-    pub fn create(messages: Vec<Arc<MessageProtobufModel>>) -> Self {
+    pub fn create<'s>(messages: impl Iterator<Item = &'s Arc<MessageProtobufModel>>) -> Self {
         let mut data = Vec::new();
 
-        for msg in &messages {
+        for msg in messages {
             data.push(MessageJsonModel::new(msg))
         }
 

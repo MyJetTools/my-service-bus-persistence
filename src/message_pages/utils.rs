@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 
 use my_service_bus_shared::{page_id::PageId, protobuf_models::TopicSnapshotProtobufModel};
 
-pub const MESSAGES_PER_PAGE: i64 = 100_000;
-
 pub fn get_active_pages(snapshot: &TopicSnapshotProtobufModel) -> BTreeMap<i64, PageId> {
     let mut result: BTreeMap<i64, PageId> = BTreeMap::new();
 

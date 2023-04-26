@@ -1,13 +1,12 @@
-use my_service_bus_shared::{
-    page_compressor, page_id::PageId, protobuf_models::MessageProtobufModel,
-};
-use std::{collections::HashMap, time::Duration};
+use my_service_bus_shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
+
+use std::{collections::BTreeMap, time::Duration};
 
 use crate::grpc::contracts::NewMessagesProtobufContract;
 
 pub struct NewMessagesGrpcContract {
     pub topic_id: String,
-    pub messages_by_page: HashMap<i64, Vec<MessageProtobufModel>>,
+    pub messages_by_sub_page: BTreeMap<i64, Vec<MessageProtobufModel>>,
 }
 
 pub async fn unzip_and_deserialize(
@@ -29,26 +28,28 @@ pub async fn unzip_and_deserialize(
         payload.extend(next.chunk);
     }
 
-    let unzipped = page_compressor::zip::decompress_payload(payload.as_slice()).unwrap();
+    let unzipped =
+        my_service_bus_shared::page_compressor::zip::decompress_payload(payload.as_slice())
+            .unwrap();
 
     let contract = NewMessagesProtobufContract::parse(unzipped.as_slice());
 
-    let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
+    let mut messages_by_sub_page: BTreeMap<i64, Vec<MessageProtobufModel>> = BTreeMap::new();
 
     for msg in contract.messages {
-        let page_id = PageId::from_message_id(msg.get_message_id());
+        let sub_page_id: SubPageId = msg.get_message_id().into();
 
-        if !messages_by_page.contains_key(page_id.as_ref()) {
-            messages_by_page.insert(page_id.into(), Vec::new());
+        if !messages_by_sub_page.contains_key(sub_page_id.as_ref()) {
+            messages_by_sub_page.insert(sub_page_id.get_value(), Vec::new());
         }
 
-        let messages = messages_by_page.get_mut(page_id.as_ref()).unwrap();
+        let messages = messages_by_sub_page.get_mut(sub_page_id.as_ref()).unwrap();
 
         messages.push(msg);
     }
 
     Ok(NewMessagesGrpcContract {
-        messages_by_page,
+        messages_by_sub_page,
         topic_id: contract.topic_id,
     })
 }
@@ -74,22 +75,22 @@ pub async fn deserialize_uncompressed(
 
     let contract = NewMessagesProtobufContract::parse(payload.as_slice());
 
-    let mut messages_by_page: HashMap<i64, Vec<MessageProtobufModel>> = HashMap::new();
+    let mut messages_by_sub_page: BTreeMap<i64, Vec<MessageProtobufModel>> = BTreeMap::new();
 
     for msg in contract.messages {
-        let page_id = PageId::from_message_id(msg.get_message_id());
+        let sub_page_id: SubPageId = msg.get_message_id().into();
 
-        if !messages_by_page.contains_key(page_id.as_ref()) {
-            messages_by_page.insert(page_id.get_value(), Vec::new());
+        if !messages_by_sub_page.contains_key(sub_page_id.as_ref()) {
+            messages_by_sub_page.insert(sub_page_id.get_value(), Vec::new());
         }
 
-        let messages = messages_by_page.get_mut(page_id.as_ref()).unwrap();
+        let messages = messages_by_sub_page.get_mut(sub_page_id.as_ref()).unwrap();
 
         messages.push(msg);
     }
 
     Ok(NewMessagesGrpcContract {
-        messages_by_page,
+        messages_by_sub_page,
         topic_id: contract.topic_id,
     })
 }

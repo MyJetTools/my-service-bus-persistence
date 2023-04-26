@@ -1,152 +1,96 @@
-use std::collections::HashMap;
-
+use my_azure_page_blob_random_access::PageBlobRandomAccess;
 use my_service_bus_abstractions::MessageId;
+use rust_extensions::date_time::AtomicDateTimeAsMicroseconds;
 
-use crate::{page_blob_random_access::*, typing::*};
+use crate::typing::*;
 
-use super::{IndexByMinuteStorage, MinuteWithinYear};
+use super::{IndexByMinutePageBlobExt, MinuteWithinYear, UpdateQueue};
 
 pub struct YearlyIndexByMinute {
-    pub index_data: Vec<u8>,
     pub year: Year,
-    pub pages_to_save: HashMap<usize, ()>,
-    storage: IndexByMinuteStorage,
+    page_blob: PageBlobRandomAccess,
+    update_queue: UpdateQueue,
+    pub last_access: AtomicDateTimeAsMicroseconds,
 }
 
 impl YearlyIndexByMinute {
-    pub async fn new(year: Year, mut storage: IndexByMinuteStorage) -> Self {
+    pub async fn open_or_create(year: Year, page_blob: PageBlobRandomAccess) -> Self {
+        page_blob.init_index_by_minute().await;
+
         Self {
             year,
-            index_data: storage.load().await,
-            pages_to_save: HashMap::new(),
-            storage,
+            page_blob,
+            update_queue: UpdateQueue::new(),
+            last_access: AtomicDateTimeAsMicroseconds::now(),
         }
     }
 
-    pub fn update_minute_index_if_new(
-        &mut self,
+    pub async fn load_if_exists(year: Year, page_blob: PageBlobRandomAccess) -> Option<Self> {
+        page_blob.check_index_by_minute_blob().await?;
+
+        Self {
+            year,
+            page_blob,
+            update_queue: UpdateQueue::new(),
+            last_access: AtomicDateTimeAsMicroseconds::now(),
+        }
+        .into()
+    }
+
+    pub async fn update_minute_index_if_new(
+        &self,
         minute_within_year: &MinuteWithinYear,
         message_id: MessageId,
     ) {
-        let position_in_file = minute_within_year.get_position_in_file();
+        self.update_queue
+            .update(minute_within_year, message_id)
+            .await;
+    }
 
-        if self
-            .get_message_id_from_position(position_in_file)
-            .get_value()
-            != 0
-        {
+    pub async fn get_message_id(&self, minute_within_year: MinuteWithinYear) -> Option<MessageId> {
+        if let Some(result) = self.update_queue.get(minute_within_year).await {
+            return Some(result);
+        }
+
+        self.page_blob
+            .read_message_id_from_minute_index(minute_within_year)
+            .await
+    }
+
+    pub async fn flush_to_storage(&self) {
+        let items_to_gc = self.update_queue.get_items_ready_to_be_gc().await;
+
+        if items_to_gc.is_none() {
             return;
         }
 
-        let dest = &mut self.index_data[position_in_file..position_in_file + 8];
+        for minute in items_to_gc.unwrap() {
+            let minute = (minute).into();
 
-        dest.copy_from_slice(message_id.get_value().to_le_bytes().as_slice());
-
-        let page_id = PageBlobPageId::from_blob_position(position_in_file);
-
-        self.pages_to_save.insert(page_id.value, ());
-    }
-
-    fn get_message_id_from_position(&self, position_in_file: usize) -> MessageId {
-        let mut page_id_in_file = [0u8; 8];
-        page_id_in_file.copy_from_slice(&self.index_data[position_in_file..position_in_file + 8]);
-
-        MessageId::from_le_bytes(page_id_in_file)
-    }
-
-    fn get_page_content_to_sync_if_needed(&self) -> Option<(PageBlobPageId, Vec<u8>)> {
-        for page_to_save in self.pages_to_save.keys() {
-            let content = crate::page_blob_random_access::utils::get_page_content(
-                self.index_data.as_slice(),
-                *page_to_save,
-            );
-            return Some((PageBlobPageId::new(*page_to_save), content.to_vec()));
-        }
-
-        None
-    }
-
-    pub fn get_message_id(&self, minute_within_year: &MinuteWithinYear) -> Option<MessageId> {
-        let position_in_file = minute_within_year.get_position_in_file();
-        let result = self.get_message_id_from_position(position_in_file);
-
-        if result.get_value() == 0 {
-            None
-        } else {
-            Some(result)
+            if let Some(message_id) = self.update_queue.remove(minute).await {
+                self.write_to_blob(minute, message_id).await;
+            }
         }
     }
 
-    pub async fn flush_to_storage(&mut self) {
-        while let Some((page_id, content)) = self.get_page_content_to_sync_if_needed() {
-            self.storage.save(content.as_slice(), &page_id).await;
-            self.pages_to_save.remove(&page_id.value);
+    pub async fn write_everything_before_gc(&self) {
+        while let Some((minute, message_id)) = self.update_queue.remove_first_element().await {
+            self.write_to_blob(minute, message_id).await;
         }
     }
-}
 
-#[cfg(test)]
-mod test {
+    async fn write_to_blob(&self, minute: MinuteWithinYear, message_id: MessageId) {
+        let value = self
+            .page_blob
+            .read_message_id_from_minute_index(minute)
+            .await;
 
-    use std::sync::Arc;
+        if value.is_some() {
+            return;
+        }
 
-    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-
-    use super::*;
-
-    #[tokio::test]
-    async fn test_1() {
-        let azure_conn_string = AzureStorageConnection::new_in_memory();
-        let page_blob = AzurePageBlobStorage::new(
-            Arc::new(azure_conn_string),
-            "test".to_string(),
-            "test".to_string(),
-        )
-        .await;
-
-        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
-
-        let storage = IndexByMinuteStorage::new(random_file_access);
-        let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
-
-        let minute = MinuteWithinYear::new(5);
-        index_by_year.update_minute_index_if_new(&minute, 15.into());
-        index_by_year.update_minute_index_if_new(&minute, 16.into());
-
-        let message_id = index_by_year.get_message_id(&minute);
-
-        assert_eq!(message_id.unwrap().get_value(), 15);
-
-        //Check that page to persist has changes
-        assert_eq!(index_by_year.pages_to_save.contains_key(&0), true);
-    }
-
-    #[tokio::test]
-    async fn test_2() {
-        let azure_conn_string = AzureStorageConnection::new_in_memory();
-        let page_blob = AzurePageBlobStorage::new(
-            Arc::new(azure_conn_string),
-            "test".to_string(),
-            "test".to_string(),
-        )
-        .await;
-
-        let random_file_access = PageBlobRandomAccess::open_or_create(page_blob, 1024).await;
-
-        let storage = IndexByMinuteStorage::new(random_file_access);
-        let mut index_by_year = YearlyIndexByMinute::new(2020, storage).await;
-
-        let minute = MinuteWithinYear::new(5);
-        index_by_year.update_minute_index_if_new(&minute, 15.into());
-
-        //Like we did it from timer
-        index_by_year.flush_to_storage().await;
-
-        let result = index_by_year.storage.load().await;
-
-        assert_eq!(result[40], 15);
-        assert_eq!(result[41], 0);
-        assert_eq!(result[42], 0);
-        assert_eq!(result[43], 0);
+        self.page_blob
+            .write_message_id_to_minute_index(minute, message_id)
+            .await;
     }
 }

@@ -1,18 +1,24 @@
-use crate::grpc::compressed_page_compiler::MsgRange;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
 
 use futures_core::Stream;
-use my_service_bus_abstractions::AsMessageId;
-use my_service_bus_shared::page_id::AsPageId;
-use rust_extensions::date_time::DateTimeAsMicroseconds;
+use my_service_bus_abstractions::MessageId;
+use my_service_bus_shared::page_id::PageId;
+use my_service_bus_shared::sub_page::SubPageId;
+
 use std::pin::Pin;
-use tokio::sync::mpsc;
+use std::time::Duration;
 use tonic::Status;
 
 use super::contracts;
 
 use super::server::MyServicePersistenceGrpc;
+
+const GRPC_TIMEOUT: Duration = Duration::from_secs(3);
+
+const CHANNEL_SIZE: usize = 100;
+
+const MAX_PAYLOAD_SIZE: usize = 1024 * 1024 * 4;
 
 #[tonic::async_trait]
 impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
@@ -21,6 +27,10 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     >;
 
     type GetPageStream = Pin<
+        Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
+    >;
+
+    type GetSubPageStream = Pin<
         Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
     >;
 
@@ -54,7 +64,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let result = match message {
             Some(msg) => msg.as_ref().into(),
             None => MessageContentGrpcModel {
-                created: DateTimeAsMicroseconds::now().unix_microseconds,
+                created: 0,
                 data: Vec::new(),
                 meta_data: Vec::new(),
                 message_id: -1,
@@ -73,72 +83,31 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let req = request.into_inner();
 
         let app = self.app.clone();
-        let grpc_timeout = self.app.grpc_timeout;
-        let (tx, rx) = mpsc::channel(4);
 
-        tokio::spawn(async move {
-            let current_message_id = app
-                .topics_snapshot
-                .get_current_message_id(req.topic_id.as_ref())
-                .await
-                .unwrap();
+        let page_id = PageId::new(req.page_no);
 
-            let data_by_topic = app.topics_list.get(&req.topic_id).await;
-            if data_by_topic.is_none() {
-                return;
-            }
+        let mut from_message_id = page_id.get_first_message_id();
+        let mut to_message_id = page_id.get_last_message_id();
 
-            let topic_data = data_by_topic.unwrap();
+        if req.from_message_id > 0 && req.to_message_id > 0 {
+            from_message_id = MessageId::new(req.from_message_id);
+            to_message_id = MessageId::new(req.to_message_id);
+        }
 
-            let page = crate::operations::get_page_to_read(
-                app.as_ref(),
-                topic_data.as_ref(),
-                req.page_no.as_page_id(),
-            )
-            .await;
+        let compressed = crate::operations::compressed_page_compiler::get_compressed_page(
+            app,
+            &req.topic_id,
+            from_message_id,
+            to_message_id,
+            req.version == 0,
+            MAX_PAYLOAD_SIZE,
+        )
+        .await;
 
-            let range = if req.from_message_id <= 0 && req.to_message_id <= 0 {
-                None
-            } else {
-                Some(MsgRange {
-                    msg_from: req.from_message_id.as_message_id(),
-                    msg_to: req.to_message_id.as_message_id(),
-                })
-            };
-
-            let max_payload_size = app.get_max_payload_size();
-
-            let zip_payload = if req.version == 1 {
-                super::compressed_page_compiler::get_v1(
-                    topic_data.topic_id.as_str(),
-                    &page,
-                    max_payload_size,
-                    range,
-                    current_message_id,
-                )
-                .await
-                .unwrap()
-            } else {
-                super::compressed_page_compiler::get_v0(&page, max_payload_size, current_message_id)
-                    .await
-                    .unwrap()
-            };
-
-            for chunk in zip_payload {
-                let grpc_contract = CompressedMessageChunkModel { chunk };
-
-                let future = tx.send(Ok(grpc_contract));
-
-                tokio::time::timeout(grpc_timeout, future)
-                    .await
-                    .unwrap()
-                    .unwrap();
-            }
-        });
-
-        Ok(tonic::Response::new(Box::pin(
-            tokio_stream::wrappers::ReceiverStream::new(rx),
-        )))
+        my_grpc_extensions::grpc_server::send_vec_to_stream(compressed, |chunk| {
+            CompressedMessageChunkModel { chunk }
+        })
+        .await
     }
 
     async fn get_page(
@@ -150,58 +119,31 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let req = request.into_inner();
 
         let app = self.app.clone();
-        let grpc_timeout = self.app.grpc_timeout;
 
-        let (tx, rx) = mpsc::channel(4);
+        let (tx, rx) = tokio::sync::mpsc::channel(CHANNEL_SIZE);
+
+        let page_id = PageId::new(req.page_no);
+
+        let mut from_message_id = page_id.get_first_message_id();
+        let mut to_message_id = page_id.get_last_message_id();
+
+        if req.from_message_id <= req.to_message_id {
+            from_message_id = MessageId::new(req.from_message_id);
+            to_message_id = MessageId::new(req.to_message_id);
+        }
+
+        let topic_id = req.topic_id;
 
         tokio::spawn(async move {
-            let current_message_id = app
-                .topics_snapshot
-                .get_current_message_id(req.topic_id.as_ref())
-                .await
-                .unwrap();
-
-            let data_by_topic = app.topics_list.get(&req.topic_id).await;
-            if data_by_topic.is_none() {
-                return;
-            }
-
-            let topic_data = data_by_topic.unwrap();
-
-            let page = crate::operations::get_page_to_read(
-                app.as_ref(),
-                topic_data.as_ref(),
-                req.page_no.as_page_id(),
+            crate::operations::send_messages_to_channel(
+                app,
+                topic_id,
+                from_message_id,
+                to_message_id,
+                tx,
+                GRPC_TIMEOUT,
             )
             .await;
-
-            if req.from_message_id >= 0 && req.to_message_id >= 0 {
-                for msg in page
-                    .get_range(
-                        req.from_message_id.as_message_id(),
-                        req.to_message_id.as_message_id(),
-                    )
-                    .await
-                {
-                    let grpc_contract = Ok(msg.as_ref().into());
-                    let future = tx.send(grpc_contract);
-
-                    tokio::time::timeout(grpc_timeout, future)
-                        .await
-                        .unwrap()
-                        .unwrap();
-                }
-            } else {
-                for msg in page.get_all(Some(current_message_id)).await {
-                    let grpc_contract = Ok(msg.as_ref().into());
-                    let future = tx.send(grpc_contract);
-
-                    tokio::time::timeout(grpc_timeout, future)
-                        .await
-                        .unwrap()
-                        .unwrap();
-                }
-            };
         });
 
         Ok(tonic::Response::new(Box::pin(
@@ -209,6 +151,41 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         )))
     }
 
+    async fn get_sub_page(
+        &self,
+        request: tonic::Request<crate::persistence_grpc::GetSubPageRequest>,
+    ) -> Result<tonic::Response<Self::GetSubPageStream>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let req = request.into_inner();
+
+        let app = self.app.clone();
+
+        let sub_page_id = SubPageId::new(req.sub_page_no);
+
+        let from_message_id = sub_page_id.get_first_message_id();
+        let to_message_id = sub_page_id.get_last_message_id();
+
+        let topic_id = req.topic_id;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(CHANNEL_SIZE);
+
+        tokio::spawn(async move {
+            crate::operations::send_messages_to_channel(
+                app,
+                topic_id,
+                from_message_id,
+                to_message_id,
+                tx,
+                GRPC_TIMEOUT,
+            )
+            .await;
+        });
+
+        Ok(tonic::Response::new(Box::pin(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        )))
+    }
     async fn save_messages(
         &self,
         request: tonic::Request<
@@ -217,27 +194,16 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     ) -> Result<tonic::Response<()>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
-        let grpc_contract = super::messages_mappers::unzip_and_deserialize(
-            &mut request.into_inner(),
-            self.app.grpc_timeout,
-        )
-        .await?;
+        let grpc_contract =
+            super::messages_mappers::unzip_and_deserialize(&mut request.into_inner(), GRPC_TIMEOUT)
+                .await?;
 
-        let topic_data = crate::operations::get_topic_data_to_publish_messages(
-            self.app.as_ref(),
-            grpc_contract.topic_id.as_str(),
+        crate::operations::new_messages(
+            &self.app,
+            grpc_contract.topic_id,
+            grpc_contract.messages_by_sub_page,
         )
         .await;
-
-        for (page_id, messages) in grpc_contract.messages_by_page {
-            crate::operations::new_messages(
-                self.app.as_ref(),
-                topic_data.as_ref(),
-                page_id.as_page_id(),
-                messages,
-            )
-            .await
-        }
 
         return Ok(tonic::Response::new(()));
     }
@@ -252,26 +218,16 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let grpc_contract = super::messages_mappers::deserialize_uncompressed(
             &mut request.into_inner(),
-            self.app.grpc_timeout,
+            GRPC_TIMEOUT,
         )
         .await?;
 
-        let topic_data = crate::operations::get_topic_data_to_publish_messages(
-            self.app.as_ref(),
-            grpc_contract.topic_id.as_str(),
+        crate::operations::new_messages(
+            &self.app,
+            grpc_contract.topic_id,
+            grpc_contract.messages_by_sub_page,
         )
         .await;
-
-        for (page_id, messages) in grpc_contract.messages_by_page {
-            crate::operations::new_messages(
-                self.app.as_ref(),
-                topic_data.as_ref(),
-                page_id.as_page_id(),
-                messages,
-            )
-            .await
-        }
-
         return Ok(tonic::Response::new(()));
     }
 

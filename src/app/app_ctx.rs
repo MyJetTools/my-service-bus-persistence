@@ -1,22 +1,21 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
+use my_azure_page_blob_random_access::PageBlobRandomAccess;
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-use my_service_bus_shared::page_id::PageId;
+
 use rust_extensions::AppStates;
 
 use crate::{
-    index_by_minute::{IndexByMinuteStorage, IndexByMinuteUtils},
-    page_blob_random_access::PageBlobRandomAccess,
-    settings::SettingsModel,
-    toipics_snapshot::current_snapshot::CurrentTopicsSnapshot,
+    archive_storage::{ArchiveFileNo, ArchivePageBlobCreator, ArchiveStorageList},
+    index_by_minute::{IndexByMinuteUtils, YearlyIndexByMinute},
+    settings::{SettingsModel, PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP},
     topic_data::TopicsDataList,
+    topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
 
 pub struct AppContext {
     pub app_states: Arc<AppStates>,
@@ -26,20 +25,25 @@ pub struct AppContext {
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
     pub queue_connection: AzureStorageConnection,
-    pub messages_connection: Arc<AzureStorageConnection>,
 
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
 
+    topics_and_queue_conn_string: Arc<AzureStorageConnection>,
     messages_conn_string: Arc<AzureStorageConnection>,
-    pub grpc_timeout: Duration,
+
+    pub archive_storage_list: ArchiveStorageList,
 }
 
 impl AppContext {
     pub async fn new(settings: SettingsModel) -> AppContext {
         let logs = Arc::new(Logs::new());
-        let messages_connection = Arc::new(AzureStorageConnection::from_conn_string(
+        let messages_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
             settings.messages_connection_string.as_str(),
+        ));
+
+        let topics_and_queue_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
+            settings.queues_connection_string.as_str(),
         ));
 
         let queue_connection =
@@ -47,31 +51,20 @@ impl AppContext {
 
         let topics_repo = settings.get_topics_snapshot_repository().await;
 
-        let messages_conn_string =
-            AzureStorageConnection::from_conn_string(settings.messages_connection_string.as_str());
-
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::new(topics_repo).await,
             logs: logs.clone(),
             topics_list: TopicsDataList::new(),
             settings,
 
-            messages_connection,
             queue_connection,
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
-            messages_conn_string: Arc::new(messages_conn_string),
+            messages_conn_string,
             app_states: Arc::new(AppStates::create_un_initialized()),
-            grpc_timeout: Duration::from_secs(5),
+            archive_storage_list: ArchiveStorageList::new(),
+            topics_and_queue_conn_string,
         }
-    }
-
-    pub fn get_max_payload_size(&self) -> usize {
-        1024 * 1024 * 3 //TODO - сделать настройку
-    }
-
-    pub fn get_max_message_size(&self) -> usize {
-        1024 * 1024 * 5 //TODO - сделать настройку
     }
 
     pub fn get_env_info(&self) -> String {
@@ -83,57 +76,19 @@ impl AppContext {
         }
     }
 
-    pub async fn open_uncompressed_page_storage_if_exists(
-        &self,
-        topic_id: &str,
-        page_id: PageId,
-    ) -> Option<PageBlobRandomAccess> {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(page_id);
-
-        let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
-            topic_id.to_string(),
-            blob_name,
-        )
-        .await;
-
-        PageBlobRandomAccess::open_if_exists(
-            azure_storage,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
-        .await
-    }
-
-    pub async fn open_or_create_uncompressed_page_storage(
-        &self,
-        topic_id: &str,
-        page_id: PageId,
-    ) -> PageBlobRandomAccess {
-        let blob_name = super::file_name_generators::generate_uncompressed_blob_name(page_id);
-
-        let azure_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
-            topic_id.to_string(),
-            blob_name,
-        )
-        .await;
-
-        PageBlobRandomAccess::open_or_create(
-            azure_storage,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
-        .await
-    }
-
-    pub async fn create_topic_folder(&self, topic_folder: &str) {
-        super::azure_storage_with_retries::create_container_if_not_exists(
+    pub async fn create_topic_container(&self, topic_id: &str) {
+        crate::azure_storage_with_retries::create_container_if_not_exists(
             self.messages_conn_string.as_ref(),
-            topic_folder,
+            topic_id,
         )
         .await;
     }
 
-    pub async fn create_index_storage(&self, topic_id: &str, year: u32) -> IndexByMinuteStorage {
+    pub async fn open_or_create_index_by_minute(
+        &self,
+        topic_id: &str,
+        year: u32,
+    ) -> YearlyIndexByMinute {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
         let azure_storage = AzurePageBlobStorage::new(
@@ -143,12 +98,59 @@ impl AppContext {
         )
         .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::open_or_create(
+        let page_blob_random_access = PageBlobRandomAccess::new(
             azure_storage,
+            true,
             PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        );
+
+        YearlyIndexByMinute::open_or_create(year, page_blob_random_access).await
+    }
+
+    pub async fn try_open_index_by_minute(
+        &self,
+        topic_id: &str,
+        year: u32,
+    ) -> Option<Arc<YearlyIndexByMinute>> {
+        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+
+        let azure_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            blob_name,
         )
         .await;
 
-        IndexByMinuteStorage::new(page_blob_random_access)
+        let page_blob_random_access = PageBlobRandomAccess::new(
+            azure_storage,
+            true,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        );
+
+        let result = YearlyIndexByMinute::load_if_exists(year, page_blob_random_access).await?;
+
+        Some(Arc::new(result))
+    }
+
+    pub fn get_storage_for_active_pages(&self) -> Arc<AzureStorageConnection> {
+        self.topics_and_queue_conn_string.clone()
+    }
+}
+
+#[async_trait::async_trait]
+impl ArchivePageBlobCreator for AppContext {
+    async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> PageBlobRandomAccess {
+        let page_blob_storage = AzurePageBlobStorage::new(
+            self.messages_conn_string.clone(),
+            topic_id.to_string(),
+            archive_file_no.get_file_name(),
+        )
+        .await;
+
+        PageBlobRandomAccess::new(
+            page_blob_storage,
+            true,
+            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+        )
     }
 }

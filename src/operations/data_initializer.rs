@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::page_id::PageId;
 use rust_extensions::{Logger, StopWatch};
 
-use crate::{
-    app::{file_name_generators::SYSTEM_FILE_NAME, AppContext, LogLevel},
-    message_pages::utils::get_active_pages,
-};
+use crate::app::{file_name_generators::SYSTEM_FILE_NAME, AppContext};
 
 pub async fn init(app: Arc<AppContext>) {
     let topics_snapshots = app.topics_snapshot.get().await;
@@ -20,21 +16,7 @@ pub async fn init(app: Arc<AppContext>) {
             continue;
         }
 
-        let current_page_id: PageId = topic_snapshot.get_message_id().into();
-
-        let active_pages = get_active_pages(topic_snapshot);
-
-        for page_id in active_pages.values() {
-            println!("Restoring {}/{}", topic_snapshot.topic_id, page_id);
-
-            restore_page(
-                app.clone(),
-                *page_id,
-                page_id.get_value() >= current_page_id.get_value(),
-                topic_snapshot.topic_id.to_string(),
-            )
-            .await;
-        }
+        restore_pages(&app).await;
     }
 
     sw.pause();
@@ -48,42 +30,42 @@ pub async fn init(app: Arc<AppContext>) {
     app.app_states.set_initialized();
 }
 
-async fn restore_page(
-    app: Arc<AppContext>,
-    page_id: PageId,
-    is_page_current: bool,
-    topic_id: String,
-) {
-    let mut sw = StopWatch::new();
-    sw.start();
-
-    app.logs.write_by_topic(
-        LogLevel::Info,
-        topic_id.to_string(),
-        "Initialization",
-        format!("Loading messages #{}", page_id),
+async fn restore_pages(app: &Arc<AppContext>) {
+    app.logs.write_info(
+        "Initialization".to_string(),
+        "Loading messages since last shutdown".to_string(),
+        None,
     );
+    let topics = crate::operations::current_sub_pages_io::restore(&app)
+        .await
+        .unwrap();
 
-    let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
+    if let Some(topics) = topics {
+        let mut sw = StopWatch::new();
 
-    if is_page_current {
-        crate::operations::restore_page::open_or_create(app.as_ref(), topic_data.as_ref(), page_id)
-            .await;
+        for (topic_id, sub_page_inner) in topics {
+            sw.start();
+            let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
+
+            sw.pause();
+
+            app.logs.write_info(
+                "Initialization".to_string(),
+                format!(
+                    "Loaded sub page {} for topic {}in {}",
+                    sub_page_inner.sub_page_id.get_value(),
+                    topic_id,
+                    sw.duration_as_string()
+                ),
+                None,
+            );
+            topic_data.pages_list.add_new(sub_page_inner).await;
+        }
     } else {
-        crate::operations::restore_page::open_uncompressed_or_empty(
-            app.as_ref(),
-            topic_data.as_ref(),
-            page_id,
-        )
-        .await;
+        app.logs.write_info(
+            "Initialization".to_string(),
+            format!("No sub page data loaded"),
+            None,
+        );
     }
-
-    sw.pause();
-
-    app.logs.write_by_topic(
-        LogLevel::Info,
-        topic_id,
-        "Initialization",
-        format!("Loaded messages #{} in {:?}", page_id, sw.duration()),
-    );
 }

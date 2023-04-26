@@ -75,20 +75,14 @@ class HtmlRenderer {
                 badges += '<div>';
 
 
-
                 var theBadge = "";
 
-                if (loadedPage.hasSkipped) {
-                    theBadge += '<div><span class="badge badge-danger" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
-                } else {
-                    theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
-                }
 
-                badges += this.compileTable([theBadge, 'WritePos: ' + this.formatNumber(loadedPage.writePosition)]) +
-                    '<div class="progress">' +
-                    '<div class="progress-bar" role="progressbar" style="width: ' + loadedPage.percent + '%;" aria-valuenow="' + loadedPage.percent + '" aria-valuemin="0" aria-valuemax="100">' + loadedPage.count + '</div>' +
-                    '</div>' +
-                    '</div>';
+                theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
+
+
+
+                '</div>';
             }
 
             let activePagesBadges = '';
@@ -103,10 +97,10 @@ class HtmlRenderer {
                 '<td>' + topic.topicId +
                 '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + badges + '</td>' +
                 '<td>' + queuesContent + '</td>' +
-                '<td><div>Current Id:' + topic.messageId + '</div><div>Last Saved:' + topic.savedMessageId + '</div><div>Last Save Chunk:' + topic.lastSaveChunk + '</div>' +
+                '<td><div>Current Id:' + topic.messageId + '</div>' +
                 '<div>Last Save Duration:' + topic.lastSaveDur + '</div>' +
                 '<div>Saved ago:' + topic.lastSaveMoment + '</div>' +
-                '<div>QSize:' + topic.queueSize + '</div>' +
+
                 '</td>' +
                 '</tr>'
         }

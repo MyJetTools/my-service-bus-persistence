@@ -38,7 +38,7 @@ async fn handle_request(
     )
     .await?;
 
-    let model = GetMessagesResponseModel::create(messages);
+    let model = GetMessagesResponseModel::create(messages.iter());
 
     HttpOutput::as_json(model).into_ok_result(true).into()
 }

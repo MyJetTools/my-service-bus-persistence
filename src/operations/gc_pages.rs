@@ -1,53 +1,13 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::page_id::PageId;
-use rust_extensions::date_time::DateTimeAsMicroseconds;
-
 use crate::{app::AppContext, topic_data::TopicData};
 
 use super::OperationError;
 
-pub async fn gc_pages(
-    app: &AppContext,
-    topic_data: Arc<TopicData>,
-    active_pages: &[PageId],
-) -> Result<(), OperationError> {
-    let pages_to_gc = get_pages_to_gc(topic_data.as_ref(), active_pages).await;
-
-    if pages_to_gc.len() == 0 {
-        return Ok(());
-    }
-
-    for page_to_gc in pages_to_gc {
-        if let Some(_) = topic_data.pages_list.remove_page(page_to_gc).await {
-            app.logs.write_by_topic(
-                crate::app::LogLevel::Info,
-                topic_data.topic_id.to_string(),
-                "Page GC",
-                format!("Page {} is garbage collected", page_to_gc),
-            );
-        }
+pub async fn gc_pages(app: &AppContext, topic_data: Arc<TopicData>) -> Result<(), OperationError> {
+    if let Some(page_to_gc) = topic_data.pages_list.gc().await {
+        crate::operations::archive_io::save_sub_page(app, &topic_data, &page_to_gc).await;
     }
 
     Ok(())
-}
-
-async fn get_pages_to_gc(topic: &TopicData, active_pages: &[PageId]) -> Vec<PageId> {
-    let now = DateTimeAsMicroseconds::now();
-
-    let pages = topic.pages_list.get_all().await;
-
-    let mut pages_to_gc = Vec::new();
-
-    for page in pages {
-        if active_pages
-            .iter()
-            .all(|itm| itm.get_value() != page.get_page_id().get_value())
-        {
-            if now.seconds_before(page.as_ref().metrics.get_last_access()) > 30 {
-                pages_to_gc.push(page.get_page_id());
-            }
-        }
-    }
-    pages_to_gc
 }

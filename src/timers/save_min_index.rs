@@ -19,9 +19,7 @@ impl MyTimerTick for SaveMinIndexTimer {
     async fn tick(&self) {
         let topics_snapshot = self.app.topics_list.get_all().await;
         for topic_data in &topics_snapshot {
-            let mut yearly_indices = topic_data.yearly_index_by_minute.lock().await;
-
-            for index in yearly_indices.values_mut() {
+            for index in topic_data.yearly_index_by_minute.get_all().await {
                 index.flush_to_storage().await;
             }
         }

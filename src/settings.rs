@@ -1,13 +1,15 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
-use crate::{
-    page_blob_random_access::PageBlobRandomAccess,
-    toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository,
-};
+use crate::topics_snapshot::blob_repository::TopicsSnapshotBlobRepository;
+
+pub const IO_RETRIES: usize = 5;
+pub const DELAY_BETWEEN_IO_RETRIES: Duration = Duration::from_secs(1);
+
+pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
@@ -40,21 +42,17 @@ impl SettingsModel {
     pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotBlobRepository {
         let connection =
             AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
-        let storage = AzurePageBlobStorage::new(
+        let page_blob = AzurePageBlobStorage::new(
             Arc::new(connection),
             "topics".to_string(),
             "topicsdata".to_string(),
         )
         .await;
 
-        let blob_random_access = PageBlobRandomAccess::open_or_create(
-            storage,
-            crate::app::PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
-        .await;
-
-        TopicsSnapshotBlobRepository::new(blob_random_access)
+        TopicsSnapshotBlobRepository::new(page_blob)
     }
+
+
 
     pub async fn read() -> Self {
         let filename = my_service_bus_shared::settings::get_settings_filename_path(

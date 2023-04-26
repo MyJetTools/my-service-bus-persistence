@@ -30,8 +30,6 @@ async fn gc_pages(
     topics: TopicsSnapshotProtobufModel,
 ) -> Result<(), OperationError> {
     for topic_snapshot in &topics.data {
-        let active_pages = crate::operations::get_active_pages(topic_snapshot);
-
         let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str()).await;
 
         if topic_data.is_none() {
@@ -40,10 +38,9 @@ async fn gc_pages(
 
         let topic_data = topic_data.unwrap();
 
-        crate::operations::gc_pages(app.as_ref(), topic_data.clone(), active_pages.as_slice())
-            .await?;
+        crate::operations::gc_pages(app.as_ref(), topic_data.clone()).await?;
 
-        crate::operations::gc_yearly_index(app.as_ref(), topic_data.as_ref()).await;
+        topic_data.yearly_index_by_minute.gc().await;
     }
 
     Ok(())
