@@ -1,11 +1,11 @@
-use std::{collections::HashMap, usize};
+use std::{collections::HashMap, sync::Arc, usize};
 
 use crate::{app::AppContext, topic_data::TopicData, utils::duration_to_string};
 use my_service_bus_shared::{
     page_id::PageId,
     protobuf_models::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
 };
-use rust_extensions::date_time::DateTimeAsMicroseconds;
+use rust_extensions::date_time::{DateTimeAsMicroseconds, DateTimeDuration};
 use serde::{Deserialize, Serialize};
 
 use sysinfo::SystemExt;
@@ -92,7 +92,12 @@ struct LoadedPageModel {
 }
 
 impl LoadedPageModel {
-    pub async fn new(topic_data: &TopicData) -> Vec<Self> {
+    pub async fn new(topic_data: Option<&Arc<TopicData>>) -> Vec<Self> {
+        if topic_data.is_none() {
+            return vec![];
+        }
+
+        let topic_data = topic_data.unwrap();
         let mut result: HashMap<i64, Self> = HashMap::new();
 
         for sub_page in topic_data.pages_list.get_all().await {
@@ -147,15 +152,9 @@ impl StatusModel {
         let now = DateTimeAsMicroseconds::now();
 
         for snapshot in &topics_snapshot.snapshot.data {
-            let data_by_topic = app.topics_list.get(snapshot.topic_id.as_str()).await;
+            let topic_data = app.topics_list.get(snapshot.topic_id.as_str()).await;
 
-            if data_by_topic.is_none() {
-                continue;
-            }
-
-            let data_by_topic = data_by_topic.unwrap();
-
-            let topic_info_model = get_topics_model(snapshot, data_by_topic.as_ref(), now).await;
+            let topic_info_model = get_topics_model(snapshot, topic_data.as_ref(), now).await;
 
             topics.push(topic_info_model)
         }
@@ -186,12 +185,19 @@ impl StatusModel {
 
 async fn get_topics_model(
     snapshot: &TopicSnapshotProtobufModel,
-    topic_data: &TopicData,
+    topic_data: Option<&Arc<TopicData>>,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {
     let active_pages = crate::message_pages::utils::get_active_pages(snapshot);
 
-    let last_save_moment_since = now.duration_since(topic_data.metrics.get_last_saved_moment());
+    let (last_save_moment_since, last_save_duration) = if let Some(topic_data) = topic_data {
+        (
+            now.duration_since(topic_data.metrics.get_last_saved_moment()),
+            duration_to_string(topic_data.metrics.get_last_saved_duration()),
+        )
+    } else {
+        (DateTimeDuration::Zero, "".to_string())
+    };
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
@@ -199,8 +205,7 @@ async fn get_topics_model(
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
         loaded_pages: LoadedPageModel::new(topic_data).await,
         queues: get_queues(&snapshot.queues),
-
-        last_save_duration: duration_to_string(topic_data.metrics.get_last_saved_duration()),
+        last_save_duration,
         last_save_moment: duration_to_string(last_save_moment_since.as_positive_or_zero()),
     }
 }
