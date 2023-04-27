@@ -27,7 +27,7 @@ pub async fn new_messages(
 
             yearly_index
                 .unwrap()
-                .update_minute_index_if_new(&minute_within_year, msg.get_message_id())
+                .update_minute_index_if_new(minute_within_year, msg.get_message_id())
                 .await;
         }
     }

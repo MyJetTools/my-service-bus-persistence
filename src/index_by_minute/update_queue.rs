@@ -16,7 +16,7 @@ impl UpdateQueue {
         }
     }
 
-    pub async fn update(&self, minute_within_year: &MinuteWithinYear, message_id: MessageId) {
+    pub async fn update(&self, minute_within_year: MinuteWithinYear, message_id: MessageId) {
         let mut update_queue = self.data.lock().await;
         if !update_queue.contains_key(minute_within_year.as_ref()) {
             update_queue.insert(minute_within_year.get_value(), message_id);
@@ -43,6 +43,7 @@ impl UpdateQueue {
             .collect();
         Some(result)
     }
+
 
     pub async fn remove_first_element(&self) -> Option<(MinuteWithinYear, MessageId)> {
         let mut write_access = self.data.lock().await;

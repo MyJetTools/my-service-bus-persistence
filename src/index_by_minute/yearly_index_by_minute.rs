@@ -39,7 +39,7 @@ impl YearlyIndexByMinute {
 
     pub async fn update_minute_index_if_new(
         &self,
-        minute_within_year: &MinuteWithinYear,
+        minute_within_year: MinuteWithinYear,
         message_id: MessageId,
     ) {
         self.update_queue
@@ -58,13 +58,13 @@ impl YearlyIndexByMinute {
     }
 
     pub async fn flush_to_storage(&self) {
-        let items_to_gc = self.update_queue.get_items_ready_to_be_gc().await;
+        let items_to_write = self.update_queue.get_items_ready_to_be_gc().await;
 
-        if items_to_gc.is_none() {
+        if items_to_write.is_none() {
             return;
         }
 
-        for minute in items_to_gc.unwrap() {
+        for minute in items_to_write.unwrap() {
             let minute = (minute).into();
 
             if let Some(message_id) = self.update_queue.remove(minute).await {
@@ -92,5 +92,59 @@ impl YearlyIndexByMinute {
         self.page_blob
             .write_message_id_to_minute_index(minute, message_id)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use my_azure_page_blob_random_access::PageBlobRandomAccess;
+    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+    use my_service_bus_abstractions::MessageId;
+
+    use crate::index_by_minute::{MinuteWithinYear, YearlyIndexByMinute};
+
+    #[tokio::test]
+    async fn test_open_not_existing() {
+        let connection = AzureStorageConnection::new_in_memory();
+        let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
+
+        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+
+        let index = YearlyIndexByMinute::load_if_exists(2021, page_blob).await;
+
+        assert_eq!(index.is_none(), true);
+    }
+
+    #[tokio::test]
+    async fn test_we_already_written() {
+        let connection = AzureStorageConnection::new_in_memory();
+        let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
+
+        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+
+        let index = YearlyIndexByMinute::open_or_create(2021, page_blob).await;
+
+        //Writing First element
+        let minute = MinuteWithinYear::new(0);
+
+        let message_id = MessageId::new(15);
+
+        index.update_minute_index_if_new(minute, message_id).await;
+
+        let minute = MinuteWithinYear::new(1);
+
+        //Writing Second element
+
+        let message_id = MessageId::new(16);
+
+        index.update_minute_index_if_new(minute, message_id).await;
+
+        index.flush_to_storage().await;
+
+        let mut result = index.page_blob.read(0, 4).await.unwrap();
+
+        let result = result.read_i64();
+
+        assert_eq!(result, 15);
     }
 }
