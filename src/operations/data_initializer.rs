@@ -2,22 +2,14 @@ use std::sync::Arc;
 
 use rust_extensions::{Logger, StopWatch};
 
-use crate::app::{file_name_generators::SYSTEM_FILE_NAME, AppContext};
+use crate::app::AppContext;
 
 pub async fn init(app: Arc<AppContext>) {
-    let topics_snapshots = app.topics_snapshot.get().await;
-
     let mut sw = StopWatch::new();
 
     sw.start();
 
-    for topic_snapshot in &topics_snapshots.snapshot.data {
-        if topic_snapshot.topic_id == SYSTEM_FILE_NAME {
-            continue;
-        }
-
-        restore_pages(&app).await;
-    }
+    restore_pages(&app).await;
 
     sw.pause();
 
