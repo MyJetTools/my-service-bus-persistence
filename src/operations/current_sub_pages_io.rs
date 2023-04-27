@@ -73,6 +73,12 @@ pub async fn restore(
                         }
                     }
 
+                    tokio::spawn(async move {
+                        connection
+                            .delete_blob(CONTAINER_NAME, BLOB_NAME)
+                            .await
+                            .unwrap();
+                    });
                     return Ok(Some(result));
                 }
                 Err(err) => {

@@ -14,6 +14,8 @@ pub struct SettingsModel {
     pub queues_connection_string: String,
     #[serde(rename = "MessagesConnectionString")]
     pub messages_connection_string: String,
+    #[serde(rename = "ArchiveConnectionString")]
+    pub archive_connection_string: String,
     #[serde(rename = "LoadBlobPagesSize")]
     pub load_blob_pages_size: usize,
     #[serde(rename = "FlushQueuesSnapshotFreq")]

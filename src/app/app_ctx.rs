@@ -26,11 +26,13 @@ pub struct AppContext {
     pub settings: SettingsModel,
     pub queue_connection: AzureStorageConnection,
 
+    archive_conn_string: Arc<AzureStorageConnection>,
+    messages_conn_string: Arc<AzureStorageConnection>,
+
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
 
     topics_and_queue_conn_string: Arc<AzureStorageConnection>,
-    messages_conn_string: Arc<AzureStorageConnection>,
 
     pub archive_storage_list: ArchiveStorageList,
 }
@@ -49,6 +51,9 @@ impl AppContext {
         let queue_connection =
             AzureStorageConnection::from_conn_string(settings.queues_connection_string.as_str());
 
+        let archive_conn_string =
+            AzureStorageConnection::from_conn_string(settings.archive_connection_string.as_str());
+
         let topics_repo = settings.get_topics_snapshot_repository().await;
 
         AppContext {
@@ -64,6 +69,7 @@ impl AppContext {
             app_states: Arc::new(AppStates::create_un_initialized()),
             archive_storage_list: ArchiveStorageList::new(),
             topics_and_queue_conn_string,
+            archive_conn_string: Arc::new(archive_conn_string),
         }
     }
 
@@ -141,7 +147,7 @@ impl AppContext {
 impl ArchivePageBlobCreator for AppContext {
     async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> PageBlobRandomAccess {
         let page_blob_storage = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
+            self.archive_conn_string.clone(),
             topic_id.to_string(),
             archive_file_no.get_file_name(),
         )
