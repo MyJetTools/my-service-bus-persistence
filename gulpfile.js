@@ -7,6 +7,7 @@ gulp.task('default', function () {
     return gulp
         .src(['./JavaScript/HtmlMain.js',
             './JavaScript/HtmlStatusBar.js',
+            './JavaScript/SubpagesWidget.js',
             './JavaScript/html.js',
             './JavaScript/main.js'])
         .pipe(minifyjs())
