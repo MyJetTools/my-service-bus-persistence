@@ -4,6 +4,7 @@ use crate::{app::AppContext, topic_data::TopicData, utils::duration_to_string};
 use my_service_bus_shared::{
     page_id::PageId,
     protobuf_models::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
+    sub_page::SubPageId,
 };
 use rust_extensions::date_time::{DateTimeAsMicroseconds, DateTimeDuration};
 use serde::{Deserialize, Serialize};
@@ -122,7 +123,13 @@ impl LoadedPageModel {
             page_data.size += size_and_amount.size;
             page_data.count += size_and_amount.amount;
 
-            page_data.sub_pages.push(sub_page.get_id().get_value());
+            let first_message_id = page_id.get_first_message_id();
+
+            let first_sub_page_id: SubPageId = first_message_id.into();
+
+            let id_within_page = sub_page.get_id().get_value() - first_sub_page_id.get_value();
+
+            page_data.sub_pages.push(id_within_page);
         }
 
         result.into_iter().map(|itm| itm.1).collect()
