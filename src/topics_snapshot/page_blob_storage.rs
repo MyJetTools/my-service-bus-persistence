@@ -4,7 +4,42 @@ use my_azure_storage_sdk::{
     page_blob::{AzurePageBlobStorage, PageBlobContentToUpload},
     AzureStorageError,
 };
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
+use prost::Message;
+
+use super::protobuf_model::*;
+
+pub enum TopicsSnapshotResult {
+    V1(TopicsSnapshotProtobufModel),
+    V2(TopicsSnapshotProtobufModelV2),
+}
+
+impl TopicsSnapshotResult {
+    pub fn default() -> Self {
+        TopicsSnapshotResult::V2(TopicsSnapshotProtobufModelV2::default())
+    }
+
+    pub fn get_result(self) -> TopicsSnapshotProtobufModelV2 {
+        match self {
+            TopicsSnapshotResult::V1(data) => TopicsSnapshotProtobufModelV2 {
+                data: data.data,
+                deleted_topics: Vec::new(),
+            },
+            TopicsSnapshotResult::V2(result) => result,
+        }
+    }
+}
+
+impl Into<TopicsSnapshotResult> for TopicsSnapshotProtobufModelV2 {
+    fn into(self) -> TopicsSnapshotResult {
+        TopicsSnapshotResult::V2(self)
+    }
+}
+
+impl Into<TopicsSnapshotResult> for TopicsSnapshotProtobufModel {
+    fn into(self) -> TopicsSnapshotResult {
+        TopicsSnapshotResult::V1(self)
+    }
+}
 
 pub struct TopicsSnapshotPageBlobStorage {
     page_blob: AzurePageBlobStorage,
@@ -39,7 +74,7 @@ impl TopicsSnapshotPageBlobStorage {
 
     pub async fn read_or_create_topics_snapshot(
         &self,
-    ) -> Result<TopicsSnapshotProtobufModel, AzureStorageError> {
+    ) -> Result<TopicsSnapshotResult, AzureStorageError> {
         let mut attempt_no = 0;
         loop {
             let download_result = self.page_blob.download().await;
@@ -72,9 +107,9 @@ impl TopicsSnapshotPageBlobStorage {
         }
     }
 
-    pub async fn write_topics_snapshot(
+    pub async fn write_topics_snapshot<TModel: Message>(
         &self,
-        model: &TopicsSnapshotProtobufModel,
+        model: &TModel,
     ) -> Result<(), AzureStorageError> {
         let mut data = Vec::new();
         data.push(0);
@@ -133,9 +168,9 @@ pub trait TopicsSnapshotPageBlobExts {
     ) -> Result<(), AzureStorageError>;
 }
 
-fn deserialize_model(content: &[u8]) -> TopicsSnapshotProtobufModel {
+fn deserialize_model(content: &[u8]) -> TopicsSnapshotResult {
     if content.len() == 0 {
-        return TopicsSnapshotProtobufModel::default();
+        return TopicsSnapshotResult::default();
     }
     let mut array = [0u8; 4];
     let slice = &content[..4];
@@ -146,20 +181,37 @@ fn deserialize_model(content: &[u8]) -> TopicsSnapshotProtobufModel {
 
     let data = &content[4..data_size + 4];
 
+    let result: Result<TopicsSnapshotProtobufModelV2, prost::DecodeError> =
+        prost::Message::decode(data);
+
+    match result {
+        Ok(msg) => {
+            println!(
+                "Loaded topic snapshot V2. Topics amount is: {}",
+                msg.data.len()
+            );
+
+            return msg.into();
+        }
+        Err(_) => {
+            println!("Can not deserialize V2 topics. Trying to deserialize V1");
+        }
+    }
+
     let result: Result<TopicsSnapshotProtobufModel, prost::DecodeError> =
         prost::Message::decode(data);
 
     match result {
         Ok(msg) => {
             println!(
-                "Loaded topic snapshot. Topics amount is: {}",
+                "Loaded topic snapshot V1. Topics amount is: {}",
                 msg.data.len()
             );
 
-            return msg;
+            return msg.into();
         }
         Err(_) => {
-            panic!("The content inside topics_and_queue_blob blob can not be deserialized");
+            panic!("Can not deserialize V2 topics. Trying to deserialize V1");
         }
     }
 }
@@ -173,12 +225,9 @@ mod tests {
 
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus_abstractions::AsMessageId;
-    use my_service_bus_shared::protobuf_models::{
-        TopicSnapshotProtobufModel, TopicsSnapshotProtobufModel,
-    };
 
     #[tokio::test]
-    async fn test_serialize_deserialize() {
+    async fn test_serialize_deserialize_v1() {
         let connection = AzureStorageConnection::new_in_memory();
         let page_blob =
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
@@ -193,7 +242,8 @@ mod tests {
         let result = page_blob_storage
             .read_or_create_topics_snapshot()
             .await
-            .unwrap();
+            .unwrap()
+            .get_result();
 
         assert_eq!(result.data.len(), 0);
 
@@ -210,7 +260,55 @@ mod tests {
         let dest = page_blob_storage
             .read_or_create_topics_snapshot()
             .await
-            .unwrap();
+            .unwrap()
+            .get_result();
+
+        assert_eq!(src.data.len(), dest.data.len());
+
+        assert_eq!(src.data[0].topic_id, dest.data[0].topic_id);
+        assert_eq!(
+            src.data[0].get_message_id().get_value(),
+            dest.data[0].get_message_id().get_value()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_serialize_deserialize_v2() {
+        let connection = AzureStorageConnection::new_in_memory();
+        let page_blob =
+            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
+                .await;
+
+        let page_blob_storage = TopicsSnapshotPageBlobStorage::new(page_blob);
+
+        //   page_blob.create_container_if_not_exists().await.unwrap();
+        //    page_blob.create(0).await.unwrap();
+
+        // Reading initial model
+        let result = page_blob_storage
+            .read_or_create_topics_snapshot()
+            .await
+            .unwrap()
+            .get_result();
+
+        assert_eq!(result.data.len(), 0);
+
+        let src = TopicsSnapshotProtobufModelV2 {
+            data: vec![TopicSnapshotProtobufModel::new(
+                "Test".to_string(),
+                12.as_message_id(),
+                vec![],
+            )],
+            deleted_topics: vec![],
+        };
+
+        page_blob_storage.write_topics_snapshot(&src).await.unwrap();
+
+        let dest = page_blob_storage
+            .read_or_create_topics_snapshot()
+            .await
+            .unwrap()
+            .get_result();
 
         assert_eq!(src.data.len(), dest.data.len());
 

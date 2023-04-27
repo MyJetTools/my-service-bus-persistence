@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use crate::{app::AppContext, operations::OperationError};
+use crate::{
+    app::AppContext, operations::OperationError, topics_snapshot::TopicSnapshotProtobufModel,
+};
 
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use rust_extensions::MyTimerTick;
 
 pub struct PagesGcTimer {
@@ -19,7 +20,7 @@ impl PagesGcTimer {
 impl MyTimerTick for PagesGcTimer {
     async fn tick(&self) {
         let topics_snapshot = self.app.topics_snapshot.get().await;
-        gc_pages(self.app.clone(), topics_snapshot.snapshot)
+        gc_pages(self.app.clone(), &topics_snapshot.snapshot.data)
             .await
             .unwrap();
     }
@@ -27,9 +28,9 @@ impl MyTimerTick for PagesGcTimer {
 
 async fn gc_pages(
     app: Arc<AppContext>,
-    topics: TopicsSnapshotProtobufModel,
+    topics: &Vec<TopicSnapshotProtobufModel>,
 ) -> Result<(), OperationError> {
-    for topic_snapshot in &topics.data {
+    for topic_snapshot in topics {
         let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str()).await;
 
         if topic_data.is_none() {

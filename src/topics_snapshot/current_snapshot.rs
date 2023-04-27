@@ -1,29 +1,34 @@
 use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use tokio::sync::RwLock;
 
 use crate::app::Logs;
 
-use super::page_blob_storage::TopicsSnapshotPageBlobStorage;
+use super::{page_blob_storage::TopicsSnapshotPageBlobStorage, protobuf_model::*};
 
 #[derive(Clone)]
 pub struct TopicsSnapshotData {
     pub snapshot_id: i64,
     pub last_saved_snapshot_id: i64,
-    pub snapshot: TopicsSnapshotProtobufModel,
+    pub snapshot: TopicsSnapshotProtobufModelV2,
 }
 
 impl TopicsSnapshotData {
-    pub fn new(snapshot: TopicsSnapshotProtobufModel) -> Self {
+    pub fn new(
+        data: Vec<TopicSnapshotProtobufModel>,
+        deleted_topics: Vec<DeletedTopicProtobufModel>,
+    ) -> Self {
         Self {
-            snapshot,
+            snapshot: TopicsSnapshotProtobufModelV2 {
+                data,
+                deleted_topics,
+            },
             snapshot_id: 0,
             last_saved_snapshot_id: 0,
         }
     }
 
-    pub fn update(&mut self, snapshot: TopicsSnapshotProtobufModel) {
-        self.snapshot = snapshot;
+    pub fn update(&mut self, data: Vec<TopicSnapshotProtobufModel>) {
+        self.snapshot.data = data;
         self.snapshot_id += 1;
     }
 
@@ -40,8 +45,9 @@ pub struct CurrentTopicsSnapshot {
 impl CurrentTopicsSnapshot {
     pub async fn read_or_create(blob: TopicsSnapshotPageBlobStorage) -> Self {
         let snapshot = blob.read_or_create_topics_snapshot().await.unwrap();
+        let result = snapshot.get_result();
         Self {
-            data: RwLock::new(TopicsSnapshotData::new(snapshot)),
+            data: RwLock::new(TopicsSnapshotData::new(result.data, result.deleted_topics)),
             blob,
         }
     }
@@ -51,7 +57,7 @@ impl CurrentTopicsSnapshot {
         read_access.clone()
     }
 
-    pub async fn update(&self, snapshot: TopicsSnapshotProtobufModel) {
+    pub async fn update(&self, snapshot: Vec<TopicSnapshotProtobufModel>) {
         let mut write_access = self.data.write().await;
         write_access.update(snapshot);
     }
@@ -83,18 +89,22 @@ impl CurrentTopicsSnapshot {
     }
 
     pub async fn flush_topics_snapshot_to_blob(&self, logs: &Logs) {
-        let snapshot = self.get_snapshot_if_there_are_changes().await;
+        let topics_snapshot = self.get_snapshot_if_there_are_changes().await;
 
-        if snapshot.is_none() {
+        if topics_snapshot.is_none() {
             return;
         }
 
-        let snapshot = snapshot.unwrap();
+        let topics_snapshot = topics_snapshot.unwrap();
 
         let mut attempt_no = 0;
 
         loop {
-            let result = { self.blob.write_topics_snapshot(&snapshot.snapshot).await };
+            let result = {
+                self.blob
+                    .write_topics_snapshot(&topics_snapshot.snapshot)
+                    .await
+            };
 
             if let Err(err) = result {
                 logs.write(
@@ -102,7 +112,7 @@ impl CurrentTopicsSnapshot {
                     "Write Topics Snapshot".to_string(),
                     format!(
                         "Can not snapshot with ID #{}. Attempt:{}. Err: {:?}",
-                        snapshot.snapshot_id, attempt_no, err
+                        topics_snapshot.snapshot_id, attempt_no, err
                     ),
                     None,
                 );
@@ -115,7 +125,8 @@ impl CurrentTopicsSnapshot {
 
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             } else {
-                self.update_snapshot_id_as_saved(snapshot.snapshot_id).await;
+                self.update_snapshot_id_as_saved(topics_snapshot.snapshot_id)
+                    .await;
                 return;
             }
         }

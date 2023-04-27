@@ -1,21 +1,16 @@
 use my_service_bus_abstractions::AsMessageId;
-use my_service_bus_shared::protobuf_models::{
-    QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
-    TopicsSnapshotProtobufModel,
+
+use crate::{
+    persistence_grpc::*,
+    topics_snapshot::{
+        QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
+    },
 };
 
-use crate::persistence_grpc::*;
-
-pub fn to_topics_data(src: &SaveQueueSnapshotGrpcRequest) -> TopicsSnapshotProtobufModel {
-    TopicsSnapshotProtobufModel {
-        data: to_topic_snapshot_vec(src.queue_snapshot.as_slice()),
-    }
-}
-
-pub fn to_topic_snapshot_vec(
-    src: &[TopicAndQueuesSnapshotGrpcModel],
-) -> Vec<TopicSnapshotProtobufModel> {
-    src.iter()
+pub fn to_topics_data(src: &SaveQueueSnapshotGrpcRequest) -> Vec<TopicSnapshotProtobufModel> {
+    src.queue_snapshot
+        .as_slice()
+        .iter()
         .map(|itm| {
             TopicSnapshotProtobufModel::new(
                 itm.topic_id.to_string(),

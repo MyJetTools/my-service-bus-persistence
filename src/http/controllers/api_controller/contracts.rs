@@ -1,11 +1,12 @@
 use std::{collections::HashMap, sync::Arc, usize};
 
-use crate::{app::AppContext, topic_data::TopicData, utils::duration_to_string};
-use my_service_bus_shared::{
-    page_id::PageId,
-    protobuf_models::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
-    sub_page::SubPageId,
+use crate::{
+    app::AppContext,
+    topic_data::TopicData,
+    topics_snapshot::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
+    utils::duration_to_string,
 };
+use my_service_bus_shared::{page_id::PageId, sub_page::SubPageId};
 use rust_extensions::date_time::{DateTimeAsMicroseconds, DateTimeDuration};
 use serde::{Deserialize, Serialize};
 
