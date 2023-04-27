@@ -1,4 +1,5 @@
 use my_service_bus_abstractions::MessageId;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 use tokio::sync::RwLock;
 
 use crate::app::Logs;
@@ -35,6 +36,25 @@ impl TopicsSnapshotData {
     pub fn update_snapshot_id(&mut self, saved_id: i64) {
         self.last_saved_snapshot_id = saved_id;
     }
+
+    pub fn add_deleted_topic(
+        &mut self,
+        topic_id: &str,
+        message_id: MessageId,
+        gc_after: DateTimeAsMicroseconds,
+    ) {
+        self.snapshot
+            .deleted_topics
+            .retain(|itm| itm.topic_id != topic_id);
+
+        let deleted_topic = DeletedTopicProtobufModel {
+            topic_id: topic_id.to_string(),
+            message_id: message_id.get_value(),
+            gc_after: gc_after.unix_microseconds,
+        };
+
+        self.snapshot.deleted_topics.push(deleted_topic);
+    }
 }
 
 pub struct CurrentTopicsSnapshot {
@@ -60,6 +80,16 @@ impl CurrentTopicsSnapshot {
     pub async fn update(&self, snapshot: Vec<TopicSnapshotProtobufModel>) {
         let mut write_access = self.data.write().await;
         write_access.update(snapshot);
+    }
+
+    pub async fn add_deleted_topic(
+        &self,
+        topic_id: &str,
+        message_id: MessageId,
+        gc_after: DateTimeAsMicroseconds,
+    ) {
+        let mut write_access = self.data.write().await;
+        write_access.add_deleted_topic(topic_id, message_id, gc_after);
     }
 
     pub async fn update_snapshot_id_as_saved(&self, saved_id: i64) {

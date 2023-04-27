@@ -32,12 +32,6 @@ pub struct SettingsModel {
 }
 
 impl SettingsModel {
-    pub fn get_messages_azure_storage_connection(&self) -> AzureStorageConnection {
-        AzureStorageConnection::from_conn_string(self.messages_connection_string.as_str())
-    }
-}
-
-impl SettingsModel {
     pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotPageBlobStorage {
         let connection =
             AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
