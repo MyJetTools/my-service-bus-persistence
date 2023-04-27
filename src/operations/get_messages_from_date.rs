@@ -23,25 +23,39 @@ pub async fn get_messages_from_date(
 
     let topic_data = super::topics::get_topic(app, topic_id).await?;
 
-    let minute_index = topic_data.yearly_index_by_minute.lock().await;
+    let now = DateTimeAsMicroseconds::now();
 
-    if let Some(yearly_index) = minute_index.get(&year) {
-        let result =
-            read_from_yearly_index(app, topic_data.as_ref(), yearly_index, &minute, max_amount);
-        return result.await;
+    let mut yearly_index = topic_data.yearly_index_by_minute.get(year, Some(now)).await;
+
+    if yearly_index.is_none() {
+        yearly_index = app.try_open_index_by_minute(topic_id, year).await;
     }
 
-    Ok(vec![])
+    if yearly_index.is_none() {
+        return Ok(vec![]);
+    }
+
+    let yearly_index = yearly_index.unwrap();
+
+    topic_data
+        .yearly_index_by_minute
+        .add(year, yearly_index.clone())
+        .await;
+
+    let result =
+        read_from_yearly_index(app, topic_data.as_ref(), &yearly_index, minute, max_amount).await;
+
+    return result;
 }
 
 async fn read_from_yearly_index(
     app: &AppContext,
     topic_data: &TopicData,
     yearly_index: &YearlyIndexByMinute,
-    minute: &MinuteWithinYear,
+    minute: MinuteWithinYear,
     max_amount: usize,
 ) -> Result<Vec<Arc<MessageProtobufModel>>, OperationError> {
-    let message_id = yearly_index.get_message_id(minute);
+    let message_id = yearly_index.get_message_id(minute).await;
 
     if message_id.is_none() {
         return Ok(vec![]);
@@ -53,6 +67,6 @@ async fn read_from_yearly_index(
 
     let page = crate::operations::get_page_to_read(app, topic_data, page_id).await;
 
-    let result = page.read_from_message_id(message_id, max_amount).await;
+    let result = page.get_from_message_id(message_id, max_amount).await;
     Ok(result)
 }

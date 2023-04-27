@@ -1,10 +1,14 @@
 use my_azure_storage_sdk::block_blob::BlockBlobApi;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
+use serde::*;
 
-use crate::{
-    app::{file_name_generators::SOFT_DELETE_METADATA_FILE_NAME, AppContext},
-    uncompressed_page_storage::TopicSoftDeleteMetadataBlobModel,
-};
+use crate::app::{file_name_generators::SOFT_DELETE_METADATA_FILE_NAME, AppContext};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TopicSoftDeleteMetadataBlobModel {
+    pub message_id: i64,
+    pub delete_after: String,
+}
 
 pub async fn delete_topic(app: &AppContext, topic_id: &str, delete_after: DateTimeAsMicroseconds) {
     let message_id = app.topics_snapshot.get_current_message_id(topic_id).await;

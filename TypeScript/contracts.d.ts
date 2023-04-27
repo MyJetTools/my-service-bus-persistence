@@ -2,23 +2,18 @@
 interface ITopicInfo {
     topicId: string;
     messageId: number;
-    savedMessageId: number;
-    lastSaveChunk: number;
     lastSaveDur: string;
     lastSaveMoment: string;
     loadedPages: ILoadedPage[];
     activePages: number[];
     queues: ITopicQueue[];
-    queueSize: number;
 }
 
 interface ILoadedPage {
     pageId: number,
-    hasSkipped: boolean,
-    percent: number,
+    subPages: number[],
     count: number,
-    writePosition: number;
-
+    size: number
 }
 
 interface ITopicQueue {

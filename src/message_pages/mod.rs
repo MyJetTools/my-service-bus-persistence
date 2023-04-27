@@ -1,20 +1,15 @@
-mod blank_page;
 mod error;
-mod messages_page;
 
-mod page_metrics;
 mod pages_list;
-mod uncompressed_page;
+mod sub_page;
+mod sub_page_inner;
+mod sub_page_read_copy;
 
 pub mod utils;
 
-pub use messages_page::MessagesPage;
-
-pub use utils::MESSAGES_PER_PAGE;
-
-pub use blank_page::BlankPage;
 pub use error::PageOperationError;
 
-pub use page_metrics::PageMetrics;
 pub use pages_list::PagesList;
-pub use uncompressed_page::{UncompressedPage, UncompressedPageData};
+pub use sub_page::*;
+pub use sub_page_inner::*;
+pub use sub_page_read_copy::*;

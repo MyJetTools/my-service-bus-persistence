@@ -61,7 +61,7 @@ async fn handle_request(
     action
         .app
         .topics_snapshot
-        .update(topics_snapshot.snapshot)
+        .update(topics_snapshot.snapshot.data)
         .await;
 
     return HttpOutput::Empty.into_ok_result(true).into();

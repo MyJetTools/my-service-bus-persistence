@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use crate::{app::AppContext, operations::OperationError};
+use crate::{
+    app::AppContext, operations::OperationError, topics_snapshot::TopicSnapshotProtobufModel,
+};
 
-use my_service_bus_shared::protobuf_models::TopicsSnapshotProtobufModel;
 use rust_extensions::MyTimerTick;
 
 pub struct PagesGcTimer {
@@ -19,7 +20,7 @@ impl PagesGcTimer {
 impl MyTimerTick for PagesGcTimer {
     async fn tick(&self) {
         let topics_snapshot = self.app.topics_snapshot.get().await;
-        gc_pages(self.app.clone(), topics_snapshot.snapshot)
+        gc_pages(self.app.clone(), &topics_snapshot.snapshot.data)
             .await
             .unwrap();
     }
@@ -27,11 +28,9 @@ impl MyTimerTick for PagesGcTimer {
 
 async fn gc_pages(
     app: Arc<AppContext>,
-    topics: TopicsSnapshotProtobufModel,
+    topics: &Vec<TopicSnapshotProtobufModel>,
 ) -> Result<(), OperationError> {
-    for topic_snapshot in &topics.data {
-        let active_pages = crate::operations::get_active_pages(topic_snapshot);
-
+    for topic_snapshot in topics {
         let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str()).await;
 
         if topic_data.is_none() {
@@ -40,10 +39,9 @@ async fn gc_pages(
 
         let topic_data = topic_data.unwrap();
 
-        crate::operations::gc_pages(app.as_ref(), topic_data.clone(), active_pages.as_slice())
-            .await?;
+        crate::operations::gc_pages(app.as_ref(), topic_data.clone()).await?;
 
-        crate::operations::gc_yearly_index(app.as_ref(), topic_data.as_ref()).await;
+        topic_data.yearly_index_by_minute.gc().await;
     }
 
     Ok(())

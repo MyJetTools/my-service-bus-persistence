@@ -56,10 +56,10 @@ impl Logs {
         }
     }
 
-    pub fn write_by_topic(
+    pub fn write_by_topic<'s>(
         &self,
         level: LogLevel,
-        topic_id: impl Into<StrOrString<'static>>,
+        topic_id: impl Into<StrOrString<'s>>,
         process: impl Into<StrOrString<'static>>,
         message: impl Into<StrOrString<'static>>,
     ) {

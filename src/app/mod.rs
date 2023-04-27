@@ -1,6 +1,5 @@
 mod app_ctx;
 mod app_error;
-mod azure_storage_with_retries;
 
 pub mod file_name_generators;
 mod logs;
@@ -10,4 +9,4 @@ pub use app_ctx::*;
 pub use app_error::AppError;
 
 pub use logs::*;
-pub use prometheus_metrics::PrometheusMetrics;
+pub use prometheus_metrics::*;

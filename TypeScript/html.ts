@@ -70,26 +70,6 @@ class HtmlRenderer {
             return a.topicId > b.topicId ? 1 : -1
         })) {
 
-            let badges = '';
-            for (let loadedPage of topic.loadedPages.sort((a, b) => a.pageId > b.pageId ? 1 : -1)) {
-                badges += '<div>';
-
-
-
-                var theBadge = "";
-
-                if (loadedPage.hasSkipped) {
-                    theBadge += '<div><span class="badge badge-danger" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
-                } else {
-                    theBadge += '<div><span class="badge badge-success" style="margin-left: 5px">' + loadedPage.pageId + '</span></div>';
-                }
-
-                badges += this.compileTable([theBadge, 'WritePos: ' + this.formatNumber(loadedPage.writePosition)]) +
-                    '<div class="progress">' +
-                    '<div class="progress-bar" role="progressbar" style="width: ' + loadedPage.percent + '%;" aria-valuenow="' + loadedPage.percent + '" aria-valuemin="0" aria-valuemax="100">' + loadedPage.count + '</div>' +
-                    '</div>' +
-                    '</div>';
-            }
 
             let activePagesBadges = '';
             for (let activePage of topic.activePages) {
@@ -101,12 +81,12 @@ class HtmlRenderer {
 
             result += '<tr style="font-size: 12px">' +
                 '<td>' + topic.topicId +
-                '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + badges + '</td>' +
+                '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + this.renderCachedPages(topic.loadedPages) + '</td>' +
                 '<td>' + queuesContent + '</td>' +
-                '<td><div>Current Id:' + topic.messageId + '</div><div>Last Saved:' + topic.savedMessageId + '</div><div>Last Save Chunk:' + topic.lastSaveChunk + '</div>' +
+                '<td><div>Current Id:' + topic.messageId + '</div>' +
                 '<div>Last Save Duration:' + topic.lastSaveDur + '</div>' +
                 '<div>Saved ago:' + topic.lastSaveMoment + '</div>' +
-                '<div>QSize:' + topic.queueSize + '</div>' +
+
                 '</td>' +
                 '</tr>'
         }
@@ -122,31 +102,6 @@ class HtmlRenderer {
 
     }
 
-    private static renderAdditionalFields(r: IStatus): string {
-        return '<div>Queue SnapshotId: ' + r.queuesSnapshotId + '</div>';
-    }
-
-
-
-    private static renderActiveOperations(header: string, activeOperations: IPersistentOperation[]): string {
-
-        let result = '<h1>' + header + '</h1><table class="table table-striped"><tr><th>Topic</th><th>Action</th></tr>';
-
-        for (let op of activeOperations) {
-            result += '<tr><td style="font-size:10px">' + op.topicId + '<div>' + op.pageId + '</div></td><td style="font-size:10px">' + op.name + '<div>' + op.dur + '</div></td></tr>';
-        }
-
-        return result + "</table>";
-    }
-
-
-    private static splitPage(leftPart, rightPart): string {
-
-        return '<table style="width: 100%"><tr>' +
-            '<td style="vertical-align: top">' + leftPart + '</td>' +
-            '<td style="vertical-align: top">' + rightPart + '</td></tr></table>';
-    }
-
 
     public static renderMainContent(r: IStatus): string {
 
@@ -157,5 +112,21 @@ class HtmlRenderer {
         return this.renderMainTable(r.topics);
 
     }
+
+    private static renderCachedPages(pages: ILoadedPage[]) {
+        let result = "";
+
+        for (let page of pages) {
+            result +=
+                '<div><div>Page:' + page.pageId + '; Amount:' + page.count + '; Size: ' + this.formatNumber(page.size) + '</div>' +
+                SubPagesWidget.renderPagesWidget(page.subPages) +
+                '</div>';
+        }
+
+        return result;
+    }
+
+
+
 
 }

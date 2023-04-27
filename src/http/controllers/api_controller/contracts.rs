@@ -1,13 +1,13 @@
-use std::usize;
+use std::{collections::HashMap, sync::Arc, usize};
 
 use crate::{
-    app::AppContext, message_pages::MESSAGES_PER_PAGE, topic_data::TopicData,
+    app::AppContext,
+    topic_data::TopicData,
+    topics_snapshot::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
     utils::duration_to_string,
 };
-use my_service_bus_shared::protobuf_models::{
-    QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
-};
-use rust_extensions::date_time::DateTimeAsMicroseconds;
+use my_service_bus_shared::{page_id::PageId, sub_page::SubPageId};
+use rust_extensions::date_time::{DateTimeAsMicroseconds, DateTimeDuration};
 use serde::{Deserialize, Serialize};
 
 use sysinfo::SystemExt;
@@ -65,12 +65,6 @@ struct TopicInfo {
     #[serde(rename = "messageId")]
     message_id: i64,
 
-    #[serde(rename = "savedMessageId")]
-    saved_message_id: i64,
-
-    #[serde(rename = "lastSaveChunk")]
-    last_save_chunk: usize,
-
     #[serde(rename = "lastSaveDur")]
     last_save_duration: String,
 
@@ -84,9 +78,6 @@ struct TopicInfo {
     active_pages: Vec<i64>,
 
     queues: Vec<QueueStatusModel>,
-
-    #[serde(rename = "queueSize")]
-    queue_size: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -94,17 +85,56 @@ struct LoadedPageModel {
     #[serde(rename = "pageId")]
     page_id: i64,
 
-    #[serde(rename = "hasSkipped")]
-    has_skipped_messages: bool,
+    #[serde(rename = "subPages")]
+    sub_pages: Vec<i64>,
 
-    #[serde(rename = "percent")]
-    percent: usize,
-
-    #[serde(rename = "count")]
     count: usize,
 
-    #[serde(rename = "writePosition")]
-    write_position: usize,
+    size: usize,
+}
+
+impl LoadedPageModel {
+    pub async fn new(topic_data: Option<&Arc<TopicData>>) -> Vec<Self> {
+        if topic_data.is_none() {
+            return vec![];
+        }
+
+        let topic_data = topic_data.unwrap();
+        let mut result: HashMap<i64, Self> = HashMap::new();
+
+        for sub_page in topic_data.pages_list.get_all().await {
+            let page_id: PageId = sub_page.get_id().into();
+
+            if !result.contains_key(page_id.as_ref()) {
+                result.insert(
+                    page_id.get_value(),
+                    Self {
+                        page_id: page_id.get_value(),
+                        sub_pages: vec![],
+                        count: 0,
+                        size: 0,
+                    },
+                );
+            }
+
+            let page_data = result.get_mut(page_id.as_ref()).unwrap();
+
+            let size_and_amount = sub_page.get_size_and_amount().await;
+
+            page_data.size += size_and_amount.size;
+            page_data.count += size_and_amount.amount;
+
+            let first_message_id = page_id.get_first_message_id();
+
+            let first_sub_page_id: SubPageId = first_message_id.into();
+
+            let id_within_page = sub_page.get_id().get_value() - first_sub_page_id.get_value();
+
+            page_data.sub_pages.push(id_within_page);
+        }
+
+        result.into_iter().map(|itm| itm.1).collect()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -130,15 +160,9 @@ impl StatusModel {
         let now = DateTimeAsMicroseconds::now();
 
         for snapshot in &topics_snapshot.snapshot.data {
-            let data_by_topic = app.topics_list.get(snapshot.topic_id.as_str()).await;
+            let topic_data = app.topics_list.get(snapshot.topic_id.as_str()).await;
 
-            if data_by_topic.is_none() {
-                continue;
-            }
-
-            let data_by_topic = data_by_topic.unwrap();
-
-            let topic_info_model = get_topics_model(snapshot, data_by_topic.as_ref(), now).await;
+            let topic_info_model = get_topics_model(snapshot, topic_data.as_ref(), now).await;
 
             topics.push(topic_info_model)
         }
@@ -166,53 +190,30 @@ impl StatusModel {
         return model;
     }
 }
-async fn get_loaded_pages(topic_data: &TopicData) -> Vec<LoadedPageModel> {
-    let mut result: Vec<LoadedPageModel> = Vec::new();
-
-    for page in topic_data.pages_list.get_all().await {
-        let count = page.get_messages_count();
-        let percent = (count as f64) / (MESSAGES_PER_PAGE as f64) * (100 as f64);
-
-        let item = LoadedPageModel {
-            page_id: page.get_page_id().get_value(),
-            percent: percent as usize,
-            count,
-            has_skipped_messages: page.has_skipped_messages(),
-            write_position: page.get_write_position(),
-        };
-
-        result.push(item);
-    }
-
-    result.sort_by(|a, b| match a.page_id > b.page_id {
-        true => return std::cmp::Ordering::Greater,
-        _ => return std::cmp::Ordering::Less,
-    });
-
-    result
-}
 
 async fn get_topics_model(
     snapshot: &TopicSnapshotProtobufModel,
-    cache_by_topic: &TopicData,
+    topic_data: Option<&Arc<TopicData>>,
     now: DateTimeAsMicroseconds,
 ) -> TopicInfo {
     let active_pages = crate::message_pages::utils::get_active_pages(snapshot);
 
-    let last_save_moment_since = now.duration_since(cache_by_topic.metrics.get_last_saved_moment());
-
-    let queue_size = cache_by_topic.get_messages_amount_to_save().await;
+    let (last_save_moment_since, last_save_duration) = if let Some(topic_data) = topic_data {
+        (
+            now.duration_since(topic_data.metrics.get_last_saved_moment()),
+            duration_to_string(topic_data.metrics.get_last_saved_duration()),
+        )
+    } else {
+        (DateTimeDuration::Zero, "".to_string())
+    };
 
     TopicInfo {
         topic_id: snapshot.topic_id.to_string(),
         message_id: snapshot.get_message_id().get_value(),
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),
-        loaded_pages: get_loaded_pages(cache_by_topic).await,
+        loaded_pages: LoadedPageModel::new(topic_data).await,
         queues: get_queues(&snapshot.queues),
-        last_save_chunk: cache_by_topic.metrics.get_last_saved_chunk(),
-        last_save_duration: duration_to_string(cache_by_topic.metrics.get_last_saved_duration()),
+        last_save_duration,
         last_save_moment: duration_to_string(last_save_moment_since.as_positive_or_zero()),
-        saved_message_id: cache_by_topic.metrics.get_last_saved_message_id(),
-        queue_size,
     }
 }

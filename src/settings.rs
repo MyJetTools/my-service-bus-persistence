@@ -4,10 +4,9 @@ use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnecti
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
-use crate::{
-    page_blob_random_access::PageBlobRandomAccess,
-    toipics_snapshot::blob_repository::TopicsSnapshotBlobRepository,
-};
+use crate::topics_snapshot::page_blob_storage::TopicsSnapshotPageBlobStorage;
+
+pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 / 512;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
@@ -15,6 +14,8 @@ pub struct SettingsModel {
     pub queues_connection_string: String,
     #[serde(rename = "MessagesConnectionString")]
     pub messages_connection_string: String,
+    #[serde(rename = "ArchiveConnectionString")]
+    pub archive_connection_string: String,
     #[serde(rename = "LoadBlobPagesSize")]
     pub load_blob_pages_size: usize,
     #[serde(rename = "FlushQueuesSnapshotFreq")]
@@ -37,23 +38,17 @@ impl SettingsModel {
 }
 
 impl SettingsModel {
-    pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotBlobRepository {
+    pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotPageBlobStorage {
         let connection =
             AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
-        let storage = AzurePageBlobStorage::new(
+        let page_blob = AzurePageBlobStorage::new(
             Arc::new(connection),
             "topics".to_string(),
             "topicsdata".to_string(),
         )
         .await;
 
-        let blob_random_access = PageBlobRandomAccess::open_or_create(
-            storage,
-            crate::app::PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
-        .await;
-
-        TopicsSnapshotBlobRepository::new(blob_random_access)
+        TopicsSnapshotPageBlobStorage::new(page_blob)
     }
 
     pub async fn read() -> Self {

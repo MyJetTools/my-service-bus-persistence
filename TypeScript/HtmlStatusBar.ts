@@ -17,29 +17,10 @@ class HtmlStatusBar {
             '<td><div class="statusbar-separator"></div></td>' +
 
             '<td style="padding-left: 5px; min-width:270px"><span id="cpu-mem" style="text-shadow: 0 0 2px white;"></span></td>' +
-            '<td><div class="statusbar-separator"></div></td>' +
-
-
-            '<td style="padding-left: 5px; min-width:270px">Total pages size: <b id="pages-size" style="text-shadow: 0 0 2px white;"></b></td>' +
-            '<td><div class="statusbar-separator"></div></td>' +
-
-            '<td style="padding-left: 5px">Queues size: <b id="q-size" style="text-shadow: 0 0 2px white;"></b></td>' +
-            '</tr></table></div>';
+            '<td><div class="statusbar-separator"></div></td>';
     }
 
-    static getTotlals(data: IStatus): { msgSize: number, queueSize: number } {
-        let msgSize = 0;
-        let queueSize = 0;
 
-        for (let topicInfo of data.topics) {
-            queueSize += topicInfo.queueSize;
-            for (var loadedPage of topicInfo.loadedPages) {
-                msgSize += loadedPage.writePosition;
-            }
-        }
-
-        return { msgSize, queueSize };
-    }
 
     public static updateStatusbar(data: IStatus) {
 
@@ -60,10 +41,6 @@ class HtmlStatusBar {
             }
 
         }
-
-        let totals = this.getTotlals(data);
-        document.getElementById('pages-size').innerHTML = '<span style="color: green">' + HtmlRenderer.formatNumber(totals.msgSize) + '</span>';
-        document.getElementById('q-size').innerHTML = '<span style="color: green">' + HtmlRenderer.formatNumber(totals.queueSize) + '</span>';
 
         document.getElementById('cpu-mem').innerHTML = 'Mem: <span>' + HtmlRenderer.formatMem(data.system.usedmem * 1024) + ' of ' + HtmlRenderer.formatMem(data.system.totalmem * 1024) + '</span>';
 

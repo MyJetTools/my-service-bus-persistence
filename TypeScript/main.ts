@@ -58,8 +58,8 @@ class main {
         $.ajax({ url: '/api/status', type: 'get' })
             .then(result => {
                 this.requested = false;
-                this.layoutElement.innerHTML = HtmlRenderer.renderMainContent(result);
                 HtmlStatusBar.updateStatusbar(result);
+                this.layoutElement.innerHTML = HtmlRenderer.renderMainContent(result);
             }).fail(() => {
                 this.requested = false;
                 HtmlStatusBar.updateOffline();

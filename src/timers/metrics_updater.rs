@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use rust_extensions::MyTimerTick;
 
-use crate::app::AppContext;
+use crate::app::{AppContext, PrometheusMetricsToUpdate};
 
 pub struct MetricsUpdater {
     app: Arc<AppContext>,
@@ -17,22 +17,21 @@ impl MetricsUpdater {
 #[async_trait::async_trait]
 impl MyTimerTick for MetricsUpdater {
     async fn tick(&self) {
-        let topics = self.app.topics_snapshot.get().await;
+        let topics = self.app.topics_list.get_all().await;
 
-        for topic in topics.snapshot.data {
-            let topic_data = self.app.topics_list.get(topic.topic_id.as_str()).await;
+        let mut metrics = HashMap::new();
 
-            if topic_data.is_none() {
-                continue;
-            }
-
-            let topic_data = topic_data.unwrap();
-
-            let queue_size = topic_data.get_messages_amount_to_save().await;
-
-            self.app
-                .metrics_keeper
-                .update_topic_persist_queue_size(topic.topic_id.as_str(), queue_size);
+        for topic_data in &topics {
+            let queue_size = topic_data.pages_list.get_messages_amount_to_save().await;
+            metrics.insert(
+                topic_data.topic_id.as_str(),
+                PrometheusMetricsToUpdate {
+                    not_persisted_size: queue_size.amount,
+                    content_size: queue_size.size,
+                },
+            );
         }
+
+        self.app.metrics_keeper.update(metrics).await;
     }
 }

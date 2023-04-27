@@ -1,3 +1,4 @@
+use my_azure_storage_sdk::AzureStorageError;
 use zip::result::ZipError;
 
 use crate::message_pages::PageOperationError;
@@ -32,5 +33,17 @@ impl From<prost::EncodeError> for OperationError {
 impl From<ZipError> for OperationError {
     fn from(src: ZipError) -> Self {
         Self::ZipError(src)
+    }
+}
+
+//
+
+pub enum RestorePageError {
+    AzureStorageError(AzureStorageError),
+}
+
+impl From<AzureStorageError> for RestorePageError {
+    fn from(src: AzureStorageError) -> Self {
+        Self::AzureStorageError(src)
     }
 }

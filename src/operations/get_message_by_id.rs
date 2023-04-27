@@ -14,9 +14,9 @@ pub async fn get_message_by_id(
 ) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
     let topic_data = super::topics::get_topic(app, topic_id).await?;
 
-    let page_id = message_id.into();
+    let sub_page_id = message_id.into();
 
-    let page = super::get_page_to_read(app, topic_data.as_ref(), page_id).await;
+    let page = super::get_page_to_read(app, topic_data.as_ref(), sub_page_id).await;
 
     Ok(page.get_message(message_id).await)
 }

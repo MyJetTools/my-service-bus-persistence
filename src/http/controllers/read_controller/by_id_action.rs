@@ -44,7 +44,7 @@ async fn handle_request(
 
     match message {
         Some(msg) => {
-            let model = GetMessageResponseModel::create(&msg);
+            let model = GetMessageResponseModel::create(msg.as_ref());
             return HttpOutput::as_json(model).into_ok_result(true).into();
         }
         None => {

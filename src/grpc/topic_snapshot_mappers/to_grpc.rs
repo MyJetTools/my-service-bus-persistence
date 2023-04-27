@@ -1,8 +1,9 @@
-use my_service_bus_shared::protobuf_models::{
-    QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
+use crate::{
+    persistence_grpc::*,
+    topics_snapshot::{
+        QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
+    },
 };
-
-use crate::persistence_grpc::*;
 
 impl Into<TopicAndQueuesSnapshotGrpcModel> for &TopicSnapshotProtobufModel {
     fn into(self) -> TopicAndQueuesSnapshotGrpcModel {
