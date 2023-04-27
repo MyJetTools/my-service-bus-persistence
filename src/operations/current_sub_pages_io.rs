@@ -40,15 +40,19 @@ pub async fn restore(
 ) -> Result<Option<BTreeMap<String, SubPageInner>>, RestorePagesError> {
     let connection = app.get_storage_for_active_pages();
 
+    println!("1");
     crate::azure_storage_with_retries::create_container_if_not_exists(&connection, CONTAINER_NAME)
         .await;
 
+    println!("2");
     let data = connection.download_blob(CONTAINER_NAME, BLOB_NAME).await;
 
+    println!("3");
     match data {
         Ok(data) => {
+            println!("4");
             let result: Result<ActivePages, _> = prost::Message::decode(data.as_slice());
-
+            println!("5");
             match result {
                 Ok(active_pages_contract) => {
                     let mut result = BTreeMap::new();
