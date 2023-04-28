@@ -7,10 +7,14 @@ pub async fn handle_error_and_create_blob(
 ) -> Result<AzureStorageError, AzureStorageError> {
     match err {
         AzureStorageError::ContainerNotFound => {
+            println!("Creating container");
             page_blob.create_container_if_not_exists().await?;
+            println!("Creating Blob");
             page_blob
                 .create_blob_if_not_exists(init_page_blob_size)
                 .await?;
+
+            println!("Created");
             Ok(err)
         }
         AzureStorageError::BlobNotFound => {
