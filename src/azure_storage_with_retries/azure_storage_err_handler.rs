@@ -14,13 +14,16 @@ pub async fn handle_error_and_create_blob(
                 .create_blob_if_not_exists(init_page_blob_size)
                 .await?;
 
-            println!("Created");
+            println!("Created container and blob");
             Ok(err)
         }
         AzureStorageError::BlobNotFound => {
+            println!("Creating blob");
             page_blob
                 .create_blob_if_not_exists(init_page_blob_size)
                 .await?;
+
+            println!("Created blob");
             Ok(err)
         }
         _ => Err(err),
