@@ -124,6 +124,7 @@ impl AzurePageBlobStorageWithRetries for PageBlobRandomAccess {
                     return Ok(result);
                 }
                 Err(err) => {
+                    println!("get_blob_size_or_create_page_blob: Error: {:?}", err);
                     let result =
                         super::handle_error_and_create_blob(self, err, pages_amount_if_create)
                             .await?;
