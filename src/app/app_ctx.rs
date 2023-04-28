@@ -24,7 +24,6 @@ pub struct AppContext {
 
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
-    pub queue_connection: AzureStorageConnection,
 
     archive_conn_string: Arc<AzureStorageConnection>,
     messages_conn_string: Arc<AzureStorageConnection>,
@@ -45,11 +44,8 @@ impl AppContext {
         ));
 
         let topics_and_queue_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
-            settings.queues_connection_string.as_str(),
+            settings.topics_connection_string.as_str(),
         ));
-
-        let queue_connection =
-            AzureStorageConnection::from_conn_string(settings.queues_connection_string.as_str());
 
         let archive_conn_string =
             AzureStorageConnection::from_conn_string(settings.archive_connection_string.as_str());
@@ -62,7 +58,6 @@ impl AppContext {
             topics_list: TopicsDataList::new(),
             settings,
 
-            queue_connection,
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
             messages_conn_string,

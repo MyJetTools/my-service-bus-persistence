@@ -187,8 +187,9 @@ fn deserialize_model(content: &[u8]) -> TopicsSnapshotResult {
     match result {
         Ok(msg) => {
             println!(
-                "Loaded topic snapshot V2. Topics amount is: {}",
-                msg.data.len()
+                "Loaded topic snapshot V2. Topics amount is: {}. Deleted topics amount is: {}",
+                msg.data.len(),
+                msg.deleted_topics.len()
             );
 
             return msg.into();

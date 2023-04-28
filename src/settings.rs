@@ -34,7 +34,7 @@ pub struct SettingsModel {
 impl SettingsModel {
     pub async fn get_topics_snapshot_repository(&self) -> TopicsSnapshotPageBlobStorage {
         let connection =
-            AzureStorageConnection::from_conn_string(self.queues_connection_string.as_str());
+            AzureStorageConnection::from_conn_string(self.topics_connection_string.as_str());
         let page_blob = AzurePageBlobStorage::new(
             Arc::new(connection),
             "topics".to_string(),

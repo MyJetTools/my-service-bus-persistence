@@ -28,14 +28,14 @@ async fn restore_pages(app: &Arc<AppContext>) {
         "Loading messages since last shutdown".to_string(),
         None,
     );
-    let topics = crate::operations::current_sub_pages_io::restore(&app)
+    let sub_pages = crate::operations::current_sub_pages_io::restore(&app)
         .await
         .unwrap();
 
-    if let Some(topics) = topics {
+    if let Some(sub_pages) = sub_pages {
         let mut sw = StopWatch::new();
 
-        for (topic_id, sub_page_inner) in topics {
+        for (topic_id, sub_page_inner) in sub_pages {
             sw.start();
             let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
 

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, usize};
+use std::{collections::BTreeMap, sync::Arc, usize};
 
 use crate::{
     app::AppContext,
@@ -100,7 +100,7 @@ impl LoadedPageModel {
         }
 
         let topic_data = topic_data.unwrap();
-        let mut result: HashMap<i64, Self> = HashMap::new();
+        let mut result: BTreeMap<i64, Self> = BTreeMap::new();
 
         for sub_page in topic_data.pages_list.get_all().await {
             let page_id: PageId = sub_page.get_id().into();
