@@ -77,6 +77,16 @@ impl CurrentTopicsSnapshot {
         read_access.clone()
     }
 
+    pub async fn get_topics_list(&self) -> Vec<String> {
+        let read_access = self.data.read().await;
+        read_access
+            .snapshot
+            .data
+            .iter()
+            .map(|itm| itm.topic_id.clone())
+            .collect()
+    }
+
     pub async fn update(&self, snapshot: Vec<TopicSnapshotProtobufModel>) {
         let mut write_access = self.data.write().await;
         write_access.update(snapshot);

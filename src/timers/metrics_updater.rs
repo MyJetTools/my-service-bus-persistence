@@ -17,19 +17,32 @@ impl MetricsUpdater {
 #[async_trait::async_trait]
 impl MyTimerTick for MetricsUpdater {
     async fn tick(&self) {
-        let topics = self.app.topics_list.get_all().await;
+        let topics_list = self.app.topics_snapshot.get_topics_list().await;
 
         let mut metrics = HashMap::new();
 
-        for topic_data in &topics {
-            let queue_size = topic_data.pages_list.get_messages_amount_to_save().await;
-            metrics.insert(
-                topic_data.topic_id.as_str(),
-                PrometheusMetricsToUpdate {
-                    not_persisted_size: queue_size.amount,
-                    content_size: queue_size.size,
-                },
-            );
+        for topic_id in &topics_list {
+            match self.app.topics_list.get(topic_id).await {
+                Some(topic_data) => {
+                    let queue_size = topic_data.pages_list.get_messages_amount_to_save().await;
+                    metrics.insert(
+                        topic_id.as_str(),
+                        PrometheusMetricsToUpdate {
+                            not_persisted_size: queue_size.amount,
+                            content_size: queue_size.size,
+                        },
+                    );
+                }
+                None => {
+                    metrics.insert(
+                        topic_id.as_str(),
+                        PrometheusMetricsToUpdate {
+                            not_persisted_size: 0,
+                            content_size: 0,
+                        },
+                    );
+                }
+            }
         }
 
         self.app.metrics_keeper.update(metrics).await;
