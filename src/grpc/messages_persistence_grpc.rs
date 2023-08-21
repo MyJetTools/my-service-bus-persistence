@@ -245,4 +245,27 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         .await;
         return Ok(tonic::Response::new(()));
     }
+
+    async fn restore_topic(
+        &self,
+        request: tonic::Request<RestoreTopicRequest>,
+    ) -> Result<tonic::Response<RestoreTopicResponse>, tonic::Status> {
+        let request = request.into_inner();
+
+        let response = if let Some(restored) =
+            crate::operations::restore_topic(self.app.as_ref(), &request.topic_id).await
+        {
+            RestoreTopicResponse {
+                result: true,
+                message_id: restored.message_id,
+            }
+        } else {
+            RestoreTopicResponse {
+                result: false,
+                message_id: 0,
+            }
+        };
+
+        return Ok(tonic::Response::new(response));
+    }
 }

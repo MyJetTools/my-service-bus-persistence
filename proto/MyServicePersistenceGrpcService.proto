@@ -98,6 +98,16 @@ message GetSubPageRequest{
   int64 SubPageNo = 2;
 }
 
+
+message RestoreTopicRequest{
+  string TopicId = 1;
+}
+
+message RestoreTopicResponse{
+  bool Result = 1;
+  int64 MessageId = 2;
+}
+
 service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetVersion(google.protobuf.Empty) returns (persistence.MyServerBusPersistenceVersion);
    rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
@@ -107,5 +117,6 @@ service MyServiceBusMessagesPersistenceGrpcService {
    rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
    rpc SaveMessagesUncompressed(stream persistence.UnCompressedMessageChunkModel) returns (google.protobuf.Empty);
    rpc DeleteTopic(DeleteTopicGrpcRequest) returns (google.protobuf.Empty);
+   rpc RestoreTopic(RestoreTopicRequest) returns (RestoreTopicResponse);
 }
 

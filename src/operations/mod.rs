@@ -33,3 +33,6 @@ pub use get_topic_data_to_write::*;
 pub use init_new_topic::*;
 pub use new_messages::*;
 pub use send_messages_to_channel::*;
+
+mod restore_topic;
+pub use restore_topic::*;

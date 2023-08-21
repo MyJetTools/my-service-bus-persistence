@@ -55,6 +55,29 @@ impl TopicsSnapshotData {
 
         self.snapshot.deleted_topics.push(deleted_topic);
     }
+
+    pub fn remove_deleted_topic(&mut self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
+        let mut index = None;
+
+        for (idx, itm) in self.snapshot.deleted_topics.iter().enumerate() {
+            if itm.topic_id == topic_id {
+                index = Some(idx);
+                break;
+            }
+        }
+
+        if index.is_none() {
+            return None;
+        }
+
+        let index = index.unwrap();
+
+        let result = self.snapshot.deleted_topics[index].clone();
+
+        self.snapshot.deleted_topics.remove(index);
+
+        Some(result)
+    }
 }
 
 pub struct CurrentTopicsSnapshot {
@@ -100,6 +123,11 @@ impl CurrentTopicsSnapshot {
     ) {
         let mut write_access = self.data.write().await;
         write_access.add_deleted_topic(topic_id, message_id, gc_after);
+    }
+
+    pub async fn remove_deleted_topic(&self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
+        let mut write_access = self.data.write().await;
+        write_access.remove_deleted_topic(topic_id)
     }
 
     pub async fn update_snapshot_id_as_saved(&self, saved_id: i64) {

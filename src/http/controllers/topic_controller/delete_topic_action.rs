@@ -12,7 +12,7 @@ use super::contracts::*;
     input_data: "DeleteTopicHttpContract",
     description: "Deletes Topic",
     summary: "Delete Topic",
-    controller: "Queues",
+    controller: "Topic",
     result:[
         {status_code: 202, description: "Topic is deleted"},
         {status_code: 404, description: "Topic not found"},

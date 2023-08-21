@@ -12,7 +12,7 @@ use crate::app::AppContext;
     route: "/api/Topic",
     description: "Get deleted topics",
     summary: "Get deleted topics",
-    controller: "Queues",
+    controller: "Topic",
     result:[
         {status_code: 200, description: "Deleted topics", model:"Vec<DeletedTopic>"},
         {status_code: 404, description: "Topic not found"},
@@ -40,7 +40,7 @@ async fn handle_request(
         for deleted in &topics_snapshot.snapshot.deleted_topics {
             result.push(DeletedTopic {
                 topic_id: deleted.topic_id.to_string(),
-                hard_delete_at: DateTimeAsMicroseconds::new(deleted.gc_after).to_rfc3339(),
+                gc_after: DateTimeAsMicroseconds::new(deleted.gc_after).to_rfc3339(),
             })
         }
     }
@@ -51,5 +51,5 @@ async fn handle_request(
 #[derive(Debug, MyHttpObjectStructure, Serialize)]
 pub struct DeletedTopic {
     pub topic_id: String,
-    pub hard_delete_at: String,
+    pub gc_after: String,
 }
