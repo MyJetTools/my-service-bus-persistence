@@ -3,7 +3,7 @@ mod app;
 
 mod archive_storage;
 
-mod azure_storage_with_retries;
+//mod azure_storage_with_retries;
 mod grpc;
 mod http;
 mod index_by_minute;
@@ -15,6 +15,7 @@ mod timers;
 mod topic_data;
 mod topics_snapshot;
 mod utils;
+
 use rust_extensions::MyTimer;
 mod typing;
 

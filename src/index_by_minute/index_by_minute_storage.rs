@@ -1,36 +1,39 @@
+use std::time::Duration;
+
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_page_blob_random_access::PageBlobRandomAccess;
-use my_azure_storage_sdk::{page_blob::consts::BLOB_PAGE_SIZE, AzureStorageError};
+use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
 use my_service_bus_abstractions::MessageId;
 
-use crate::azure_storage_with_retries::AzurePageBlobStorageWithRetries;
+use super::{
+    utils::{MINUTE_INDEX_FILE_SIZE, MINUTE_INDEX_PAGES_AMOUNT},
+    MinuteWithinYear,
+};
 
-use super::{utils::MINUTE_INDEX_FILE_SIZE, MinuteWithinYear};
-pub static INIT_PAGES_SIZE: usize = MINUTE_INDEX_FILE_SIZE / BLOB_PAGE_SIZE;
-
-#[async_trait::async_trait]
-pub trait IndexByMinutePageBlobExt {
-    async fn check_index_by_minute_blob(&self) -> Option<()>;
-
-    async fn init_index_by_minute(&self);
-    async fn write_message_id_to_minute_index(
-        &self,
-        minute: MinuteWithinYear,
-        message_id: MessageId,
-    );
-
-    async fn read_message_id_from_minute_index(
-        &self,
-        minute: MinuteWithinYear,
-    ) -> Option<MessageId>;
+pub struct IndexByMinutePageBlob {
+    page_blob: PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries>,
 }
 
-#[async_trait::async_trait]
-impl IndexByMinutePageBlobExt for PageBlobRandomAccess {
-    async fn check_index_by_minute_blob(&self) -> Option<()> {
-        let result = self.get_blob_size_with_retires().await;
+impl IndexByMinutePageBlob {
+    pub fn new(page_blob: AzurePageBlobStorage) -> Self {
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(3));
+        Self {
+            page_blob: PageBlobRandomAccess::new(page_blob, true, MINUTE_INDEX_PAGES_AMOUNT),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn get_page_blob(&self) -> &PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries> {
+        &self.page_blob
+    }
+
+    pub async fn check_index_by_minute_blob(&self) -> Option<()> {
+        let result = self.page_blob.get_blob_properties().await;
 
         match result {
-            Ok(file_size) => {
+            Ok(props) => {
+                let file_size = props.get_blob_size();
                 if file_size < MINUTE_INDEX_FILE_SIZE {
                     return None;
                 }
@@ -52,17 +55,21 @@ impl IndexByMinutePageBlobExt for PageBlobRandomAccess {
         }
     }
 
-    async fn init_index_by_minute(&self) {
-        let file_size = self
-            .get_blob_size_or_create_page_blob(MINUTE_INDEX_FILE_SIZE)
+    pub async fn init_index_by_minute(&self) {
+        let page_blob_props = self
+            .page_blob
+            .create_blob_if_not_exists(MINUTE_INDEX_PAGES_AMOUNT, true)
             .await
             .unwrap();
 
-        if file_size < MINUTE_INDEX_FILE_SIZE {
-            self.resize(INIT_PAGES_SIZE).await.unwrap();
+        if page_blob_props.get_pages_amount() < MINUTE_INDEX_PAGES_AMOUNT {
+            self.page_blob
+                .resize(MINUTE_INDEX_PAGES_AMOUNT)
+                .await
+                .unwrap();
         }
     }
-    async fn write_message_id_to_minute_index(
+    pub async fn write_message_id_to_minute_index(
         &self,
         minute: MinuteWithinYear,
         message_id: MessageId,
@@ -71,18 +78,19 @@ impl IndexByMinutePageBlobExt for PageBlobRandomAccess {
 
         let payload = message_id.to_le_bytes();
         let position_in_file = minute.get_position_in_file();
-        self.write(position_in_file, payload.as_slice())
+        self.page_blob
+            .write(position_in_file, payload.as_slice())
             .await
             .unwrap();
     }
 
-    async fn read_message_id_from_minute_index(
+    pub async fn read_message_id_from_minute_index(
         &self,
         minute: MinuteWithinYear,
     ) -> Option<MessageId> {
         let position_in_file = minute.get_position_in_file();
 
-        let mut payload = self.read(position_in_file, 8).await.unwrap();
+        let mut payload = self.page_blob.read(position_in_file, 8).await.unwrap();
 
         let result = payload.read_i64();
 
@@ -100,8 +108,7 @@ mod tests {
 
     use crate::index_by_minute::MinuteWithinYear;
 
-    use super::IndexByMinutePageBlobExt;
-    use my_azure_page_blob_random_access::PageBlobRandomAccess;
+    use super::IndexByMinutePageBlob;
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus_abstractions::MessageId;
 
@@ -112,9 +119,9 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
-
         page_blob.create_container_if_not_exists().await.unwrap();
+
+        let page_blob = IndexByMinutePageBlob::new(page_blob);
 
         page_blob.init_index_by_minute().await;
 
@@ -137,9 +144,9 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
-
         page_blob.create_container_if_not_exists().await.unwrap();
+
+        let page_blob = IndexByMinutePageBlob::new(page_blob);
 
         page_blob.init_index_by_minute().await;
 
@@ -157,9 +164,9 @@ mod tests {
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
 
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
-
         page_blob.create_container_if_not_exists().await.unwrap();
+
+        let page_blob = IndexByMinutePageBlob::new(page_blob);
 
         page_blob.init_index_by_minute().await;
 
@@ -170,7 +177,7 @@ mod tests {
             .write_message_id_to_minute_index(minute, message_id)
             .await;
 
-        let blob_payload = page_blob.download().await.unwrap();
+        let blob_payload = page_blob.get_page_blob().download().await.unwrap();
 
         assert_eq!(
             &blob_payload[minute.get_value() as usize * 8..minute.get_value() as usize * 8 + 8],

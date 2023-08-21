@@ -1,6 +1,11 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use my_azure_storage_sdk::{blob::BlobApi, block_blob::BlockBlobApi, AzureStorageError};
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
+use my_azure_storage_sdk::{
+    block_blob::BlockBlobApi,
+    page_blob::{AzurePageBlobStorage, MyAzurePageBlobStorage},
+    AzureStorageError,
+};
 use my_service_bus_shared::sub_page::SubPageId;
 
 use crate::{app::AppContext, message_pages::SubPageInner};
@@ -19,6 +24,8 @@ impl RestorePagesError {
 
 const CONTAINER_NAME: &str = "topics";
 const BLOB_NAME: &str = ".active-pages";
+
+#[allow(non_snake_case)]
 #[derive(Clone, prost::Message)]
 pub struct ActiveSubPageModel {
     #[prost(string, tag = "1")]
@@ -40,10 +47,13 @@ pub async fn restore(
 ) -> Result<Option<BTreeMap<String, SubPageInner>>, RestorePagesError> {
     let connection = app.get_storage_for_active_pages();
 
-    crate::azure_storage_with_retries::create_container_if_not_exists(&connection, CONTAINER_NAME)
-        .await;
+    let page_blob = AzurePageBlobStorage::new(connection, CONTAINER_NAME, BLOB_NAME).await;
 
-    let data = connection.download_blob(CONTAINER_NAME, BLOB_NAME).await;
+    let page_blob = MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(3));
+
+    let page_blob = Arc::new(page_blob);
+
+    let data = page_blob.download().await;
 
     match data {
         Ok(data) => {
@@ -73,11 +83,10 @@ pub async fn restore(
                         }
                     }
 
+                    let page_blob = page_blob.clone();
+
                     tokio::spawn(async move {
-                        connection
-                            .delete_blob_if_exists(CONTAINER_NAME, BLOB_NAME)
-                            .await
-                            .unwrap();
+                        let _ = page_blob.delete().await;
                     });
 
                     return Ok(Some(result));

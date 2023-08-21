@@ -20,7 +20,7 @@ pub struct GetMessagesByIdInputContract {
     #[http_query(name = "topicId"; description="Id of topic")]
     pub topic_id: String,
 
-    #[http_query(name = "maxAmount"; description="Maximum amounts to read"; default="1")]
+    #[http_query(name = "maxAmount"; description="Maximum amounts to read"; default: 1)]
     pub max_amount: usize,
 
     #[http_query(name = "fromDate"; description="From date")]

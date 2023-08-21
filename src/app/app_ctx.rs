@@ -1,14 +1,15 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use my_azure_page_blob_random_access::PageBlobRandomAccess;
-use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
+use my_azure_storage_sdk::{
+    blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
+};
 
 use rust_extensions::AppStates;
 
 use crate::{
     archive_storage::{ArchiveFileNo, ArchivePageBlobCreator, ArchiveStorageList},
     index_by_minute::{IndexByMinuteUtils, YearlyIndexByMinute},
-    settings::{SettingsModel, PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP},
+    settings::SettingsModel,
     topic_data::TopicsDataList,
     topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
 };
@@ -78,11 +79,24 @@ impl AppContext {
     }
 
     pub async fn create_topic_container(&self, topic_id: &str) {
-        crate::azure_storage_with_retries::create_container_if_not_exists(
-            self.messages_conn_string.as_ref(),
-            topic_id,
-        )
-        .await;
+        let conn_string = AzureStorageConnection::from_conn_string(
+            self.settings.topics_connection_string.as_str(),
+        );
+
+        let mut attempt_no = 0;
+        loop {
+            let result = conn_string.create_container_if_not_exists(topic_id).await;
+
+            if result.is_ok() {
+                break;
+            }
+
+            attempt_no += 1;
+            if attempt_no > 3 {
+                result.unwrap();
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     }
 
     pub async fn open_or_create_index_by_minute(
@@ -92,20 +106,14 @@ impl AppContext {
     ) -> YearlyIndexByMinute {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
-        let azure_storage = AzurePageBlobStorage::new(
+        let page_blob = AzurePageBlobStorage::new(
             self.messages_conn_string.clone(),
             topic_id.to_string(),
             blob_name,
         )
         .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::new(
-            azure_storage,
-            true,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        );
-
-        YearlyIndexByMinute::open_or_create(year, page_blob_random_access).await
+        YearlyIndexByMinute::open_or_create(year, page_blob).await
     }
 
     pub async fn try_open_index_by_minute(
@@ -115,20 +123,14 @@ impl AppContext {
     ) -> Option<Arc<YearlyIndexByMinute>> {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
-        let azure_storage = AzurePageBlobStorage::new(
+        let page_blob = AzurePageBlobStorage::new(
             self.messages_conn_string.clone(),
             topic_id.to_string(),
             blob_name,
         )
         .await;
 
-        let page_blob_random_access = PageBlobRandomAccess::new(
-            azure_storage,
-            true,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        );
-
-        let result = YearlyIndexByMinute::load_if_exists(year, page_blob_random_access).await?;
+        let result = YearlyIndexByMinute::load_if_exists(year, page_blob).await?;
 
         Some(Arc::new(result))
     }
@@ -140,18 +142,12 @@ impl AppContext {
 
 #[async_trait::async_trait]
 impl ArchivePageBlobCreator for AppContext {
-    async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> PageBlobRandomAccess {
-        let page_blob_storage = AzurePageBlobStorage::new(
+    async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> AzurePageBlobStorage {
+        AzurePageBlobStorage::new(
             self.archive_conn_string.clone(),
             topic_id.to_string(),
             archive_file_no.get_file_name(),
         )
-        .await;
-
-        PageBlobRandomAccess::new(
-            page_blob_storage,
-            true,
-            PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
-        )
+        .await
     }
 }

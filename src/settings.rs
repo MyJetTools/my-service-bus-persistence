@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
@@ -41,6 +42,9 @@ impl SettingsModel {
             "topicsdata".to_string(),
         )
         .await;
+
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         TopicsSnapshotPageBlobStorage::new(page_blob)
     }

@@ -1,3 +1,4 @@
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_page_blob_random_access::PageBlobRandomAccess;
 
 use my_service_bus_shared::sub_page::SubPageId;
@@ -11,7 +12,7 @@ pub struct SubPagePosition {
 }
 
 pub async fn read_file_position(
-    page_blob: &PageBlobRandomAccess,
+    page_blob: &PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries>,
     archive_file_no: ArchiveFileNo,
     sub_page_id: SubPageId,
 ) -> SubPagePosition {
@@ -33,7 +34,7 @@ pub async fn read_file_position(
 }
 
 pub async fn write_file_position(
-    page_blob: &PageBlobRandomAccess,
+    page_blob: &PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries>,
     archive_file_no: ArchiveFileNo,
     sub_page_id: SubPageId,
     pos: SubPagePosition,

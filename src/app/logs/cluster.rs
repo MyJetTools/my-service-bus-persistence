@@ -15,6 +15,8 @@ impl LogsCluster {
         }
     }
 
+
+
     pub fn push(&mut self, itm: LogItem) {
         if let Some(ctx) = &itm.ctx {
             if let Some(topic_id) = ctx.get("topicId") {

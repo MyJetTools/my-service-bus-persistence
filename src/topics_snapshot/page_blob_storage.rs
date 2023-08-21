@@ -1,12 +1,13 @@
-use std::{sync::atomic::AtomicUsize, time::Duration, usize};
+use std::{sync::atomic::AtomicUsize, usize};
 
 use my_azure_storage_sdk::{
-    page_blob::{AzurePageBlobStorage, PageBlobContentToUpload},
+    page_blob::{MyAzurePageBlobStorage, PageBlobContentToUpload},
     AzureStorageError,
 };
 use prost::Message;
 
 use super::protobuf_model::*;
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 
 pub enum TopicsSnapshotResult {
     V1(TopicsSnapshotProtobufModel),
@@ -42,12 +43,12 @@ impl Into<TopicsSnapshotResult> for TopicsSnapshotProtobufModel {
 }
 
 pub struct TopicsSnapshotPageBlobStorage {
-    page_blob: AzurePageBlobStorage,
+    page_blob: MyAzurePageBlobStorageWithRetries,
     size: AtomicUsize,
 }
 
 impl TopicsSnapshotPageBlobStorage {
-    pub fn new(page_blob: AzurePageBlobStorage) -> Self {
+    pub fn new(page_blob: MyAzurePageBlobStorageWithRetries) -> Self {
         Self {
             page_blob,
             size: AtomicUsize::new(0),
@@ -75,35 +76,24 @@ impl TopicsSnapshotPageBlobStorage {
     pub async fn read_or_create_topics_snapshot(
         &self,
     ) -> Result<TopicsSnapshotResult, AzureStorageError> {
-        let mut attempt_no = 0;
-        loop {
-            let download_result = self.page_blob.download().await;
-            match download_result {
-                Ok(result) => {
-                    self.size
-                        .store(result.len(), std::sync::atomic::Ordering::SeqCst);
-                    return Ok(deserialize_model(result.as_slice()));
-                }
-                Err(err) => {
-                    let result = crate::azure_storage_with_retries::handle_error_and_create_blob(
-                        &self.page_blob,
-                        err,
-                        0,
-                    )
-                    .await?;
-
-                    if attempt_no > 5 {
-                        return Err(result);
-                    }
-
-                    println!(
-                        "Can not read topics snapshot. Attempt: {}. Err: {:?}",
-                        attempt_no, result
-                    );
-                    attempt_no += 1;
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                }
+        let download_result = self.page_blob.download().await;
+        match download_result {
+            Ok(result) => {
+                self.size
+                    .store(result.len(), std::sync::atomic::Ordering::SeqCst);
+                return Ok(deserialize_model(result.as_slice()));
             }
+            Err(err) => match err {
+                AzureStorageError::ContainerNotFound => {
+                    self.page_blob.create_if_not_exists(0, true).await.unwrap();
+                    return Ok(TopicsSnapshotResult::default());
+                }
+                AzureStorageError::BlobNotFound => {
+                    self.page_blob.create_if_not_exists(0, true).await.unwrap();
+                    return Ok(TopicsSnapshotResult::default());
+                }
+                _ => panic!("Can not read topics snapshot. Err: {:?}", err),
+            },
         }
     }
 
@@ -220,7 +210,7 @@ fn deserialize_model(content: &[u8]) -> TopicsSnapshotResult {
 #[cfg(test)]
 mod tests {
 
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
     use super::*;
 
@@ -233,6 +223,9 @@ mod tests {
         let page_blob =
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
+
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         let page_blob_storage = TopicsSnapshotPageBlobStorage::new(page_blob);
 
@@ -279,6 +272,9 @@ mod tests {
         let page_blob =
             AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
                 .await;
+
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         let page_blob_storage = TopicsSnapshotPageBlobStorage::new(page_blob);
 

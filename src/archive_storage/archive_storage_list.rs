@@ -1,16 +1,21 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use my_azure_page_blob_random_access::PageBlobRandomAccess;
-
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
+use my_azure_storage_sdk::page_blob::MyAzurePageBlobStorage;
 use tokio::sync::Mutex;
 
-use crate::azure_storage_with_retries::AzurePageBlobStorageWithRetries;
-
-use super::{consts::TOC_SIZE, ArchiveFileNo, ArchiveStorage};
+use super::{
+    consts::{CALCULATED_TOC_PAGES_AMOUNT, TOC_SIZE},
+    ArchiveFileNo, ArchiveStorage,
+};
 
 #[async_trait::async_trait]
 pub trait ArchivePageBlobCreator {
-    async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> PageBlobRandomAccess;
+    async fn create(
+        &self,
+        topic_id: &str,
+        archive_file_no: ArchiveFileNo,
+    ) -> my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
 }
 
 pub struct ArchiveStorageList {
@@ -69,13 +74,16 @@ impl ArchiveStorageList {
 
         let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
 
-        let result = page_blob
-            .get_blob_size_or_create_page_blob(TOC_SIZE)
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
+
+        let page_blob_props = page_blob
+            .create_if_not_exists(TOC_SIZE, true)
             .await
             .unwrap();
 
-        if result < TOC_SIZE {
-            page_blob.resize(TOC_SIZE).await.unwrap();
+        if page_blob_props.get_pages_amount() < CALCULATED_TOC_PAGES_AMOUNT {
+            page_blob.resize(CALCULATED_TOC_PAGES_AMOUNT).await.unwrap();
         }
 
         let archive_storage = ArchiveStorage::open_or_create(archive_file_no, page_blob).await;
@@ -100,15 +108,18 @@ impl ArchiveStorageList {
 
         let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
 
-        let blob_size = page_blob.get_blob_size_with_retires().await;
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(3));
 
-        if blob_size.is_err() {
+        let blob_props = page_blob.get_blob_properties().await;
+
+        if blob_props.is_err() {
             return None;
         }
 
-        let blob_size = blob_size.unwrap();
+        let blob_props = blob_props.unwrap();
 
-        if blob_size < TOC_SIZE {
+        if blob_props.get_pages_amount() < CALCULATED_TOC_PAGES_AMOUNT {
             return None;
         }
 

@@ -1,31 +1,35 @@
+use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_page_blob_random_access::{
     PageBlobRandomAccess, PageBlobRandomAccessError, ReadChunk,
 };
+use my_azure_storage_sdk::page_blob::MyAzurePageBlobStorage;
 use my_service_bus_shared::sub_page::SubPageId;
 
-use crate::azure_storage_with_retries::AzurePageBlobStorageWithRetries;
+use crate::settings::PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP;
 
 use super::{
-    consts::{CALCULATED_TOC_PAGES_AMOUNT, TOC_SIZE_IN_BITES, TOC_STRUCTURE_SIZE},
+    consts::{CALCULATED_TOC_PAGES_AMOUNT, TOC_SIZE_IN_BITES},
     toc::SubPagePosition,
     ArchiveFileNo,
 };
 
 pub struct ArchiveStorage {
     pub archive_file_no: ArchiveFileNo,
-    pub page_blob: PageBlobRandomAccess,
+    pub page_blob: PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries>,
 }
 
 impl ArchiveStorage {
     pub async fn open_if_exists(
         archive_file_no: ArchiveFileNo,
-        page_blob: PageBlobRandomAccess,
+        page_blob: MyAzurePageBlobStorageWithRetries,
     ) -> Option<Self> {
-        let result = page_blob.get_blob_size_with_retires().await;
+        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+
+        let result = page_blob.get_blob_properties().await;
 
         match result {
-            Ok(blob_size) => {
-                if blob_size >= TOC_SIZE_IN_BITES {
+            Ok(props) => {
+                if props.get_blob_size() >= TOC_SIZE_IN_BITES {
                     return Self {
                         archive_file_no,
                         page_blob,
@@ -47,23 +51,24 @@ impl ArchiveStorage {
 
     pub async fn open_or_create(
         archive_file_no: ArchiveFileNo,
-        page_blob: PageBlobRandomAccess,
+        page_blob: MyAzurePageBlobStorageWithRetries,
     ) -> Self {
-        let file_size = page_blob
-            .get_blob_size_or_create_page_blob(TOC_STRUCTURE_SIZE)
+        let blob_props = page_blob
+            .create_if_not_exists(CALCULATED_TOC_PAGES_AMOUNT, true)
             .await
             .unwrap();
 
-        if file_size < TOC_SIZE_IN_BITES {
-            page_blob
-                .resize_with_retries(CALCULATED_TOC_PAGES_AMOUNT)
-                .await
-                .unwrap();
+        if blob_props.get_pages_amount() < CALCULATED_TOC_PAGES_AMOUNT {
+            page_blob.resize(CALCULATED_TOC_PAGES_AMOUNT).await.unwrap();
         }
 
         Self {
             archive_file_no,
-            page_blob,
+            page_blob: PageBlobRandomAccess::new(
+                page_blob,
+                true,
+                PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP,
+            ),
         }
     }
 
@@ -100,10 +105,10 @@ impl ArchiveStorage {
             return;
         }
 
-        let blob_size = self.page_blob.get_blob_size().await.unwrap();
+        let blob_size = self.page_blob.get_blob_properties().await.unwrap();
 
         let pos = SubPagePosition {
-            offset: blob_size as u64,
+            offset: blob_size.get_blob_size() as u64,
             length: payload.len() as u32,
         };
 
@@ -119,9 +124,9 @@ impl ArchiveStorage {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{sync::Arc, time::Duration};
 
-    use my_azure_page_blob_random_access::PageBlobRandomAccess;
+    use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus_shared::sub_page::SubPageId;
 
@@ -132,7 +137,8 @@ mod tests {
         let azure_connection = Arc::new(AzureStorageConnection::new_in_memory());
 
         let page_blob = AzurePageBlobStorage::new(azure_connection, "test", "test").await;
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         let archive_storage =
             super::ArchiveStorage::open_if_exists(ArchiveFileNo::new(0), page_blob).await;
@@ -145,7 +151,9 @@ mod tests {
         let azure_connection = Arc::new(AzureStorageConnection::new_in_memory());
 
         let page_blob = AzurePageBlobStorage::new(azure_connection, "test", "test").await;
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         let archive_storage =
             super::ArchiveStorage::open_or_create(ArchiveFileNo::new(0), page_blob).await;
@@ -164,7 +172,8 @@ mod tests {
         let azure_connection = Arc::new(AzureStorageConnection::new_in_memory());
 
         let page_blob = AzurePageBlobStorage::new(azure_connection, "test", "test").await;
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+        let page_blob =
+            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
 
         let archive_storage =
             super::ArchiveStorage::open_or_create(ArchiveFileNo::new(0), page_blob).await;

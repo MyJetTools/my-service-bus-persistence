@@ -1,20 +1,22 @@
-use my_azure_page_blob_random_access::PageBlobRandomAccess;
+use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
 use my_service_bus_abstractions::MessageId;
 use rust_extensions::date_time::AtomicDateTimeAsMicroseconds;
 
 use crate::typing::*;
 
-use super::{IndexByMinutePageBlobExt, MinuteWithinYear, UpdateQueue};
+use super::{IndexByMinutePageBlob, MinuteWithinYear, UpdateQueue};
 
 pub struct YearlyIndexByMinute {
     pub year: Year,
-    page_blob: PageBlobRandomAccess,
+    page_blob: IndexByMinutePageBlob,
     update_queue: UpdateQueue,
     pub last_access: AtomicDateTimeAsMicroseconds,
 }
 
 impl YearlyIndexByMinute {
-    pub async fn open_or_create(year: Year, page_blob: PageBlobRandomAccess) -> Self {
+    pub async fn open_or_create(year: Year, page_blob: AzurePageBlobStorage) -> Self {
+        let page_blob = IndexByMinutePageBlob::new(page_blob);
+
         page_blob.init_index_by_minute().await;
 
         Self {
@@ -24,8 +26,17 @@ impl YearlyIndexByMinute {
             last_access: AtomicDateTimeAsMicroseconds::now(),
         }
     }
+    #[cfg(test)]
+    pub fn get_page_blob(
+        &self,
+    ) -> &my_azure_page_blob_random_access::PageBlobRandomAccess<
+        my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries,
+    > {
+        self.page_blob.get_page_blob()
+    }
 
-    pub async fn load_if_exists(year: Year, page_blob: PageBlobRandomAccess) -> Option<Self> {
+    pub async fn load_if_exists(year: Year, page_blob: AzurePageBlobStorage) -> Option<Self> {
+        let page_blob = IndexByMinutePageBlob::new(page_blob);
         page_blob.check_index_by_minute_blob().await?;
 
         Self {
@@ -97,7 +108,7 @@ impl YearlyIndexByMinute {
 
 #[cfg(test)]
 mod tests {
-    use my_azure_page_blob_random_access::PageBlobRandomAccess;
+
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus_abstractions::MessageId;
 
@@ -108,7 +119,7 @@ mod tests {
         let connection = AzureStorageConnection::new_in_memory();
         let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
 
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
+        // let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
 
         let index = YearlyIndexByMinute::load_if_exists(2021, page_blob).await;
 
@@ -119,8 +130,6 @@ mod tests {
     async fn test_we_already_written() {
         let connection = AzureStorageConnection::new_in_memory();
         let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
-
-        let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
 
         let index = YearlyIndexByMinute::open_or_create(2021, page_blob).await;
 
@@ -141,7 +150,7 @@ mod tests {
 
         index.flush_to_storage().await;
 
-        let mut result = index.page_blob.read(0, 4).await.unwrap();
+        let mut result = index.get_page_blob().read(0, 4).await.unwrap();
 
         let result = result.read_i64();
 

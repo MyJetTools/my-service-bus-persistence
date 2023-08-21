@@ -2,6 +2,7 @@ use std::usize;
 
 //cSpell:disable
 use chrono::{Datelike, Timelike};
+use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
 //cSpell:enable
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
@@ -13,6 +14,8 @@ pub const INDEX_STEP: usize = 8;
 const LAST_DAY_OF_YEAR: usize = 527039;
 
 pub const MINUTE_INDEX_FILE_SIZE: usize = (LAST_DAY_OF_YEAR + 1) * INDEX_STEP;
+
+pub const MINUTE_INDEX_PAGES_AMOUNT: usize = MINUTE_INDEX_FILE_SIZE / BLOB_PAGE_SIZE;
 
 pub struct IndexByMinuteUtils {
     day_no_in_year: Vec<u32>,
