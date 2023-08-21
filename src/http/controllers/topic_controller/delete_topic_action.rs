@@ -8,7 +8,7 @@ use super::contracts::*;
 
 #[my_http_server_swagger::http_route(
     method: "DELETE",
-    route: "/Topic",
+    route: "/api/Topic",
     input_data: "DeleteTopicHttpContract",
     description: "Deletes Topic",
     summary: "Delete Topic",

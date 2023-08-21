@@ -27,7 +27,7 @@ use crate::{
         topics_snapshot_saver::TopicsSnapshotSaverTimer,
     },
 };
-
+#[allow(non_snake_case)]
 pub mod persistence_grpc {
     tonic::include_proto!("persistence");
 }

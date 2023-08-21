@@ -1,0 +1,55 @@
+use std::sync::Arc;
+
+use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
+use my_http_server_swagger::MyHttpObjectStructure;
+use rust_extensions::date_time::DateTimeAsMicroseconds;
+use serde::*;
+
+use crate::app::AppContext;
+
+#[my_http_server_swagger::http_route(
+    method: "GET",
+    route: "/api/Topic",
+    description: "Get deleted topics",
+    summary: "Get deleted topics",
+    controller: "Queues",
+    result:[
+        {status_code: 200, description: "Deleted topics", model:"Vec<DeletedTopic>"},
+        {status_code: 404, description: "Topic not found"},
+    ]
+)]
+pub struct GetDeletedTopicsAction {
+    app: Arc<AppContext>,
+}
+
+impl GetDeletedTopicsAction {
+    pub fn new(app: Arc<AppContext>) -> Self {
+        Self { app }
+    }
+}
+
+async fn handle_request(
+    action: &GetDeletedTopicsAction,
+
+    _ctx: &HttpContext,
+) -> Result<HttpOkResult, HttpFailResult> {
+    let mut result = Vec::new();
+
+    {
+        let topics_snapshot = action.app.topics_snapshot.get().await;
+        for deleted in &topics_snapshot.snapshot.deleted_topics {
+            result.push(DeletedTopic {
+                topic_id: deleted.topic_id.to_string(),
+                hard_delete_at: DateTimeAsMicroseconds::new(deleted.gc_after).to_rfc3339(),
+            })
+        }
+    }
+
+    return HttpOutput::as_json(result).into_ok_result(true).into();
+}
+
+#[derive(Debug, MyHttpObjectStructure, Serialize)]
+pub struct DeletedTopic {
+    pub topic_id: String,
+    pub hard_delete_at: String,
+}

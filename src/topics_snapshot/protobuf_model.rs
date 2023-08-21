@@ -14,6 +14,7 @@ pub struct TopicsSnapshotProtobufModelV2 {
     pub deleted_topics: Vec<DeletedTopicProtobufModel>,
 }
 
+#[allow(non_snake_case)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TopicSnapshotProtobufModel {
     #[prost(string, tag = "1")]
