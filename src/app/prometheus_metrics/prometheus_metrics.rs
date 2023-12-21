@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use prometheus::{Encoder, Registry, TextEncoder};
+use prometheus::{Encoder, IntGauge, Registry, TextEncoder};
 use tokio::sync::Mutex;
 
 use super::GaugeByTopic;
@@ -15,6 +15,7 @@ pub struct PrometheusMetrics {
     topic_persist_queue_size: GaugeByTopic,
     cached_messages_size: GaugeByTopic,
     active_topics: Mutex<HashSet<String>>,
+    http_connections_amount: IntGauge,
 }
 
 impl PrometheusMetrics {
@@ -29,14 +30,26 @@ impl PrometheusMetrics {
         let cached_messages_size =
             GaugeByTopic::new(&registry, "cached_messages_size", "Cached messages size");
 
+        let http_connections_amount = create_http_connections_amount();
+
+        registry
+            .register(Box::new(http_connections_amount.clone()))
+            .unwrap();
+
         return Self {
             registry,
             topic_persist_queue_size,
             cached_messages_size,
             active_topics: Mutex::new(HashSet::new()),
+            http_connections_amount,
         };
     }
-    pub async fn update(&self, mut update_data: HashMap<&str, PrometheusMetricsToUpdate>) {
+    pub async fn update(
+        &self,
+        mut update_data: HashMap<&str, PrometheusMetricsToUpdate>,
+        http_connections_amount: i64,
+    ) {
+        self.http_connections_amount.set(http_connections_amount);
         let mut active_topics = self.active_topics.lock().await;
 
         for active_topic_id in active_topics.iter() {
@@ -77,4 +90,8 @@ impl PrometheusMetrics {
 
         return String::from_utf8(buffer).unwrap();
     }
+}
+
+fn create_http_connections_amount() -> IntGauge {
+    IntGauge::new("http_connections_amount", "Amount of Http Connections").unwrap()
 }

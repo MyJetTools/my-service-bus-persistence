@@ -1,16 +1,21 @@
 use std::{collections::HashMap, sync::Arc};
 
+use my_http_server::HttpConnectionsCounter;
 use rust_extensions::MyTimerTick;
 
 use crate::app::{AppContext, PrometheusMetricsToUpdate};
 
 pub struct MetricsUpdater {
     app: Arc<AppContext>,
+    http_connections_country: HttpConnectionsCounter,
 }
 
 impl MetricsUpdater {
-    pub fn new(app: Arc<AppContext>) -> Self {
-        Self { app }
+    pub fn new(app: Arc<AppContext>, http_connections_country: HttpConnectionsCounter) -> Self {
+        Self {
+            app,
+            http_connections_country,
+        }
     }
 }
 
@@ -45,6 +50,11 @@ impl MyTimerTick for MetricsUpdater {
             }
         }
 
-        self.app.metrics_keeper.update(metrics).await;
+        let http_connections = self.http_connections_country.get_connections_amount();
+
+        self.app
+            .metrics_keeper
+            .update(metrics, http_connections)
+            .await;
     }
 }

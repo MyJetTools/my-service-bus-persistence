@@ -40,9 +40,6 @@ async fn main() {
 
     let app = Arc::new(app);
 
-    let mut timer_1s = MyTimer::new(Duration::from_secs(1));
-    timer_1s.register_timer("MetricsUpdater", Arc::new(MetricsUpdater::new(app.clone())));
-
     let mut timer_3s = MyTimer::new(Duration::from_secs(3));
 
     timer_3s.register_timer(
@@ -58,9 +55,15 @@ async fn main() {
     );
 
     timer_3s.start(app.app_states.clone(), app.logs.clone());
-    timer_1s.start(app.app_states.clone(), app.logs.clone());
 
-    crate::http::start_up::setup_server(&app, 7123);
+    let http_connections_counter = crate::http::start_up::setup_server(&app, 7123);
+
+    let mut timer_1s = MyTimer::new(Duration::from_secs(1));
+    timer_1s.register_timer(
+        "MetricsUpdater",
+        Arc::new(MetricsUpdater::new(app.clone(), http_connections_counter)),
+    );
+    timer_1s.start(app.app_states.clone(), app.logs.clone());
 
     tokio::spawn(operations::data_initializer::init(app.clone()));
 
