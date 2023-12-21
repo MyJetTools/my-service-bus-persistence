@@ -6,11 +6,9 @@ use crate::{
     topics_snapshot::{QueueSnapshotProtobufModel, TopicSnapshotProtobufModel},
     utils::duration_to_string,
 };
-use my_service_bus_shared::{page_id::PageId, sub_page::SubPageId};
+use my_service_bus::shared::{page_id::PageId, sub_page::SubPageId};
 use rust_extensions::date_time::{DateTimeAsMicroseconds, DateTimeDuration};
 use serde::{Deserialize, Serialize};
-
-use sysinfo::SystemExt;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemStatusModel {

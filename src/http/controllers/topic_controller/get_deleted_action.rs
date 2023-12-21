@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
+use my_http_server::macros::MyHttpObjectStructure;
 use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
-use my_http_server_swagger::MyHttpObjectStructure;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use serde::*;
 
 use crate::app::AppContext;
 
-#[my_http_server_swagger::http_route(
+#[my_http_server::macros::http_route(
     method: "GET",
     route: "/api/Topic",
     description: "Get deleted topics",

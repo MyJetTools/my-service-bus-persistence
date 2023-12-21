@@ -1,7 +1,7 @@
 use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput, WebContentType};
 use rand::Rng;
 
-#[my_http_server_swagger::http_route(method: "GET",route: "/",)]
+#[my_http_server::macros::http_route(method: "GET",route: "/",)]
 pub struct IndexAction {
     rnd: u64,
 }

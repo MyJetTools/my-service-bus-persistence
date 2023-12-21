@@ -4,7 +4,7 @@ use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use std::sync::Arc;
 
-#[my_http_server_swagger::http_route(method:"GET",
+#[my_http_server::macros::http_route(method:"GET",
 route:"/Read/ListFromDate",
 controller:"Read",
 description:"Reads message by Id",

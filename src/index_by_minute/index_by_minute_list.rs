@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use tokio::sync::RwLock;
 
+use crate::typing::Year;
+
 use super::YearlyIndexByMinute;
 
 pub struct IndexByMinuteList {
@@ -16,18 +18,18 @@ impl IndexByMinuteList {
         }
     }
 
-    pub async fn add(&self, year: u32, yearly_index_by_minute: Arc<YearlyIndexByMinute>) {
+    pub async fn add(&self, year: Year, yearly_index_by_minute: Arc<YearlyIndexByMinute>) {
         let mut write_access = self.data.write().await;
-        write_access.insert(year, yearly_index_by_minute);
+        write_access.insert(year.get_value(), yearly_index_by_minute);
     }
 
     pub async fn get(
         &self,
-        year: u32,
+        year: Year,
         update_read_time: Option<DateTimeAsMicroseconds>,
     ) -> Option<Arc<YearlyIndexByMinute>> {
         let read_access = self.data.read().await;
-        let result = read_access.get(&year).cloned();
+        let result = read_access.get(year.value_as_ref()).cloned();
 
         if let Some(result) = &result {
             if let Some(update_read_time) = update_read_time {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_service_bus::shared::protobuf_models::MessageProtobufModel;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{

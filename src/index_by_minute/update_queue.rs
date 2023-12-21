@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_abstractions::MessageId;
+use my_service_bus::abstractions::MessageId;
 use tokio::sync::Mutex;
 
 use super::MinuteWithinYear;
@@ -43,7 +43,6 @@ impl UpdateQueue {
             .collect();
         Some(result)
     }
-
 
     pub async fn remove_first_element(&self) -> Option<(MinuteWithinYear, MessageId)> {
         let mut write_access = self.data.lock().await;

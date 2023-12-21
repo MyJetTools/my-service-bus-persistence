@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::page_id::PageId;
+use my_service_bus::shared::page_id::PageId;
 
 use crate::topics_snapshot::TopicSnapshotProtobufModel;
 

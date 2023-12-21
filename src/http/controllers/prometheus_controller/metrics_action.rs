@@ -4,7 +4,7 @@ use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
 
 use crate::app::AppContext;
 
-#[my_http_server_swagger::http_route(method: "GET",route: "/metrics",)]
+#[my_http_server::macros::http_route(method: "GET",route: "/metrics",)]
 pub struct MetricsAction {
     app: Arc<AppContext>,
 }

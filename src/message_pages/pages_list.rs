@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_shared::sub_page::{SizeAndAmount, SubPageId};
+use my_service_bus::shared::sub_page::{SizeAndAmount, SubPageId};
 use tokio::sync::Mutex;
 
 use super::{SubPage, SubPageInner};

@@ -12,6 +12,7 @@ use crate::{
     settings::SettingsModel,
     topic_data::TopicsDataList,
     topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
+    typing::Year,
 };
 
 use super::{logs::Logs, PrometheusMetrics};
@@ -102,7 +103,7 @@ impl AppContext {
     pub async fn open_or_create_index_by_minute(
         &self,
         topic_id: &str,
-        year: u32,
+        year: Year,
     ) -> YearlyIndexByMinute {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 
@@ -119,7 +120,7 @@ impl AppContext {
     pub async fn try_open_index_by_minute(
         &self,
         topic_id: &str,
-        year: u32,
+        year: Year,
     ) -> Option<Arc<YearlyIndexByMinute>> {
         let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
 

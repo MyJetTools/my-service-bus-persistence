@@ -2,9 +2,9 @@ use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_se
 use crate::persistence_grpc::*;
 
 use futures_core::Stream;
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::page_id::PageId;
-use my_service_bus_shared::sub_page::SubPageId;
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::page_id::PageId;
+use my_service_bus::shared::sub_page::SubPageId;
 
 use std::pin::Pin;
 use std::time::Duration;
@@ -104,7 +104,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         )
         .await;
 
-        my_grpc_extensions::grpc_server::send_vec_to_stream(compressed, |chunk| {
+        my_grpc_extensions::grpc_server::send_vec_to_stream(compressed.into_iter(), |chunk| {
             CompressedMessageChunkModel { chunk }
         })
         .await

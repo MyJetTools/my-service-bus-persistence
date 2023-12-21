@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::{
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::{
     page_compressor::CompressedPageReaderError,
     protobuf_models::MessageProtobufModel,
     sub_page::{SizeAndAmount, SubPageId},
@@ -86,7 +86,7 @@ impl SubPageInner {
         compressed_payload: &[u8],
     ) -> Result<SubPageInner, CompressedPageReaderError> {
         let mut compressed_payload =
-            my_service_bus_shared::page_compressor::CompressedPageReader::new(compressed_payload)?;
+            my_service_bus::shared::page_compressor::CompressedPageReader::new(compressed_payload)?;
 
         let mut messages: BTreeMap<i64, Arc<MessageProtobufModel>> = BTreeMap::new();
 

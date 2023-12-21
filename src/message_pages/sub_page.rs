@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::{
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::{
     protobuf_models::MessageProtobufModel,
     sub_page::{SizeAndAmount, SubPageId},
 };
@@ -131,7 +131,7 @@ impl SubPage {
         match self {
             SubPage::Active(_, sub_page_inner) => {
                 let mut page_compressor =
-                    my_service_bus_shared::page_compressor::CompressedPageBuilder::new_as_single_file();
+                    my_service_bus::shared::page_compressor::CompressedPageBuilder::new_as_single_file();
 
                 {
                     let data = sub_page_inner.lock().await;

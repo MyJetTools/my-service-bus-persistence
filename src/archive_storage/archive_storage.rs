@@ -3,7 +3,7 @@ use my_azure_page_blob_random_access::{
     PageBlobRandomAccess, PageBlobRandomAccessError, ReadChunk,
 };
 use my_azure_storage_sdk::page_blob::MyAzurePageBlobStorage;
-use my_service_bus_shared::sub_page::SubPageId;
+use my_service_bus::shared::sub_page::SubPageId;
 
 use crate::settings::PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP;
 
@@ -128,7 +128,7 @@ mod tests {
 
     use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-    use my_service_bus_shared::sub_page::SubPageId;
+    use my_service_bus::shared::sub_page::SubPageId;
 
     use crate::archive_storage::ArchiveFileNo;
 

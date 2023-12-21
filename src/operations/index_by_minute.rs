@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_service_bus::shared::protobuf_models::MessageProtobufModel;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
-use crate::{app::AppContext, index_by_minute::MinuteWithinYear, topic_data::TopicData};
+use crate::{
+    app::AppContext, index_by_minute::MinuteWithinYear, topic_data::TopicData, typing::Year,
+};
 
 pub async fn new_messages(
     app: &AppContext,
@@ -36,7 +38,7 @@ pub async fn new_messages(
 fn extract_year_and_minute_within_year(
     app: &AppContext,
     msg: &MessageProtobufModel,
-) -> Option<(MinuteWithinYear, u32)> {
+) -> Option<(MinuteWithinYear, Year)> {
     return Some(
         app.index_by_minute_utils
             .get_minute_within_the_year(msg.get_created()),

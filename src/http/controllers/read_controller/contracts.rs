@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
-use my_http_server_swagger::{MyHttpInput, MyHttpObjectStructure};
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_http_server::macros::{MyHttpInput, MyHttpObjectStructure};
+use my_service_bus::shared::protobuf_models::MessageProtobufModel;
+use rust_extensions::base64::IntoBase64;
 use serde::{Deserialize, Serialize};
-
-use crate::utils::ToBase64;
 
 #[derive(MyHttpInput)]
 pub struct GetMessageByIdInputContract {
@@ -71,7 +70,7 @@ impl MessageJsonModel {
     pub fn new(src: &MessageProtobufModel) -> Self {
         let result = Self {
             id: src.get_message_id().into(),
-            content: src.data.to_base64(),
+            content: src.data.into_base64(),
             created: src.get_created().to_rfc3339(),
         };
 

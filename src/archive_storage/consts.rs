@@ -1,4 +1,4 @@
-use my_service_bus_shared::sub_page::SUB_PAGE_MESSAGES_AMOUNT;
+use my_service_bus::shared::sub_page::SUB_PAGE_MESSAGES_AMOUNT;
 
 pub const TOC_STRUCTURE_SIZE: usize = 12;
 

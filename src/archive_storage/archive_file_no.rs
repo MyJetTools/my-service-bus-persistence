@@ -1,4 +1,4 @@
-use my_service_bus_shared::sub_page::SubPageId;
+use my_service_bus::shared::sub_page::SubPageId;
 
 #[derive(Clone, Copy)]
 pub struct ArchiveFileNo(i64);
@@ -46,7 +46,7 @@ impl Into<ArchiveFileNo> for SubPageId {
 #[cfg(test)]
 mod tests {
 
-    use my_service_bus_shared::sub_page::SubPageId;
+    use my_service_bus::shared::sub_page::SubPageId;
 
     use crate::archive_storage::ArchiveFileNo;
 

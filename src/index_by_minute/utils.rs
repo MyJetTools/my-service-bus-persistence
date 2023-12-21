@@ -6,6 +6,8 @@ use my_azure_storage_sdk::page_blob::consts::BLOB_PAGE_SIZE;
 //cSpell:enable
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
+use crate::typing::Year;
+
 use super::MinuteWithinYear;
 
 const MINUTES_PER_DAY: u32 = 60 * 24;
@@ -87,7 +89,7 @@ impl IndexByMinuteUtils {
     pub fn get_minute_within_the_year(
         &self,
         dt_micros: DateTimeAsMicroseconds,
-    ) -> (MinuteWithinYear, u32) {
+    ) -> (MinuteWithinYear, Year) {
         let d = dt_micros.to_chrono_utc();
 
         let month = d.month();
@@ -99,7 +101,7 @@ impl IndexByMinuteUtils {
             self.day_no_in_year[month as usize] + (day - 1) * MINUTES_PER_DAY + hour * 60 + minute
                 - 1;
 
-        (MinuteWithinYear::new(minute), d.year() as u32)
+        (MinuteWithinYear::new(minute), (d.year() as u32).into())
     }
 }
 

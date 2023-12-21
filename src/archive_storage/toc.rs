@@ -1,7 +1,7 @@
 use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_page_blob_random_access::PageBlobRandomAccess;
 
-use my_service_bus_shared::sub_page::SubPageId;
+use my_service_bus::shared::sub_page::SubPageId;
 use rust_extensions::BinaryPayloadBuilder;
 
 use super::{consts::TOC_STRUCTURE_SIZE, ArchiveFileNo};

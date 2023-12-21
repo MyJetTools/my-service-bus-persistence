@@ -1,4 +1,4 @@
-use my_service_bus_abstractions::MessageId;
+use my_service_bus::abstractions::MessageId;
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TopicsSnapshotProtobufModel {

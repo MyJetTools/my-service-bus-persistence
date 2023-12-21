@@ -1,5 +1,5 @@
 use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
-use my_service_bus_abstractions::MessageId;
+use my_service_bus::abstractions::MessageId;
 use rust_extensions::date_time::AtomicDateTimeAsMicroseconds;
 
 use crate::typing::*;
@@ -110,7 +110,7 @@ impl YearlyIndexByMinute {
 mod tests {
 
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-    use my_service_bus_abstractions::MessageId;
+    use my_service_bus::abstractions::MessageId;
 
     use crate::index_by_minute::{MinuteWithinYear, YearlyIndexByMinute};
 
@@ -121,7 +121,7 @@ mod tests {
 
         // let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
 
-        let index = YearlyIndexByMinute::load_if_exists(2021, page_blob).await;
+        let index = YearlyIndexByMinute::load_if_exists(2021.into(), page_blob).await;
 
         assert_eq!(index.is_none(), true);
     }
@@ -131,7 +131,7 @@ mod tests {
         let connection = AzureStorageConnection::new_in_memory();
         let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
 
-        let index = YearlyIndexByMinute::open_or_create(2021, page_blob).await;
+        let index = YearlyIndexByMinute::open_or_create(2021.into(), page_blob).await;
 
         //Writing First element
         let minute = MinuteWithinYear::new(0);

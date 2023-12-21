@@ -1,4 +1,4 @@
-use my_service_bus_abstractions::AsMessageId;
+use my_service_bus::abstractions::AsMessageId;
 
 use crate::{
     persistence_grpc::*,

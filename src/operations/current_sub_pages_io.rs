@@ -6,7 +6,7 @@ use my_azure_storage_sdk::{
     page_blob::{AzurePageBlobStorage, MyAzurePageBlobStorage},
     AzureStorageError,
 };
-use my_service_bus_shared::sub_page::SubPageId;
+use my_service_bus::shared::sub_page::SubPageId;
 
 use crate::{app::AppContext, message_pages::SubPageInner};
 

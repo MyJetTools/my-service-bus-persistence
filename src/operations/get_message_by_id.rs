@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::protobuf_models::MessageProtobufModel;
 
 use crate::app::AppContext;
 

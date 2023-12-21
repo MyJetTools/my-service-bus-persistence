@@ -1,4 +1,4 @@
-use my_service_bus_abstractions::MessageId;
+use my_service_bus::abstractions::MessageId;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use tokio::sync::RwLock;
 

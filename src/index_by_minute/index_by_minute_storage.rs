@@ -3,7 +3,7 @@ use std::time::Duration;
 use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_page_blob_random_access::PageBlobRandomAccess;
 use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
-use my_service_bus_abstractions::MessageId;
+use my_service_bus::abstractions::MessageId;
 
 use super::{
     utils::{MINUTE_INDEX_FILE_SIZE, MINUTE_INDEX_PAGES_AMOUNT},
@@ -110,7 +110,7 @@ mod tests {
 
     use super::IndexByMinutePageBlob;
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-    use my_service_bus_abstractions::MessageId;
+    use my_service_bus::abstractions::MessageId;
 
     #[tokio::test]
     async fn test_create_new_blob_then_write_and_read() {

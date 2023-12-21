@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::{page_compressor::CompressedPageBuilder, sub_page::SubPageId};
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::{page_compressor::CompressedPageBuilder, sub_page::SubPageId};
 
 use crate::app::AppContext;
 

@@ -1,4 +1,4 @@
-use my_http_server_swagger::MyHttpInput;
+use my_http_server::macros::MyHttpInput;
 
 #[derive(Debug, MyHttpInput)]
 pub struct GetLogsByTopicHttpInput {

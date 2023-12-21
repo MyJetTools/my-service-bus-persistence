@@ -1,6 +1,6 @@
 use crate::app::AppContext;
 
-use my_service_bus_shared::protobuf_models::MessageProtobufModel;
+use my_service_bus::shared::protobuf_models::MessageProtobufModel;
 
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessagesProtobufContract {

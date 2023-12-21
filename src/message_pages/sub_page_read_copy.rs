@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use my_service_bus_abstractions::MessageId;
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
+use my_service_bus::abstractions::MessageId;
+use my_service_bus::shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
 
 pub struct SubPageReadCopy {
     pub sub_page_id: SubPageId,

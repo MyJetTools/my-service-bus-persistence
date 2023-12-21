@@ -1,5 +1,5 @@
 use my_azure_page_blob_random_access::PageBlobRandomAccessError;
-use my_service_bus_shared::{page_compressor::CompressedPageReaderError, sub_page::SubPageId};
+use my_service_bus::shared::{page_compressor::CompressedPageReaderError, sub_page::SubPageId};
 use rust_extensions::{date_time::DateTimeAsMicroseconds, StopWatch};
 
 use crate::{

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
+use my_service_bus::shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
 
 use crate::app::AppContext;
 

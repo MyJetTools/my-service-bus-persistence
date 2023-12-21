@@ -215,7 +215,7 @@ mod tests {
     use super::*;
 
     use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
-    use my_service_bus_abstractions::AsMessageId;
+    use my_service_bus::abstractions::AsMessageId;
 
     #[tokio::test]
     async fn test_serialize_deserialize_v1() {

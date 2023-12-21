@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::AppContext;
 
-#[my_http_server_swagger::http_route(method: "GET", route: "/api/is_alive")]
+#[my_http_server::macros::http_route(method: "GET", route: "/api/is_alive")]
 pub struct IsAliveAction {
     app: Arc<AppContext>,
 }

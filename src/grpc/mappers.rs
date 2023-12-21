@@ -1,4 +1,4 @@
-use my_service_bus_shared::protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel};
+use my_service_bus::shared::protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel};
 
 use crate::persistence_grpc::{MessageContentGrpcModel, MessageContentMetaDataItem};
 

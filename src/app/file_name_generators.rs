@@ -1,3 +1,5 @@
-pub fn generate_year_index_blob_name(year: u32) -> String {
-    return format!(".{}.yearindex", year);
+use crate::typing::Year;
+
+pub fn generate_year_index_blob_name(year: Year) -> String {
+    return format!(".{}.yearindex", year.get_value());
 }

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
-use my_service_bus_abstractions::AsMessageId;
+use my_service_bus::abstractions::AsMessageId;
 
 use crate::app::AppContext;
 
 use super::contracts::*;
 
-#[my_http_server_swagger::http_route(
+#[my_http_server::macros::http_route(
     method:"GET",
 route:"/Read/ById",
 controller:"Read",

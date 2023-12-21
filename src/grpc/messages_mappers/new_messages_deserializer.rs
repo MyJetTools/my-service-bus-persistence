@@ -1,4 +1,4 @@
-use my_service_bus_shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
+use my_service_bus::shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -29,7 +29,7 @@ pub async fn unzip_and_deserialize(
     }
 
     let unzipped =
-        my_service_bus_shared::page_compressor::zip::decompress_payload(payload.as_slice())
+        my_service_bus::shared::page_compressor::zip::decompress_payload(payload.as_slice())
             .unwrap();
 
     let contract = NewMessagesProtobufContract::parse(unzipped.as_slice());
