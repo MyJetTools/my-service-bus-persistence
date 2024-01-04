@@ -17,19 +17,10 @@ pub struct SettingsModel {
     pub messages_connection_string: String,
     #[serde(rename = "ArchiveConnectionString")]
     pub archive_connection_string: String,
-    #[serde(rename = "LoadBlobPagesSize")]
-    pub load_blob_pages_size: usize,
-    #[serde(rename = "FlushQueuesSnapshotFreq")]
-    pub flush_queues_snapshot_freq: String,
-    #[serde(rename = "FlushMessagesFreq")]
-    pub flush_messages_freq: String,
     #[serde(rename = "MaxResponseRecordsAmount")]
     pub max_response_records_amount: usize,
     #[serde(rename = "DeleteTopicSecretKey")]
     pub delete_topic_secret_key: String,
-
-    #[serde(rename = "MaxMessageSize")]
-    pub max_message_size: usize,
 }
 
 impl SettingsModel {
@@ -49,6 +40,11 @@ impl SettingsModel {
         TopicsSnapshotPageBlobStorage::new(page_blob)
     }
 
+    /*
+       pub fn get_persist_timer_interval(&self) -> Duration {
+           Duration::from_str(&self.persist_timer_interval).unwrap()
+       }
+    */
     pub async fn read() -> Self {
         let filename = my_service_bus::shared::settings::get_settings_filename_path(
             ".myservicebus-persistence",

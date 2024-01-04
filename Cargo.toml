@@ -54,8 +54,6 @@ rand = "*"
 sysinfo = "*"
 prometheus = "*"
 futures = "*"
-
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = "*"
 
 [build-dependencies]

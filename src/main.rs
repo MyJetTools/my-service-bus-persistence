@@ -50,14 +50,18 @@ async fn main() {
         Arc::new(TopicsSnapshotSaverTimer::new(app.clone())),
     );
 
-    timer_3s.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
-
     timer_3s.register_timer(
         "SaveMinIndexTimer",
         Arc::new(SaveMinIndexTimer::new(app.clone())),
     );
 
     timer_3s.start(app.app_states.clone(), my_logger::LOGGER.clone());
+
+    let mut timer_persist_queues = MyTimer::new(Duration::from_secs(1));
+
+    timer_persist_queues.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
+
+    timer_persist_queues.start(app.app_states.clone(), my_logger::LOGGER.clone());
 
     let http_connections_counter = crate::http::start_up::setup_server(&app, 7123);
 
