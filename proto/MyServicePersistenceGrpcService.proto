@@ -27,6 +27,7 @@ message TopicAndQueuesSnapshotGrpcModel {
   string TopicId = 1;
   int64 MessageId = 2;
   repeated persistence.QueueSnapshotGrpcModel QueueSnapshots = 3;
+  optional bool Persist = 4;
 }
 
 service MyServiceBusQueuePersistenceGrpcService {

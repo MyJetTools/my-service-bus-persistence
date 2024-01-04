@@ -11,6 +11,7 @@ impl Into<TopicAndQueuesSnapshotGrpcModel> for &TopicSnapshotProtobufModel {
             topic_id: self.topic_id.to_string(),
             message_id: self.get_message_id().get_value(),
             queue_snapshots: to_queue_snapshot_vec(self.queues.as_slice()),
+            persist: self.persist,
         }
     }
 }

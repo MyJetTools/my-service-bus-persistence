@@ -246,6 +246,7 @@ mod tests {
                 "Test".to_string(),
                 12.as_message_id(),
                 vec![],
+                true.into(),
             )],
         };
 
@@ -295,6 +296,7 @@ mod tests {
                 "Test".to_string(),
                 12.as_message_id(),
                 vec![],
+                true.into(),
             )],
             deleted_topics: vec![],
         };

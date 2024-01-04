@@ -16,6 +16,7 @@ pub fn to_topics_data(src: &SaveQueueSnapshotGrpcRequest) -> Vec<TopicSnapshotPr
                 itm.topic_id.to_string(),
                 itm.message_id.as_message_id(),
                 to_queue_snapshot_vec(itm.queue_snapshots.as_slice()),
+                itm.persist,
             )
         })
         .collect()

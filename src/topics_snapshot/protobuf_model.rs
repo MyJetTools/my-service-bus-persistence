@@ -27,6 +27,9 @@ pub struct TopicSnapshotProtobufModel {
 
     #[prost(message, repeated, tag = "4")]
     pub queues: Vec<QueueSnapshotProtobufModel>,
+
+    #[prost(bool, optional, tag = "5")]
+    pub persist: Option<bool>,
 }
 
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -44,12 +47,14 @@ impl TopicSnapshotProtobufModel {
         topic_id: String,
         message_id: MessageId,
         queues: Vec<QueueSnapshotProtobufModel>,
+        persist: Option<bool>,
     ) -> Self {
         Self {
             topic_id,
             message_id: message_id.get_value(),
             not_used: 0,
             queues,
+            persist,
         }
     }
     pub fn get_message_id(&self) -> MessageId {
