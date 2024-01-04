@@ -4,12 +4,12 @@ class HtmlRenderer {
 
 
 
-    public static formatNumber(n: number): String {
+    public static formatNumber(n: number): string {
 
-        return n.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+        return n.toString().replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1 ');
     }
 
-    public static formatMem(n: number): String {
+    public static formatMem(n: number): string {
 
         if (n < 1024) {
             return n.toFixed(2) + "b";
@@ -66,6 +66,8 @@ class HtmlRenderer {
     private static renderLoadedPagesContent(topics: ITopicInfo[]): string {
         let result = '';
 
+        let totalPagesSize = 0;
+
         for (let topic of topics.sort((a, b) => {
             return a.topicId > b.topicId ? 1 : -1
         })) {
@@ -79,6 +81,10 @@ class HtmlRenderer {
             let queuesContent = this.renderQueuesTableContent(topic.queues);
 
 
+            for (let page of topic.loadedPages) {
+                totalPagesSize += page.size;
+            }
+
             result += '<tr style="font-size: 12px">' +
                 '<td>' + topic.topicId +
                 '<div>Active:</div>' + activePagesBadges + '<hr/><div>Loaded:</div>' + this.renderCachedPages(topic.loadedPages) + '</td>' +
@@ -90,6 +96,10 @@ class HtmlRenderer {
                 '</td>' +
                 '</tr>'
         }
+
+
+        document.getElementById('total-pages-size').innerHTML = HtmlRenderer.formatNumber(totalPagesSize);
+
 
         return result;
     }

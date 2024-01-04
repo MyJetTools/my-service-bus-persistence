@@ -16,6 +16,9 @@ class HtmlStatusBar {
             '<td style="padding-left: 5px; min-width:250px">Queue snapshotId: <b id="snapshot-id" style="text-shadow: 0 0 2px white;"></b></td>' +
             '<td><div class="statusbar-separator"></div></td>' +
 
+            '<td style="padding-left: 5px; min-width:200px; font-size:12px;">Total pages size:<span id="total-pages-size" style="text-shadow: 0 0 2px white;"></span></td>' +
+            '<td><div class="statusbar-separator"></div></td>' +
+
             '<td style="padding-left: 5px; min-width:270px"><span id="cpu-mem" style="text-shadow: 0 0 2px white;"></span></td>' +
             '<td><div class="statusbar-separator"></div></td>';
     }
