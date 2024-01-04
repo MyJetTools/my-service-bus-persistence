@@ -32,6 +32,9 @@ pub mod persistence_grpc {
     tonic::include_proto!("persistence");
 }
 
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[tokio::main]
 async fn main() {
     let settings = SettingsModel::read().await;

@@ -55,6 +55,8 @@ sysinfo = "*"
 prometheus = "*"
 futures = "*"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemallocator = "*"
 
 [build-dependencies]
 ci-utils = { git = "https://github.com/MyJetTools/ci-utils.git", tag = "0.1.0" }
