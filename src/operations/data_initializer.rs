@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use rust_extensions::{Logger, StopWatch};
+use my_logger::LogEventCtx;
+use rust_extensions::StopWatch;
 
 use crate::app::AppContext;
 
@@ -13,20 +14,20 @@ pub async fn init(app: Arc<AppContext>) {
 
     sw.pause();
 
-    app.logs.write_info(
+    my_logger::LOGGER.write_info(
         "Initialization".to_string(),
         format!("Application is initialized in {:?}", sw.duration()),
-        None,
+        LogEventCtx::new(),
     );
 
     app.app_states.set_initialized();
 }
 
 async fn restore_pages(app: &Arc<AppContext>) {
-    app.logs.write_info(
+    my_logger::LOGGER.write_info(
         "Initialization".to_string(),
         "Loading messages since last shutdown".to_string(),
-        None,
+        LogEventCtx::new(),
     );
     let sub_pages = crate::operations::current_sub_pages_io::restore(&app)
         .await
@@ -41,7 +42,7 @@ async fn restore_pages(app: &Arc<AppContext>) {
 
             sw.pause();
 
-            app.logs.write_info(
+            my_logger::LOGGER.write_info(
                 "Initialization".to_string(),
                 format!(
                     "Loaded sub page {} for topic {}in {}",
@@ -49,15 +50,15 @@ async fn restore_pages(app: &Arc<AppContext>) {
                     topic_id,
                     sw.duration_as_string()
                 ),
-                None,
+                LogEventCtx::new(),
             );
             topic_data.pages_list.add_new(sub_page_inner).await;
         }
     } else {
-        app.logs.write_info(
+        my_logger::LOGGER.write_info(
             "Initialization".to_string(),
             format!("No sub page data loaded"),
-            None,
+            LogEventCtx::new(),
         );
     }
 }

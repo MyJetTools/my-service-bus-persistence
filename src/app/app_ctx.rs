@@ -15,14 +15,13 @@ use crate::{
     typing::Year,
 };
 
-use super::{logs::Logs, PrometheusMetrics};
+use super::PrometheusMetrics;
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct AppContext {
     pub app_states: Arc<AppStates>,
     pub topics_snapshot: CurrentTopicsSnapshot,
-    pub logs: Arc<Logs>,
 
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
@@ -40,7 +39,6 @@ pub struct AppContext {
 
 impl AppContext {
     pub async fn new(settings: SettingsModel) -> AppContext {
-        let logs = Arc::new(Logs::new());
         let messages_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
             settings.messages_connection_string.as_str(),
         ));
@@ -56,7 +54,6 @@ impl AppContext {
 
         AppContext {
             topics_snapshot: CurrentTopicsSnapshot::read_or_create(topics_repo).await,
-            logs: logs.clone(),
             topics_list: TopicsDataList::new(),
             settings,
 

@@ -1,19 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 use tokio::sync::RwLock;
 
 use super::TopicData;
 
 pub struct TopicDataInner {
-    data: HashMap<String, Arc<TopicData>>,
-    deleted: HashMap<String, ()>,
+    data: BTreeMap<String, Arc<TopicData>>,
+    deleted: BTreeMap<String, ()>,
 }
 
 impl TopicDataInner {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new(),
-            deleted: HashMap::new(),
+            data: BTreeMap::new(),
+            deleted: BTreeMap::new(),
         }
     }
 }

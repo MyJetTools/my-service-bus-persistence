@@ -19,7 +19,6 @@ mod init_new_topic;
 pub mod before_shut_down;
 mod new_messages;
 mod topics;
-pub use current_sub_pages_io::*;
 pub use delete_topic::*;
 pub use error::*;
 pub use gc_pages::*;

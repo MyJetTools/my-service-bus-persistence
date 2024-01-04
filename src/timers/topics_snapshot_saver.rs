@@ -19,7 +19,7 @@ impl MyTimerTick for TopicsSnapshotSaverTimer {
     async fn tick(&self) {
         self.app
             .topics_snapshot
-            .flush_topics_snapshot_to_blob(&self.app.logs)
+            .flush_topics_snapshot_to_blob()
             .await;
     }
 }

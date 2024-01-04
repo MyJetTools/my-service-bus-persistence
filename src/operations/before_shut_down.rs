@@ -7,9 +7,7 @@ pub async fn execute_before_shutdown(app: Arc<AppContext>) {
     println!("Waiting until we flush all the queues and messages");
     tokio::time::sleep(duration).await;
 
-    app.topics_snapshot
-        .flush_topics_snapshot_to_blob(&app.logs)
-        .await;
+    app.topics_snapshot.flush_topics_snapshot_to_blob().await;
 
     println!("Topic snapshot is flushed");
 

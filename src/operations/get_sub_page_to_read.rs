@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use my_logger::LogEventCtx;
 use my_service_bus::shared::sub_page::SubPageId;
 
 use crate::{
@@ -42,11 +43,10 @@ async fn read(app: &AppContext, topic_id: &str, sub_page_id: SubPageId) -> Optio
             let sub_page = SubPageInner::from_compressed_payload(sub_page_id, payload?.as_slice());
 
             if let Err(err) = &sub_page {
-                app.logs.write_by_topic(
-                    crate::app::LogLevel::Warning,
-                    topic_id,
+                my_logger::LOGGER.write_warning(
                     "get_sub_page_to_read",
                     format!("{:?}", err),
+                    LogEventCtx::new().add("topicId", topic_id),
                 );
             }
 
@@ -56,11 +56,10 @@ async fn read(app: &AppContext, topic_id: &str, sub_page_id: SubPageId) -> Optio
             Some(sub_page)
         }
         Err(err) => {
-            app.logs.write_by_topic(
-                crate::app::LogLevel::Warning,
-                topic_id,
+            my_logger::LOGGER.write_warning(
                 "get_sub_page_to_read",
                 format!("{:?}", err),
+                LogEventCtx::new().add("topicId", topic_id),
             );
             None
         }

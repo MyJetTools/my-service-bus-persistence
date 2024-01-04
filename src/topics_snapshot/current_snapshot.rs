@@ -1,8 +1,7 @@
+use my_logger::LogEventCtx;
 use my_service_bus::abstractions::MessageId;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use tokio::sync::RwLock;
-
-use crate::app::Logs;
 
 use super::{page_blob_storage::TopicsSnapshotPageBlobStorage, protobuf_model::*};
 
@@ -156,7 +155,7 @@ impl CurrentTopicsSnapshot {
         None
     }
 
-    pub async fn flush_topics_snapshot_to_blob(&self, logs: &Logs) {
+    pub async fn flush_topics_snapshot_to_blob(&self) {
         let topics_snapshot = self.get_snapshot_if_there_are_changes().await;
 
         if topics_snapshot.is_none() {
@@ -175,14 +174,13 @@ impl CurrentTopicsSnapshot {
             };
 
             if let Err(err) = result {
-                logs.write(
-                    crate::app::LogLevel::Error,
+                my_logger::LOGGER.write_error(
                     "Write Topics Snapshot".to_string(),
                     format!(
                         "Can not snapshot with ID #{}. Attempt:{}. Err: {:?}",
                         topics_snapshot.snapshot_id, attempt_no, err
                     ),
-                    None,
+                    LogEventCtx::new(),
                 );
 
                 if attempt_no >= 5 {
