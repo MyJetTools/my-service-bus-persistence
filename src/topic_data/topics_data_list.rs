@@ -71,6 +71,11 @@ impl TopicsDataList {
         topic_data
     }
 
+    pub async fn remove(&self, topic_id: &str) {
+        let mut write_access = self.data.write().await;
+        write_access.data.remove(topic_id);
+    }
+
     pub async fn delete(&self, topic_id: &str) -> Option<Arc<TopicData>> {
         let mut write_access = self.data.write().await;
         let result = write_access.data.remove(topic_id);

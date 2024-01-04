@@ -20,6 +20,7 @@ impl PagesGcTimer {
 impl MyTimerTick for PagesGcTimer {
     async fn tick(&self) {
         let topics_snapshot = self.app.topics_snapshot.get().await;
+
         gc_pages(self.app.clone(), &topics_snapshot.snapshot.data)
             .await
             .unwrap();
@@ -38,6 +39,15 @@ async fn gc_pages(
         }
 
         let topic_data = topic_data.unwrap();
+
+        if let Some(persist) = topic_snapshot.persist {
+            if !persist {
+                app.topics_list
+                    .remove(topic_snapshot.topic_id.as_str())
+                    .await;
+                continue;
+            }
+        }
 
         crate::operations::gc_pages(app.as_ref(), topic_data.clone()).await?;
 
