@@ -54,7 +54,10 @@ rand = "*"
 sysinfo = "*"
 prometheus = "*"
 futures = "*"
-jemallocator = "*"
+tikv-jemalloc-ctl = { version = "*", features = ['use_std'] }
+tikv-jemallocator = { version = "*", features = [
+    "unprefixed_malloc_on_supported_platforms",
+] }
 
 [build-dependencies]
 ci-utils = { git = "https://github.com/MyJetTools/ci-utils.git", tag = "0.1.0" }
