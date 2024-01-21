@@ -37,7 +37,7 @@ pub async fn send_messages_to_channel(
         let message = sub_page_read_copy.as_ref().unwrap().get(message_id);
 
         if let Some(message) = message {
-            let future = tx.send(Ok(message.into()));
+            let future = tx.send(Ok(message.as_ref().into()));
 
             match tokio::time::timeout(send_timeout, future).await {
                 Ok(_) => {}

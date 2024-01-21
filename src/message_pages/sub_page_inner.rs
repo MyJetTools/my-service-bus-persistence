@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::{
@@ -7,10 +7,11 @@ use my_service_bus::shared::{
     sub_page::{SizeAndAmount, SubPageId},
 };
 use rust_extensions::date_time::DateTimeAsMicroseconds;
+use rust_extensions::sorted_vec::SortedVecOfArc;
 
 pub struct SubPageInner {
     pub sub_page_id: SubPageId,
-    pub messages: BTreeMap<i64, Arc<MessageProtobufModel>>,
+    pub messages: SortedVecOfArc<i64, MessageProtobufModel>,
     pub created: DateTimeAsMicroseconds,
 
     size_and_amount: SizeAndAmount,
@@ -20,7 +21,7 @@ impl SubPageInner {
     pub fn new(sub_page_id: SubPageId) -> Self {
         Self {
             sub_page_id,
-            messages: BTreeMap::new(),
+            messages: SortedVecOfArc::new(),
             created: DateTimeAsMicroseconds::now(),
             size_and_amount: SizeAndAmount::new(),
         }
@@ -28,11 +29,11 @@ impl SubPageInner {
 
     pub fn restore(
         sub_page_id: SubPageId,
-        messages: BTreeMap<i64, Arc<MessageProtobufModel>>,
+        messages: SortedVecOfArc<i64, MessageProtobufModel>,
     ) -> Self {
         let mut size_and_amount = SizeAndAmount::new();
 
-        for msg in messages.values() {
+        for msg in messages.iter() {
             size_and_amount.added(msg.data.len());
         }
 
@@ -61,9 +62,11 @@ impl SubPageInner {
 
         self.size_and_amount.added(message.data.len());
 
-        if let Some(old_message) = self.messages.insert(message_id.get_value(), message) {
-            self.size_and_amount.removed(old_message.data.len());
-            return Some(old_message);
+        let (_, removed) = self.messages.insert_or_replace(message);
+
+        if let Some(removed_item) = removed {
+            self.size_and_amount.removed(removed_item.data.len());
+            return Some(removed_item);
         }
 
         None
@@ -73,7 +76,7 @@ impl SubPageInner {
         self.messages.get(msg_id.as_ref())
     }
 
-    pub fn get_all_messages(&self) -> BTreeMap<i64, Arc<MessageProtobufModel>> {
+    pub fn get_all_messages(&self) -> SortedVecOfArc<i64, MessageProtobufModel> {
         self.messages.clone()
     }
 
@@ -88,10 +91,10 @@ impl SubPageInner {
         let mut compressed_payload =
             my_service_bus::shared::page_compressor::CompressedPageReader::new(compressed_payload)?;
 
-        let mut messages: BTreeMap<i64, Arc<MessageProtobufModel>> = BTreeMap::new();
+        let mut messages = SortedVecOfArc::new();
 
         while let Some(msg) = compressed_payload.get_next_message().unwrap() {
-            messages.insert(msg.get_message_id().get_value(), Arc::new(msg));
+            messages.insert_or_replace(Arc::new(msg));
         }
 
         let sub_page_inner = SubPageInner::restore(sub_page_id, messages);

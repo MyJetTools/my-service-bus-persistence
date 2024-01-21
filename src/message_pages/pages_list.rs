@@ -1,42 +1,63 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use my_service_bus::shared::sub_page::{SizeAndAmount, SubPageId};
+use rust_extensions::sorted_vec::SortedVecOfArc;
 use tokio::sync::Mutex;
 
 use super::{SubPage, SubPageInner};
 
 pub struct PagesList {
-    pub sub_pages: Mutex<BTreeMap<i64, Arc<SubPage>>>,
+    pub sub_pages: Mutex<SortedVecOfArc<i64, SubPage>>,
 }
 
 impl PagesList {
     pub fn new() -> Self {
         Self {
-            sub_pages: Mutex::new(BTreeMap::new()),
+            sub_pages: Mutex::new(SortedVecOfArc::new()),
         }
     }
 
-    pub async fn add_new(&self, sub_page_inner: SubPageInner) {
-        let sub_page_id = sub_page_inner.sub_page_id.get_value();
-
-        self.sub_pages
+    pub async fn insert(&self, sub_page_inner: SubPageInner) {
+        match self
+            .sub_pages
             .lock()
             .await
-            .insert(sub_page_id, Arc::new(SubPage::create_new(sub_page_inner)));
+            .insert_or_if_not_exists(sub_page_inner.sub_page_id.as_ref())
+        {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                let item = SubPage::create_new(sub_page_inner);
+                entry.insert(Arc::new(item));
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(_) => {}
+        }
     }
 
     pub async fn restore_from_archive(&self, sub_page: SubPage) {
-        self.sub_pages
+        match self
+            .sub_pages
             .lock()
             .await
-            .insert(sub_page.get_id().get_value(), sub_page.into());
+            .insert_or_if_not_exists(sub_page.get_id().as_ref())
+        {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                entry.insert(Arc::new(sub_page));
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(_) => {}
+        }
     }
 
     pub async fn add_missing(&self, sub_page_id: SubPageId) {
-        self.sub_pages.lock().await.insert(
-            sub_page_id.get_value(),
-            SubPage::create_missing(sub_page_id).into(),
-        );
+        match self
+            .sub_pages
+            .lock()
+            .await
+            .insert_or_if_not_exists(sub_page_id.as_ref())
+        {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                entry.insert(Arc::new(SubPage::create_missing(sub_page_id)));
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(_) => {}
+        }
     }
 
     pub async fn get(&self, sub_page_id: SubPageId) -> Option<Arc<SubPage>> {
@@ -46,10 +67,9 @@ impl PagesList {
     }
 
     pub async fn get_all(&self) -> Vec<Arc<SubPage>> {
-        let mut result = Vec::new();
         let read_access = self.sub_pages.lock().await;
-
-        for page in read_access.values() {
+        let mut result = Vec::with_capacity(read_access.len());
+        for page in read_access.iter() {
             let itm = page.clone();
             result.push(itm);
         }
@@ -57,6 +77,7 @@ impl PagesList {
         result
     }
 
+    //todo!("Can be optimized from memory perspective")
     pub async fn gc(&self) -> Option<Arc<SubPage>> {
         let mut pages_access = self.sub_pages.lock().await;
 
@@ -64,21 +85,23 @@ impl PagesList {
             return None;
         }
 
-        let first_key = pages_access.keys().next().unwrap().clone();
-        pages_access.remove(&first_key)
+        let first_key = pages_access.first().unwrap().get_id().clone();
+        pages_access.remove(first_key.as_ref())
     }
 
     pub async fn get_active_sub_page(&self) -> Option<Arc<SubPage>> {
         let read_access = self.sub_pages.lock().await;
-        let last_key = read_access.keys().last().unwrap().clone();
-        let result = read_access.get(&last_key).unwrap().clone();
+
+        let last_key = read_access.last().unwrap().get_id().clone();
+
+        let result = read_access.get(last_key.as_ref()).unwrap().clone();
         Some(result)
     }
 
     pub async fn get_messages_amount_to_save(&self) -> SizeAndAmount {
         let mut result = SizeAndAmount::new();
         let read_access = self.sub_pages.lock().await;
-        for sub_page in read_access.values() {
+        for sub_page in read_access.iter() {
             if sub_page.is_active() {
                 let size_and_amount = sub_page.get_size_and_amount().await;
                 result.size += size_and_amount.size;

@@ -5,6 +5,7 @@ use my_service_bus::shared::{
     protobuf_models::MessageProtobufModel,
     sub_page::{SizeAndAmount, SubPageId},
 };
+use rust_extensions::sorted_vec::{EntityWithKey, SortedVecOfArc};
 use tokio::sync::Mutex;
 
 use super::{SubPageInner, SubPageReadCopy};
@@ -13,6 +14,16 @@ pub enum SubPage {
     Active(SubPageId, Mutex<SubPageInner>),
     FromArchive(SubPageInner),
     Missing(SubPageId),
+}
+
+impl EntityWithKey<i64> for SubPage {
+    fn get_key(&self) -> &i64 {
+        match self {
+            SubPage::Active(id, _) => id.as_ref(),
+            SubPage::FromArchive(inner) => inner.sub_page_id.as_ref(),
+            SubPage::Missing(id) => id.as_ref(),
+        }
+    }
 }
 
 impl SubPage {
@@ -64,27 +75,16 @@ impl SubPage {
         match self {
             SubPage::Active(_, inner) => {
                 let data = inner.lock().await;
-                let result = data.get_all_messages();
-
-                let messages = if result.is_empty() {
-                    None
-                } else {
-                    Some(result)
-                };
+                let messages = data.get_all_messages();
 
                 SubPageReadCopy::new(self.get_id(), messages)
             }
             SubPage::FromArchive(data) => {
-                let result = data.get_all_messages();
-                let messages = if result.is_empty() {
-                    None
-                } else {
-                    Some(result)
-                };
+                let messages = data.get_all_messages();
 
                 SubPageReadCopy::new(self.get_id(), messages)
             }
-            SubPage::Missing(_) => SubPageReadCopy::new(self.get_id(), None),
+            SubPage::Missing(_) => SubPageReadCopy::new(self.get_id(), SortedVecOfArc::new()),
         }
     }
 
@@ -136,7 +136,7 @@ impl SubPage {
                 {
                     let data = sub_page_inner.lock().await;
 
-                    for msg in data.messages.values() {
+                    for msg in data.messages.iter() {
                         page_compressor.add_message(msg).unwrap();
                     }
                 }

@@ -85,8 +85,9 @@ impl YearlyIndexByMinute {
     }
 
     pub async fn write_everything_before_gc(&self) {
-        while let Some((minute, message_id)) = self.update_queue.remove_first_element().await {
-            self.write_to_blob(minute, message_id).await;
+        while let Some(item) = self.update_queue.remove_first_element().await {
+            self.write_to_blob(item.minute_within_year, item.message_id)
+                .await;
         }
     }
 

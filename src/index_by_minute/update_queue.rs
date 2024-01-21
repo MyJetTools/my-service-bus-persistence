@@ -1,62 +1,76 @@
-use std::collections::BTreeMap;
-
 use my_service_bus::abstractions::MessageId;
+use rust_extensions::sorted_vec::{EntityWithKey, SortedVec};
 use tokio::sync::Mutex;
 
 use super::MinuteWithinYear;
 
+#[derive(Clone)]
+pub struct UpdateQueueItem {
+    pub minute_within_year: MinuteWithinYear,
+    pub message_id: MessageId,
+}
+
+impl EntityWithKey<MinuteWithinYear> for UpdateQueueItem {
+    fn get_key(&self) -> &MinuteWithinYear {
+        &self.minute_within_year
+    }
+}
+
 pub struct UpdateQueue {
-    data: Mutex<BTreeMap<u32, MessageId>>,
+    data: Mutex<SortedVec<MinuteWithinYear, UpdateQueueItem>>,
 }
 
 impl UpdateQueue {
     pub fn new() -> Self {
         Self {
-            data: Mutex::new(BTreeMap::new()),
+            data: Mutex::new(SortedVec::new()),
         }
     }
 
     pub async fn update(&self, minute_within_year: MinuteWithinYear, message_id: MessageId) {
         let mut update_queue = self.data.lock().await;
-        if !update_queue.contains_key(minute_within_year.as_ref()) {
-            update_queue.insert(minute_within_year.get_value(), message_id);
+        match update_queue.insert_or_if_not_exists(&minute_within_year) {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                let item = UpdateQueueItem {
+                    minute_within_year,
+                    message_id,
+                };
+                entry.insert(item);
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(_) => {}
         }
     }
 
     pub async fn get(&self, minute_within_year: MinuteWithinYear) -> Option<MessageId> {
         let read_access = self.data.lock().await;
-        read_access.get(minute_within_year.as_ref()).cloned()
+        let result = read_access.get(&minute_within_year)?;
+        Some(result.message_id)
     }
 
-    pub async fn get_items_ready_to_be_gc(&self) -> Option<Vec<u32>> {
+    pub async fn get_items_ready_to_be_gc(&self) -> Option<Vec<MinuteWithinYear>> {
         let read_access = self.data.lock().await;
         if read_access.len() <= 1 {
             return None;
         }
 
-        let last = read_access.iter().last().unwrap().0;
+        let last = read_access.last().unwrap().minute_within_year;
 
-        let result: Vec<u32> = read_access
-            .keys()
-            .filter(|itm| *itm != last)
-            .map(|itm| *itm)
+        let result: Vec<MinuteWithinYear> = read_access
+            .iter()
+            .filter(|itm| itm.minute_within_year.get_value() != last.get_value())
+            .map(|itm| itm.minute_within_year)
             .collect();
         Some(result)
     }
 
-    pub async fn remove_first_element(&self) -> Option<(MinuteWithinYear, MessageId)> {
+    pub async fn remove_first_element(&self) -> Option<UpdateQueueItem> {
         let mut write_access = self.data.lock().await;
-        if write_access.len() == 0 {
-            return None;
-        }
-
-        let first = *write_access.keys().next().unwrap();
-        let result = write_access.remove(&first).unwrap();
-        Some((first.into(), result))
+        write_access.remove_at(0)
     }
 
     pub async fn remove(&self, minute_within_year: MinuteWithinYear) -> Option<MessageId> {
         let mut write_access = self.data.lock().await;
-        write_access.remove(minute_within_year.as_ref())
+        let result = write_access.remove(&minute_within_year)?;
+        Some(result.message_id)
     }
 }

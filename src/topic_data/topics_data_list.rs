@@ -1,19 +1,20 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
+use rust_extensions::sorted_vec::SortedVecOfArcWithStrKey;
 use tokio::sync::RwLock;
 
 use super::TopicData;
 
 pub struct TopicDataInner {
-    data: BTreeMap<String, Arc<TopicData>>,
-    deleted: BTreeMap<String, ()>,
+    data: SortedVecOfArcWithStrKey<TopicData>,
+    deleted: HashMap<String, ()>,
 }
 
 impl TopicDataInner {
     pub fn new() -> Self {
         Self {
-            data: BTreeMap::new(),
-            deleted: BTreeMap::new(),
+            data: SortedVecOfArcWithStrKey::new(),
+            deleted: HashMap::new(),
         }
     }
 }
@@ -42,8 +43,7 @@ impl TopicsDataList {
 
     pub async fn get_all(&self) -> Vec<Arc<TopicData>> {
         let read_access = self.data.read().await;
-
-        read_access.data.values().map(|v| v.clone()).collect()
+        read_access.data.to_vec_cloned()
     }
 
     pub async fn create_topic_data(&self, topic_id: &str) -> bool {
@@ -53,22 +53,28 @@ impl TopicsDataList {
             panic!("Topic {} is deleted", topic_id);
         }
 
-        if write_access.data.contains_key(topic_id) {
-            return false;
+        match write_access.data.insert_or_if_not_exists(topic_id) {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                let topic_data = Arc::new(TopicData::new(topic_id));
+                entry.insert(topic_data);
+                true
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(_) => false,
         }
-
-        let topic_data = Arc::new(TopicData::new(topic_id));
-        write_access.data.insert(topic_id.to_string(), topic_data);
-        return true;
     }
 
     pub async fn init_topic_data(&self, topic_id: &str) -> Arc<TopicData> {
         let mut write_access = self.data.write().await;
-        let topic_data = Arc::new(TopicData::new(topic_id));
-        write_access
-            .data
-            .insert(topic_id.to_string(), topic_data.clone());
-        topic_data
+        match write_access.data.insert_or_if_not_exists(topic_id) {
+            rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
+                let topic_data = Arc::new(TopicData::new(topic_id));
+                entry.insert(topic_data.clone());
+                topic_data
+            }
+            rust_extensions::sorted_vec::InsertIfNotExists::Exists(index) => {
+                write_access.data.get_by_index(index).unwrap().clone()
+            }
+        }
     }
 
     pub async fn remove(&self, topic_id: &str) {

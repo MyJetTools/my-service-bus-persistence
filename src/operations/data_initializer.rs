@@ -52,7 +52,7 @@ async fn restore_pages(app: &Arc<AppContext>) {
                 ),
                 LogEventCtx::new(),
             );
-            topic_data.pages_list.add_new(sub_page_inner).await;
+            topic_data.pages_list.insert(sub_page_inner).await;
         }
     } else {
         my_logger::LOGGER.write_info(

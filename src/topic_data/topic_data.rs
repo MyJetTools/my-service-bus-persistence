@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use my_service_bus::shared::sub_page::SubPageId;
+use rust_extensions::sorted_vec::EntityWithStrKey;
 
 use crate::{
     archive_storage::ArchiveStorageList,
@@ -16,6 +17,12 @@ pub struct TopicData {
     pub metrics: TopicDataMetrics,
     pub yearly_index_by_minute: IndexByMinuteList,
     pub archive_pages_list: ArchiveStorageList,
+}
+
+impl EntityWithStrKey for TopicData {
+    fn get_key(&self) -> &str {
+        &self.topic_id
+    }
 }
 
 impl TopicData {
@@ -38,7 +45,7 @@ impl TopicData {
             };
 
             let sub_page_inner = SubPageInner::new(sub_page_id);
-            self.pages_list.add_new(sub_page_inner).await;
+            self.pages_list.insert(sub_page_inner).await;
         }
     }
 }

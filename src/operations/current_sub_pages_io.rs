@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_storage_sdk::{
@@ -44,7 +44,7 @@ pub struct ActivePages {
 
 pub async fn restore(
     app: &AppContext,
-) -> Result<Option<BTreeMap<String, SubPageInner>>, RestorePagesError> {
+) -> Result<Option<Vec<(String, SubPageInner)>>, RestorePagesError> {
     let connection = app.get_storage_for_active_pages();
 
     let page_blob = AzurePageBlobStorage::new(connection, CONTAINER_NAME, BLOB_NAME).await;
@@ -61,7 +61,7 @@ pub async fn restore(
 
             match result {
                 Ok(active_pages_contract) => {
-                    let mut result = BTreeMap::new();
+                    let mut result = Vec::new();
 
                     for sub_page in active_pages_contract.sub_pages {
                         let sub_page_inner_result = SubPageInner::from_compressed_payload(
@@ -71,7 +71,7 @@ pub async fn restore(
 
                         match sub_page_inner_result {
                             Ok(sub_page_inner) => {
-                                result.insert(sub_page.topic_id, sub_page_inner);
+                                result.push((sub_page.topic_id, sub_page_inner));
                             }
                             Err(err) => {
                                 return RestorePagesError::Other(format!(
