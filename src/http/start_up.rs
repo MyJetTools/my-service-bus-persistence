@@ -18,7 +18,9 @@ pub fn setup_server(app: &Arc<AppContext>, port: u16) -> HttpConnectionsCounter 
         crate::app::APP_VERSION.to_string(),
     );
 
-    http_server.add_middleware(Arc::new(swagger_middleware));
+    let swagger_middleware = Arc::new(swagger_middleware);
+
+    http_server.add_middleware(swagger_middleware);
     http_server.add_middleware(controllers);
 
     http_server.add_middleware(Arc::new(StaticFilesMiddleware::new(None, None)));

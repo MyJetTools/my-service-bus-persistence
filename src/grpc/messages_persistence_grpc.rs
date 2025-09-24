@@ -1,14 +1,12 @@
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
 
-use futures_core::Stream;
+use my_grpc_extensions::server::*;
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::page_id::PageId;
 use my_service_bus::shared::sub_page::SubPageId;
 
-use std::pin::Pin;
 use std::time::Duration;
-use tonic::Status;
 
 use super::contracts;
 
@@ -22,18 +20,6 @@ const MAX_PAYLOAD_SIZE: usize = 1024 * 1024 * 4;
 
 #[tonic::async_trait]
 impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
-    type GetPageCompressedStream = Pin<
-        Box<dyn Stream<Item = Result<CompressedMessageChunkModel, Status>> + Send + Sync + 'static>,
-    >;
-
-    type GetPageStream = Pin<
-        Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
-    >;
-
-    type GetSubPageStream = Pin<
-        Box<dyn Stream<Item = Result<MessageContentGrpcModel, Status>> + Send + Sync + 'static>,
-    >;
-
     async fn get_version(
         &self,
         _request: tonic::Request<()>,
@@ -74,6 +60,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         return Ok(tonic::Response::new(result));
     }
 
+    generate_server_stream!(stream_name:"GetPageCompressedStream", item_name:"CompressedMessageChunkModel");
     async fn get_page_compressed(
         &self,
         request: tonic::Request<crate::persistence_grpc::GetMessagesPageGrpcRequest>,
@@ -104,12 +91,14 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         )
         .await;
 
-        my_grpc_extensions::grpc_server::send_vec_to_stream(compressed.into_iter(), |chunk| {
-            CompressedMessageChunkModel { chunk }
-        })
+        my_grpc_extensions::grpc_server_streams::send_vec_to_stream(
+            compressed.into_iter(),
+            |chunk| CompressedMessageChunkModel { chunk },
+        )
         .await
     }
 
+    generate_server_stream!(stream_name:"GetPageStream", item_name:"MessageContentGrpcModel");
     async fn get_page(
         &self,
         request: tonic::Request<crate::persistence_grpc::GetMessagesPageGrpcRequest>,
@@ -151,6 +140,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         )))
     }
 
+    generate_server_stream!(stream_name:"GetSubPageStream", item_name:"MessageContentGrpcModel");
     async fn get_sub_page(
         &self,
         request: tonic::Request<crate::persistence_grpc::GetSubPageRequest>,

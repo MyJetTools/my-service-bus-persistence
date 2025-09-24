@@ -1,15 +1,16 @@
-use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput, WebContentType};
-use rand::Rng;
+use my_http_server::{HttpFailResult, HttpOkResult, HttpOutput};
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 #[my_http_server::macros::http_route(method: "GET",route: "/",)]
 pub struct IndexAction {
-    rnd: u64,
+    rnd: i64,
 }
 
 impl IndexAction {
     pub fn new() -> Self {
-        let mut rng = rand::thread_rng();
-        IndexAction { rnd: rng.gen() }
+        IndexAction {
+            rnd: DateTimeAsMicroseconds::now().unix_microseconds,
+        }
     }
 }
 
@@ -25,11 +26,5 @@ async fn handle_request(
         rnd = action.rnd
     );
 
-    HttpOutput::Content {
-        headers: None,
-        content_type: Some(WebContentType::Html),
-        content: content.into_bytes(),
-    }
-    .into_ok_result(true)
-    .into()
+    HttpOutput::as_html(content).into_ok_result(false)
 }

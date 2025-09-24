@@ -76,6 +76,13 @@ async fn main() {
 
     tokio::spawn(grpc::server::start(app.clone(), 7124));
 
+    if let Some(unix_socket_addr) = app.settings.listen_unix_socket.clone() {
+        tokio::spawn(grpc::server::start_unix_socket(
+            app.clone(),
+            unix_socket_addr,
+        ));
+    }
+
     app.app_states.wait_until_shutdown().await;
 
     crate::operations::before_shut_down::execute_before_shutdown(app).await;

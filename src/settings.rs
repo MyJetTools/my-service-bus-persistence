@@ -11,16 +11,13 @@ pub const PAGE_BLOB_MAX_PAGES_TO_UPLOAD_PER_ROUND_TRIP: usize = 1024 * 1024 * 3 
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SettingsModel {
-    #[serde(rename = "TopicsConnectionString")]
     pub topics_connection_string: String,
-    #[serde(rename = "MessagesConnectionString")]
     pub messages_connection_string: String,
-    #[serde(rename = "ArchiveConnectionString")]
     pub archive_connection_string: String,
-    #[serde(rename = "MaxResponseRecordsAmount")]
     pub max_response_records_amount: usize,
-    #[serde(rename = "DeleteTopicSecretKey")]
     pub delete_topic_secret_key: String,
+
+    pub listen_unix_socket: Option<String>,
 }
 
 impl SettingsModel {

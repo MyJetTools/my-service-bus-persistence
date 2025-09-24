@@ -65,15 +65,11 @@ pub async fn save_sub_page(app: &AppContext, topic_data: &TopicData, sub_page: &
             .get_or_create(sub_page_id.into(), topic_data.topic_id.as_str(), app)
             .await;
 
-        let mut sw = StopWatch::new();
-
-        sw.start();
+        let sw = StopWatch::new();
 
         storage
             .write_payload(sub_page_id, zip_payload.as_slice())
             .await;
-
-        sw.pause();
 
         topic_data.metrics.update_last_saved_duration(sw.duration());
 

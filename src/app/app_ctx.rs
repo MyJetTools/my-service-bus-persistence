@@ -111,7 +111,7 @@ impl AppContext {
         )
         .await;
 
-        YearlyIndexByMinute::open_or_create(year, page_blob).await
+        YearlyIndexByMinute::open_or_create(page_blob).await
     }
 
     pub async fn try_open_index_by_minute(
@@ -128,7 +128,7 @@ impl AppContext {
         )
         .await;
 
-        let result = YearlyIndexByMinute::load_if_exists(year, page_blob).await?;
+        let result = YearlyIndexByMinute::load_if_exists(page_blob).await?;
 
         Some(Arc::new(result))
     }

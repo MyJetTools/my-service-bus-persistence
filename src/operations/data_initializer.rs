@@ -6,13 +6,9 @@ use rust_extensions::StopWatch;
 use crate::app::AppContext;
 
 pub async fn init(app: Arc<AppContext>) {
-    let mut sw = StopWatch::new();
-
-    sw.start();
+    let sw = StopWatch::new();
 
     restore_pages(&app).await;
-
-    sw.pause();
 
     my_logger::LOGGER.write_info(
         "Initialization".to_string(),
@@ -34,13 +30,10 @@ async fn restore_pages(app: &Arc<AppContext>) {
         .unwrap();
 
     if let Some(sub_pages) = sub_pages {
-        let mut sw = StopWatch::new();
+        let sw = StopWatch::new();
 
         for (topic_id, sub_page_inner) in sub_pages {
-            sw.start();
             let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
-
-            sw.pause();
 
             my_logger::LOGGER.write_info(
                 "Initialization".to_string(),

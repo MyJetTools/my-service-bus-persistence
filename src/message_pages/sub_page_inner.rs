@@ -6,13 +6,11 @@ use my_service_bus::shared::{
     protobuf_models::MessageProtobufModel,
     sub_page::{SizeAndAmount, SubPageId},
 };
-use rust_extensions::date_time::DateTimeAsMicroseconds;
 use rust_extensions::sorted_vec::SortedVecOfArc;
 
 pub struct SubPageInner {
     pub sub_page_id: SubPageId,
     pub messages: SortedVecOfArc<i64, MessageProtobufModel>,
-    pub created: DateTimeAsMicroseconds,
 
     size_and_amount: SizeAndAmount,
 }
@@ -22,7 +20,6 @@ impl SubPageInner {
         Self {
             sub_page_id,
             messages: SortedVecOfArc::new(),
-            created: DateTimeAsMicroseconds::now(),
             size_and_amount: SizeAndAmount::new(),
         }
     }
@@ -40,7 +37,6 @@ impl SubPageInner {
         Self {
             sub_page_id,
             messages,
-            created: DateTimeAsMicroseconds::now(),
             size_and_amount,
         }
     }

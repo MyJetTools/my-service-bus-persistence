@@ -146,6 +146,7 @@ impl TopicsSnapshotPageBlobStorage {
     }
 }
 
+/*
 #[async_trait::async_trait]
 pub trait TopicsSnapshotPageBlobExts {
     async fn read_or_create_topics_snapshot(
@@ -157,7 +158,7 @@ pub trait TopicsSnapshotPageBlobExts {
         topics_snapshot: &TopicsSnapshotProtobufModel,
     ) -> Result<(), AzureStorageError>;
 }
-
+ */
 fn deserialize_model(content: &[u8]) -> TopicsSnapshotResult {
     if content.len() == 0 {
         return TopicsSnapshotResult::default();

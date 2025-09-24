@@ -77,7 +77,6 @@ impl PagesList {
         result
     }
 
-    //todo!("Can be optimized from memory perspective")
     pub async fn gc(&self) -> Option<Arc<SubPage>> {
         let mut pages_access = self.sub_pages.lock().await;
 

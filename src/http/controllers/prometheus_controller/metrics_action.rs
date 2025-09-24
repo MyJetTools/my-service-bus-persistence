@@ -21,11 +21,7 @@ async fn handle_request(
 ) -> Result<HttpOkResult, HttpFailResult> {
     let result = action.app.metrics_keeper.build_prometheus_content();
 
-    HttpOutput::Content {
-        headers: None,
-        content_type: None,
-        content: result.into_bytes(),
-    }
-    .into_ok_result(true)
-    .into()
+    HttpOutput::from_builder()
+        .set_content(result.into_bytes())
+        .into_ok_result(false)
 }

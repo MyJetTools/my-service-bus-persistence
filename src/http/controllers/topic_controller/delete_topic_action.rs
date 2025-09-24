@@ -34,9 +34,7 @@ async fn handle_request(
     _ctx: &HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
     if action.app.settings.delete_topic_secret_key.as_str() != input_data.api_key {
-        return Err(HttpFailResult::as_unauthorized(
-            "Invalid Secret Key".to_string().into(),
-        ));
+        return HttpOutput::as_unauthorized(Some("Invalid Secret Key")).into_err(false, false);
     }
 
     let mut topics_snapshot = action.app.topics_snapshot.get().await;
