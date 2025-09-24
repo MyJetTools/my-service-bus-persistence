@@ -84,7 +84,7 @@ pub struct QueueRangeProtobufModel {
 }
 
 impl QueueRangeProtobufModel {
-    pub fn new(from_id: MessageId, to_id: MessageId) -> Self {
+    pub fn new(from_id: i64, to_id: i64) -> Self {
         Self {
             from_id: from_id.into(),
             to_id: to_id.into(),

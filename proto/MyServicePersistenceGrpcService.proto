@@ -2,6 +2,7 @@ syntax = "proto3";
 import "google/protobuf/empty.proto";
 package persistence;
 
+
 enum QueueTypePersistenceGrpcEnum {
    Permanent = 0;
    AutoDelete = 1;
@@ -19,21 +20,13 @@ message QueueSnapshotGrpcModel {
   persistence.QueueTypePersistenceGrpcEnum QueueType = 3;
 }
 
-message SaveQueueSnapshotGrpcRequest {
-  repeated persistence.TopicAndQueuesSnapshotGrpcModel QueueSnapshot = 1;
-}
+
 
 message TopicAndQueuesSnapshotGrpcModel {
   string TopicId = 1;
   int64 MessageId = 2;
   repeated persistence.QueueSnapshotGrpcModel QueueSnapshots = 3;
   optional bool Persist = 4;
-}
-
-service MyServiceBusQueuePersistenceGrpcService {
-
-   rpc GetSnapshot(google.protobuf.Empty) returns (stream persistence.TopicAndQueuesSnapshotGrpcModel);
-   rpc SaveSnapshot(persistence.SaveQueueSnapshotGrpcRequest) returns (google.protobuf.Empty);
 }
 
 
@@ -118,6 +111,10 @@ message RestoreTopicGrpcResponse{
 }
 
 service MyServiceBusMessagesPersistenceGrpcService {
+
+   rpc GetQueueSnapshot(google.protobuf.Empty) returns (stream TopicAndQueuesSnapshotGrpcModel);
+   rpc SaveQueueSnapshot(stream TopicAndQueuesSnapshotGrpcModel) returns (google.protobuf.Empty);
+
    rpc GetVersion(google.protobuf.Empty) returns (GetVersionGrpcResponse);
    rpc GetMessage(GetMessageGrpcRequest) returns (MessageContentGrpcModel);
    rpc GetPageCompressed(GetPageCompressedGrpcRequest) returns (stream CompressedMessageChunkModel);

@@ -1,6 +1,5 @@
 use crate::app::AppContext;
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcServiceServer;
-use crate::persistence_grpc::my_service_bus_queue_persistence_grpc_service_server::MyServiceBusQueuePersistenceGrpcServiceServer;
 use anyhow::*;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -23,9 +22,6 @@ pub async fn start(app: Arc<AppContext>, port: u16) -> Result<()> {
 
     println!("Listening to {:?} as grpc endpoint", addr);
     Server::builder()
-        .add_service(MyServiceBusQueuePersistenceGrpcServiceServer::new(
-            service.clone(),
-        ))
         .add_service(MyServiceBusMessagesPersistenceGrpcServiceServer::new(
             service,
         ))
@@ -48,9 +44,6 @@ pub async fn start_unix_socket(app: Arc<AppContext>, unix_socket_addr: String) -
         unix_socket_addr.as_str()
     );
     Server::builder()
-        .add_service(MyServiceBusQueuePersistenceGrpcServiceServer::new(
-            service.clone(),
-        ))
         .add_service(MyServiceBusMessagesPersistenceGrpcServiceServer::new(
             service,
         ))

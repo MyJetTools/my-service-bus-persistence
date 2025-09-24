@@ -1,7 +1,8 @@
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
+use crate::topics_snapshot::TopicSnapshotProtobufModel;
 
-use my_grpc_extensions::server::*;
+use my_grpc_extensions::{server::*, StreamedRequestReader};
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::page_id::PageId;
 use my_service_bus::shared::sub_page::SubPageId;
@@ -20,6 +21,38 @@ const MAX_PAYLOAD_SIZE: usize = 1024 * 1024 * 4;
 
 #[tonic::async_trait]
 impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
+    generate_server_stream!(stream_name:"GetQueueSnapshotStream", item_name:"TopicAndQueuesSnapshotGrpcModel");
+    async fn get_queue_snapshot(
+        &self,
+        _: tonic::Request<()>,
+    ) -> Result<tonic::Response<Self::GetQueueSnapshotStream>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let result = self.app.topics_snapshot.get().await;
+
+        my_grpc_extensions::grpc_server_streams::send_from_iterator(
+            result.snapshot.data.into_iter(),
+        )
+        .await
+    }
+
+    async fn save_queue_snapshot(
+        &self,
+        request: tonic::Request<tonic::Streaming<TopicAndQueuesSnapshotGrpcModel>>,
+    ) -> Result<tonic::Response<()>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        let stream = request.into_inner();
+
+        let values = StreamedRequestReader::new(stream);
+
+        let snapshot: Vec<TopicSnapshotProtobufModel> = values.into_vec().await.unwrap();
+
+        self.app.topics_snapshot.update(snapshot).await;
+
+        Ok(tonic::Response::new(()))
+    }
+
     async fn get_version(
         &self,
         _request: tonic::Request<()>,
@@ -91,11 +124,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         )
         .await;
 
-        my_grpc_extensions::grpc_server_streams::send_vec_to_stream(
-            compressed.into_iter(),
-            |chunk| CompressedMessageChunkModel { chunk },
-        )
-        .await
+        my_grpc_extensions::grpc_server_streams::send_from_iterator(compressed.into_iter()).await
     }
 
     generate_server_stream!(stream_name:"GetPageStream", item_name:"MessageContentGrpcModel");
