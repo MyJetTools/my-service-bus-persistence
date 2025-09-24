@@ -1,7 +1,6 @@
 use crate::app::AppContext;
 
-use my_service_bus::shared::protobuf_models::MessageProtobufModel;
-
+/*
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NewMessagesProtobufContract {
     #[prost(string, tag = "1")]
@@ -16,7 +15,7 @@ impl NewMessagesProtobufContract {
         prost::Message::decode(protobuf).unwrap()
     }
 }
-
+ */
 pub fn check_flags(app: &AppContext) -> Result<(), tonic::Status> {
     if !app.app_states.is_initialized() {
         return Err(tonic::Status::cancelled(

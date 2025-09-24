@@ -37,6 +37,11 @@ message GetHistoryByDateGrpcRequest {
   int64 FromDateTime = 2;
 }
 
+message SaveMessagesGrpcRequest{
+  string TopicId = 1;
+  repeated MessageContentGrpcModel Messages = 2; 
+}
+
 message MessageContentGrpcModel {
   int64 MessageId = 1;
   int64 Created = 2;
@@ -48,11 +53,6 @@ message MessageContentMetaDataItem {
   string Key = 1;
   string Value = 2;
 }
-
-service MyServiceBusHistoryReaderGrpcService {
-
-}
-
 
 //////////////
 
@@ -122,8 +122,7 @@ service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetPageCompressed(GetPageCompressedGrpcRequest) returns (stream CompressedMessageChunkModel);
    rpc GetPage(GetPageGrpcRequest) returns (stream MessageContentGrpcModel);
    rpc GetSubPage(GetSubPageGrpcRequest) returns (stream MessageContentGrpcModel);
-   rpc SaveMessages(stream CompressedMessageChunkModel) returns (google.protobuf.Empty);
-   rpc SaveMessagesUncompressed(stream UnCompressedMessageChunkModel) returns (google.protobuf.Empty);
+   rpc SaveMessages(stream SaveMessagesGrpcRequest) returns (google.protobuf.Empty);
    rpc DeleteTopic(DeleteTopicGrpcRequest) returns (google.protobuf.Empty);
    rpc RestoreTopic(RestoreTopicGrpcRequest) returns (RestoreTopicGrpcResponse);
    rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);

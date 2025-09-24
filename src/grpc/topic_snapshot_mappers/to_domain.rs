@@ -1,4 +1,8 @@
-use my_service_bus::abstractions::AsMessageId;
+use my_service_bus::{
+    abstractions::AsMessageId,
+    shared::protobuf_models::{MessageMetaDataProtobufModel, MessageProtobufModel},
+};
+use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{
     persistence_grpc::*,
@@ -39,5 +43,22 @@ impl Into<QueueSnapshotProtobufModel> for QueueSnapshotGrpcModel {
 impl Into<QueueRangeProtobufModel> for QueueIndexRangeGrpcModel {
     fn into(self) -> QueueRangeProtobufModel {
         QueueRangeProtobufModel::new(self.from_id, self.to_id)
+    }
+}
+
+impl Into<MessageProtobufModel> for MessageContentGrpcModel {
+    fn into(self) -> MessageProtobufModel {
+        MessageProtobufModel::new(
+            self.message_id.into(),
+            DateTimeAsMicroseconds::new(self.created),
+            self.data,
+            self.meta_data
+                .into_iter()
+                .map(|itm| MessageMetaDataProtobufModel {
+                    key: itm.key,
+                    value: itm.value,
+                })
+                .collect(),
+        )
     }
 }

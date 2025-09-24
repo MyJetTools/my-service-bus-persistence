@@ -7,11 +7,25 @@ use crate::app::AppContext;
 pub async fn new_messages(
     app: &AppContext,
     topic_id: String,
-    messages_by_sub_page: BTreeMap<i64, Vec<MessageProtobufModel>>,
+    messages: impl Iterator<Item = MessageProtobufModel>,
 ) {
+    let mut messages_by_sub_page: BTreeMap<SubPageId, Vec<MessageProtobufModel>> = BTreeMap::new();
+
+    for message in messages {
+        let sub_page_id: SubPageId = message.get_message_id().into();
+
+        match messages_by_sub_page.get_mut(&sub_page_id) {
+            Some(items) => {
+                items.push(message);
+            }
+            None => {
+                messages_by_sub_page.insert(sub_page_id, vec![message]);
+            }
+        }
+    }
+
     let topic_data = crate::operations::get_topic_data_to_write(app, topic_id.as_str()).await;
     for (sub_page_id, messages) in messages_by_sub_page {
-        let sub_page_id = SubPageId::new(sub_page_id);
         let page = topic_data
             .get_sub_page_to_publish_messages(sub_page_id)
             .await;

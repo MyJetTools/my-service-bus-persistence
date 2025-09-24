@@ -2,8 +2,6 @@ use my_service_bus::shared::{protobuf_models::MessageProtobufModel, sub_page::Su
 
 use std::{collections::BTreeMap, time::Duration};
 
-use crate::grpc::contracts::NewMessagesProtobufContract;
-
 pub struct NewMessagesGrpcContract {
     pub topic_id: String,
     pub messages_by_sub_page: BTreeMap<i64, Vec<MessageProtobufModel>>,

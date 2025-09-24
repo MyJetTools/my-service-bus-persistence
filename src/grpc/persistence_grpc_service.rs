@@ -7,13 +7,9 @@ use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::page_id::PageId;
 use my_service_bus::shared::sub_page::SubPageId;
 
-use std::time::Duration;
-
 use super::contracts;
 
 use super::server::MyServicePersistenceGrpc;
-
-const GRPC_TIMEOUT: Duration = Duration::from_secs(3);
 
 const MAX_PAYLOAD_SIZE: usize = 1024 * 1024 * 4;
 
@@ -191,49 +187,29 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         streamed_response.get_result()
     }
+
     async fn save_messages(
         &self,
-        request: tonic::Request<
-            tonic::Streaming<crate::persistence_grpc::CompressedMessageChunkModel>,
-        >,
+        request: tonic::Request<tonic::Streaming<SaveMessagesGrpcRequest>>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
-        let grpc_contract =
-            super::messages_mappers::unzip_and_deserialize(&mut request.into_inner(), GRPC_TIMEOUT)
-                .await?;
+        let request = request.into_inner();
 
-        crate::operations::new_messages(
-            &self.app,
-            grpc_contract.topic_id,
-            grpc_contract.messages_by_sub_page,
-        )
-        .await;
+        let mut stream_reader = StreamedRequestReader::new(request);
 
-        return Ok(tonic::Response::new(()));
-    }
+        while let Some(message) = stream_reader.get_next().await {
+            let message = message.unwrap();
 
-    async fn save_messages_uncompressed(
-        &self,
-        request: tonic::Request<
-            tonic::Streaming<crate::persistence_grpc::UnCompressedMessageChunkModel>,
-        >,
-    ) -> Result<tonic::Response<()>, tonic::Status> {
-        contracts::check_flags(self.app.as_ref())?;
+            crate::operations::new_messages(
+                &self.app,
+                message.topic_id,
+                message.messages.into_iter().map(|itm| itm.into()),
+            )
+            .await;
+        }
 
-        let grpc_contract = super::messages_mappers::deserialize_uncompressed(
-            &mut request.into_inner(),
-            GRPC_TIMEOUT,
-        )
-        .await?;
-
-        crate::operations::new_messages(
-            &self.app,
-            grpc_contract.topic_id,
-            grpc_contract.messages_by_sub_page,
-        )
-        .await;
-        return Ok(tonic::Response::new(()));
+        Ok(tonic::Response::new(()))
     }
 
     async fn delete_topic(
