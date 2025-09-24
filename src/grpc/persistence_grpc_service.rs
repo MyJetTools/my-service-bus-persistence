@@ -2,7 +2,7 @@ use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_se
 use crate::persistence_grpc::*;
 use crate::topics_snapshot::TopicSnapshotProtobufModel;
 
-use my_grpc_extensions::{server::*, StreamedRequestReader};
+use my_grpc_extensions::{server::*, StreamedRequestReader, StreamedResponseWriter};
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::page_id::PageId;
 use my_service_bus::shared::sub_page::SubPageId;
@@ -14,8 +14,6 @@ use super::contracts;
 use super::server::MyServicePersistenceGrpc;
 
 const GRPC_TIMEOUT: Duration = Duration::from_secs(3);
-
-const CHANNEL_SIZE: usize = 100;
 
 const MAX_PAYLOAD_SIZE: usize = 1024 * 1024 * 4;
 
@@ -138,8 +136,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let app = self.app.clone();
 
-        let (tx, rx) = tokio::sync::mpsc::channel(CHANNEL_SIZE);
-
         let page_id = PageId::new(req.page_no);
 
         let mut from_message_id = page_id.get_first_message_id();
@@ -152,21 +148,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let topic_id = req.topic_id;
 
-        tokio::spawn(async move {
-            crate::operations::send_messages_to_channel(
-                app,
-                topic_id,
-                from_message_id,
-                to_message_id,
-                tx,
-                GRPC_TIMEOUT,
-            )
-            .await;
-        });
+        let mut streamed_response = StreamedResponseWriter::new(1024);
 
-        Ok(tonic::Response::new(Box::pin(
-            tokio_stream::wrappers::ReceiverStream::new(rx),
-        )))
+        let producer = streamed_response.get_stream_producer();
+
+        tokio::spawn(crate::operations::send_messages_to_channel(
+            app,
+            topic_id,
+            from_message_id,
+            to_message_id,
+            producer,
+        ));
+
+        streamed_response.get_result()
     }
 
     generate_server_stream!(stream_name:"GetSubPageStream", item_name:"MessageContentGrpcModel");
@@ -178,32 +172,24 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
-        let app = self.app.clone();
-
         let sub_page_id = SubPageId::new(req.sub_page_no);
 
         let from_message_id = sub_page_id.get_first_message_id();
         let to_message_id = sub_page_id.get_last_message_id();
 
-        let topic_id = req.topic_id;
+        let mut streamed_response = StreamedResponseWriter::new(1024);
 
-        let (tx, rx) = tokio::sync::mpsc::channel(CHANNEL_SIZE);
+        let producer = streamed_response.get_stream_producer();
 
-        tokio::spawn(async move {
-            crate::operations::send_messages_to_channel(
-                app,
-                topic_id,
-                from_message_id,
-                to_message_id,
-                tx,
-                GRPC_TIMEOUT,
-            )
-            .await;
-        });
+        tokio::spawn(crate::operations::send_messages_to_channel(
+            self.app.clone(),
+            req.topic_id,
+            from_message_id,
+            to_message_id,
+            producer,
+        ));
 
-        Ok(tonic::Response::new(Box::pin(
-            tokio_stream::wrappers::ReceiverStream::new(rx),
-        )))
+        streamed_response.get_result()
     }
     async fn save_messages(
         &self,
@@ -286,6 +272,16 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         };
 
         return Ok(tonic::Response::new(response));
+    }
+
+    generate_server_stream!(stream_name:"GetHistoryByDateStream", item_name:"MessageContentGrpcModel");
+    async fn get_history_by_date(
+        &self,
+        _request: tonic::Request<GetHistoryByDateGrpcRequest>,
+    ) -> Result<tonic::Response<Self::GetHistoryByDateStream>, tonic::Status> {
+        contracts::check_flags(self.app.as_ref())?;
+
+        my_grpc_extensions::grpc_server_streams::send_from_iterator([].into_iter()).await
     }
 
     async fn ping(&self, _: tonic::Request<()>) -> Result<tonic::Response<()>, tonic::Status> {

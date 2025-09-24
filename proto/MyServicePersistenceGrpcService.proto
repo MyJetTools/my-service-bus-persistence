@@ -50,7 +50,7 @@ message MessageContentMetaDataItem {
 }
 
 service MyServiceBusHistoryReaderGrpcService {
-   rpc GetByDate(persistence.GetHistoryByDateGrpcRequest) returns (stream persistence.MessageContentGrpcModel);
+
 }
 
 
@@ -114,6 +114,8 @@ service MyServiceBusMessagesPersistenceGrpcService {
 
    rpc GetQueueSnapshot(google.protobuf.Empty) returns (stream TopicAndQueuesSnapshotGrpcModel);
    rpc SaveQueueSnapshot(stream TopicAndQueuesSnapshotGrpcModel) returns (google.protobuf.Empty);
+
+   rpc GetHistoryByDate(GetHistoryByDateGrpcRequest) returns (stream persistence.MessageContentGrpcModel);
 
    rpc GetVersion(google.protobuf.Empty) returns (GetVersionGrpcResponse);
    rpc GetMessage(GetMessageGrpcRequest) returns (MessageContentGrpcModel);

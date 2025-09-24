@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use my_grpc_extensions::StreamedResponseProducer;
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::sub_page::SubPageId;
 
@@ -10,8 +11,7 @@ pub async fn send_messages_to_channel(
     topic_id: String,
     from_message_id: MessageId,
     to_message_id: MessageId,
-    tx: tokio::sync::mpsc::Sender<Result<MessageContentGrpcModel, tonic::Status>>,
-    send_timeout: std::time::Duration,
+    producer: StreamedResponseProducer<MessageContentGrpcModel>,
 ) {
     let mut sub_page_read_copy = None;
 
@@ -37,14 +37,7 @@ pub async fn send_messages_to_channel(
         let message = sub_page_read_copy.as_ref().unwrap().get(message_id);
 
         if let Some(message) = message {
-            let future = tx.send(Ok(message.as_ref().into()));
-
-            match tokio::time::timeout(send_timeout, future).await {
-                Ok(_) => {}
-                Err(_) => {
-                    panic!("Timeout while sending message to channel at send_messages_to_channel");
-                }
-            }
+            producer.send(message.as_ref().into()).await.unwrap();
         }
     }
 }
