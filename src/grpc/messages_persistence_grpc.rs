@@ -23,8 +23,8 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     async fn get_version(
         &self,
         _request: tonic::Request<()>,
-    ) -> Result<tonic::Response<MyServerBusPersistenceVersion>, tonic::Status> {
-        let result = MyServerBusPersistenceVersion {
+    ) -> Result<tonic::Response<GetVersionGrpcResponse>, tonic::Status> {
+        let result = GetVersionGrpcResponse {
             version: crate::app::APP_VERSION.to_string(),
         };
 
@@ -63,7 +63,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     generate_server_stream!(stream_name:"GetPageCompressedStream", item_name:"CompressedMessageChunkModel");
     async fn get_page_compressed(
         &self,
-        request: tonic::Request<crate::persistence_grpc::GetMessagesPageGrpcRequest>,
+        request: tonic::Request<crate::persistence_grpc::GetPageCompressedGrpcRequest>,
     ) -> Result<tonic::Response<Self::GetPageCompressedStream>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
@@ -101,7 +101,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     generate_server_stream!(stream_name:"GetPageStream", item_name:"MessageContentGrpcModel");
     async fn get_page(
         &self,
-        request: tonic::Request<crate::persistence_grpc::GetMessagesPageGrpcRequest>,
+        request: tonic::Request<crate::persistence_grpc::GetPageGrpcRequest>,
     ) -> Result<tonic::Response<Self::GetPageStream>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
@@ -143,7 +143,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     generate_server_stream!(stream_name:"GetSubPageStream", item_name:"MessageContentGrpcModel");
     async fn get_sub_page(
         &self,
-        request: tonic::Request<crate::persistence_grpc::GetSubPageRequest>,
+        request: tonic::Request<GetSubPageGrpcRequest>,
     ) -> Result<tonic::Response<Self::GetSubPageStream>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
 
@@ -238,24 +238,28 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
     async fn restore_topic(
         &self,
-        request: tonic::Request<RestoreTopicRequest>,
-    ) -> Result<tonic::Response<RestoreTopicResponse>, tonic::Status> {
+        request: tonic::Request<RestoreTopicGrpcRequest>,
+    ) -> Result<tonic::Response<RestoreTopicGrpcResponse>, tonic::Status> {
         let request = request.into_inner();
 
         let response = if let Some(restored) =
             crate::operations::restore_topic(self.app.as_ref(), &request.topic_id).await
         {
-            RestoreTopicResponse {
+            RestoreTopicGrpcResponse {
                 result: true,
                 message_id: restored.message_id,
             }
         } else {
-            RestoreTopicResponse {
+            RestoreTopicGrpcResponse {
                 result: false,
                 message_id: 0,
             }
         };
 
         return Ok(tonic::Response::new(response));
+    }
+
+    async fn ping(&self, _: tonic::Request<()>) -> Result<tonic::Response<()>, tonic::Status> {
+        Ok(tonic::Response::new(()))
     }
 }

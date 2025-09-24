@@ -77,7 +77,7 @@ message GetMessageGrpcRequest {
   int64 MessageId = 2;
 }
 
-message GetMessagesPageGrpcRequest {
+message GetPageCompressedGrpcRequest {
   string TopicId = 1;
   int64 PageNo = 2;
   int64 FromMessageId = 3;
@@ -85,7 +85,15 @@ message GetMessagesPageGrpcRequest {
   int32 Version = 5;
 }
 
-message MyServerBusPersistenceVersion{
+message GetPageGrpcRequest {
+  string TopicId = 1;
+  int64 PageNo = 2;
+  int64 FromMessageId = 3;
+  int64 ToMessageId = 4;
+  int32 Version = 5;
+}
+
+message GetVersionGrpcResponse{
   string Version = 1;
 }
 
@@ -94,30 +102,31 @@ message DeleteTopicGrpcRequest {
   int64 DeleteAfter = 2;
 }
 
-message GetSubPageRequest{
+message GetSubPageGrpcRequest{
   string TopicId = 1;
   int64 SubPageNo = 2;
 }
 
 
-message RestoreTopicRequest{
+message RestoreTopicGrpcRequest{
   string TopicId = 1;
 }
 
-message RestoreTopicResponse{
+message RestoreTopicGrpcResponse{
   bool Result = 1;
   int64 MessageId = 2;
 }
 
 service MyServiceBusMessagesPersistenceGrpcService {
-   rpc GetVersion(google.protobuf.Empty) returns (persistence.MyServerBusPersistenceVersion);
-   rpc GetMessage(persistence.GetMessageGrpcRequest) returns (persistence.MessageContentGrpcModel);
-   rpc GetPageCompressed(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.CompressedMessageChunkModel);
-   rpc GetPage(persistence.GetMessagesPageGrpcRequest) returns (stream persistence.MessageContentGrpcModel);
-   rpc GetSubPage(persistence.GetSubPageRequest) returns (stream persistence.MessageContentGrpcModel);
-   rpc SaveMessages(stream persistence.CompressedMessageChunkModel) returns (google.protobuf.Empty);
-   rpc SaveMessagesUncompressed(stream persistence.UnCompressedMessageChunkModel) returns (google.protobuf.Empty);
+   rpc GetVersion(google.protobuf.Empty) returns (GetVersionGrpcResponse);
+   rpc GetMessage(GetMessageGrpcRequest) returns (MessageContentGrpcModel);
+   rpc GetPageCompressed(GetPageCompressedGrpcRequest) returns (stream CompressedMessageChunkModel);
+   rpc GetPage(GetPageGrpcRequest) returns (stream MessageContentGrpcModel);
+   rpc GetSubPage(GetSubPageGrpcRequest) returns (stream MessageContentGrpcModel);
+   rpc SaveMessages(stream CompressedMessageChunkModel) returns (google.protobuf.Empty);
+   rpc SaveMessagesUncompressed(stream UnCompressedMessageChunkModel) returns (google.protobuf.Empty);
    rpc DeleteTopic(DeleteTopicGrpcRequest) returns (google.protobuf.Empty);
-   rpc RestoreTopic(RestoreTopicRequest) returns (RestoreTopicResponse);
+   rpc RestoreTopic(RestoreTopicGrpcRequest) returns (RestoreTopicGrpcResponse);
+   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
