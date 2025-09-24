@@ -35,34 +35,6 @@ impl Into<QueueSnapshotGrpcModel> for QueueSnapshotProtobufModel {
     }
 }
 
-/*
-impl Into<TopicAndQueuesSnapshotGrpcModel> for &TopicSnapshotProtobufModel {
-    fn into(self) -> TopicAndQueuesSnapshotGrpcModel {
-        let queue_snapshots = self
-            .queues
-            .into_iter()
-            .map(|itm| QueueSnapshotGrpcModel {
-                queue_id: itm.queue_id,
-                ranges: itm
-                    .ranges
-                    .into_iter()
-                    .map(|itm| QueueIndexRangeGrpcModel {
-                        from_id: itm.get_from_id().get_value(),
-                        to_id: itm.get_to_id().get_value(),
-                    })
-                    .collect(),
-                queue_type: itm.queue_type,
-            })
-            .collect();
-        TopicAndQueuesSnapshotGrpcModel {
-            message_id: self.get_message_id().get_value(),
-            queue_snapshots,
-            persist: self.persist,
-            topic_id: self.topic_id.to_string(),
-        }
-    }
-}
- */
 impl Into<QueueIndexRangeGrpcModel> for &QueueRangeProtobufModel {
     fn into(self) -> QueueIndexRangeGrpcModel {
         QueueIndexRangeGrpcModel {
