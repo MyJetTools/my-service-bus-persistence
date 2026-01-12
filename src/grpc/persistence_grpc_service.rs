@@ -218,13 +218,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     ) -> Result<tonic::Response<()>, tonic::Status> {
         let request = request.into_inner();
 
-        crate::operations::delete_topic(
+        match crate::operations::delete_topic(
             self.app.as_ref(),
             &request.topic_id,
             request.delete_after.into(),
         )
-        .await;
-        return Ok(tonic::Response::new(()));
+        .await
+        {
+            Ok(_) => Ok(tonic::Response::new(())),
+            Err(crate::operations::OperationError::TopicNotFound(_)) => {
+                Err(tonic::Status::not_found("Topic not found"))
+            }
+            Err(err) => Err(tonic::Status::internal(format!("{:?}", err))),
+        }
     }
 
     async fn restore_topic(

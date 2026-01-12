@@ -10,6 +10,7 @@ pub enum OperationError {
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
+    AzureStorageError(AzureStorageError),
 }
 
 impl From<PageOperationError> for OperationError {
@@ -33,6 +34,12 @@ impl From<prost::EncodeError> for OperationError {
 impl From<ZipError> for OperationError {
     fn from(src: ZipError) -> Self {
         Self::ZipError(src)
+    }
+}
+
+impl From<AzureStorageError> for OperationError {
+    fn from(src: AzureStorageError) -> Self {
+        Self::AzureStorageError(src)
     }
 }
 

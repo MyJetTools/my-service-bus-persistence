@@ -9,6 +9,7 @@ mod gc_pages;
 mod get_message_by_id;
 mod get_messages_from_date;
 mod get_sub_page_to_read;
+mod hard_delete_topic;
 mod send_messages_to_channel;
 
 mod get_page_to_read;
@@ -22,6 +23,7 @@ mod topics;
 pub use delete_topic::*;
 pub use error::*;
 pub use gc_pages::*;
+pub use hard_delete_topic::*;
 
 pub use get_message_by_id::*;
 pub use get_messages_from_date::*;

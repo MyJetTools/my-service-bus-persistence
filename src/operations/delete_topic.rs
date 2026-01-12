@@ -3,24 +3,49 @@ use serde::*;
 
 use crate::app::AppContext;
 
+use super::OperationError;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TopicSoftDeleteMetadataBlobModel {
     pub message_id: i64,
     pub delete_after: String,
 }
 
-pub async fn delete_topic(app: &AppContext, topic_id: &str, delete_after: DateTimeAsMicroseconds) {
-    let message_id = app.topics_snapshot.get_current_message_id(topic_id).await;
+pub async fn delete_topic(
+    app: &AppContext,
+    topic_id: &str,
+    delete_after: DateTimeAsMicroseconds,
+) -> Result<(), OperationError> {
+    // Get current snapshot and find the topic
+    let mut topics_snapshot = app.topics_snapshot.get().await;
 
-    if message_id.is_none() {
-        panic!("Topic {} not found", topic_id)
+    let index = topics_snapshot
+        .snapshot
+        .data
+        .iter()
+        .position(|topic| topic.topic_id.as_str() == topic_id);
+
+    if index.is_none() {
+        return Err(OperationError::TopicNotFound(topic_id.to_string()));
     }
 
+    let index = index.unwrap();
+
+    let message_id = topics_snapshot.snapshot.data[index].get_message_id();
+
+    // Remove topic from active snapshot data
+    topics_snapshot.snapshot.data.remove(index);
+    app.topics_snapshot
+        .update(topics_snapshot.snapshot.data)
+        .await;
+
+    // Drop in-memory topic data
     app.topics_list.delete(topic_id).await;
 
-    let message_id = message_id.unwrap();
-
+    // Register soft-delete with GC deadline
     app.topics_snapshot
         .add_deleted_topic(topic_id, message_id, delete_after)
         .await;
+
+    Ok(())
 }

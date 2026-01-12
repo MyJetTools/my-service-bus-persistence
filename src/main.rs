@@ -23,7 +23,8 @@ use crate::{
     app::AppContext,
     settings::SettingsModel,
     timers::{
-        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
+        deleted_topics_gc::DeletedTopicsGcTimer, metrics_updater::MetricsUpdater,
+        pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
         topics_snapshot_saver::TopicsSnapshotSaverTimer,
     },
 };
@@ -62,6 +63,13 @@ async fn main() {
     timer_persist_queues.register_timer("PagesGc", Arc::new(PagesGcTimer::new(app.clone())));
 
     timer_persist_queues.start(app.app_states.clone(), my_logger::LOGGER.clone());
+
+    let mut timer_30s = MyTimer::new(Duration::from_secs(30));
+    timer_30s.register_timer(
+        "DeletedTopicsGc",
+        Arc::new(DeletedTopicsGcTimer::new(app.clone())),
+    );
+    timer_30s.start(app.app_states.clone(), my_logger::LOGGER.clone());
 
     let http_connections_counter = crate::http::start_up::setup_server(&app, 7123);
 

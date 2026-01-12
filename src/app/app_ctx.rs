@@ -136,6 +136,18 @@ impl AppContext {
     pub fn get_storage_for_active_pages(&self) -> Arc<AzureStorageConnection> {
         self.topics_and_queue_conn_string.clone()
     }
+
+    pub fn get_topics_conn(&self) -> Arc<AzureStorageConnection> {
+        self.topics_and_queue_conn_string.clone()
+    }
+
+    pub fn get_messages_conn(&self) -> Arc<AzureStorageConnection> {
+        self.messages_conn_string.clone()
+    }
+
+    pub fn get_archive_conn(&self) -> Arc<AzureStorageConnection> {
+        self.archive_conn_string.clone()
+    }
 }
 
 #[async_trait::async_trait]

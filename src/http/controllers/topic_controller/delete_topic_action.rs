@@ -37,30 +37,53 @@ async fn handle_request(
         return HttpOutput::as_unauthorized(Some("Invalid Secret Key")).into_err(false, false);
     }
 
-    let mut topics_snapshot = action.app.topics_snapshot.get().await;
+    // Parse delete_after (RFC3339). Default: now + 24h to give grace period.
+    let delete_after = {
+        let parsed: Result<rust_extensions::date_time::DateTimeAsMicroseconds, HttpFailResult> =
+            match input_data.delete_after {
+                None => {
+                    let mut v = rust_extensions::date_time::DateTimeAsMicroseconds::now();
+                    v.add_days(1);
+                    Ok(v)
+                }
+                Some(ref delete_after) if delete_after.is_empty() => {
+                    let mut v = rust_extensions::date_time::DateTimeAsMicroseconds::now();
+                    v.add_days(1);
+                    Ok(v)
+                }
+                Some(delete_after) => {
+                    if let Some(parsed) =
+                        rust_extensions::date_time::DateTimeAsMicroseconds::parse_iso_string(
+                            delete_after.as_str(),
+                        )
+                    {
+                        Ok(parsed)
+                    } else {
+                        Err(HttpFailResult::as_validation_error(format!(
+                            "Invalid deleteAfter: expected RFC3339, got '{}'",
+                            delete_after
+                        )))
+                    }
+                }
+            };
 
-    let index = topics_snapshot
-        .snapshot
-        .data
-        .iter()
-        .position(|topic| topic.topic_id.as_str() == input_data.topic_id);
+        match parsed {
+            Ok(val) => val,
+            Err(err) => return Err(err),
+        }
+    };
 
-    if index.is_none() {
-        return Err(HttpFailResult::as_not_found(
-            format!("Topic {} not found", input_data.topic_id),
-            true,
-        ));
+    match crate::operations::delete_topic(
+        action.app.as_ref(),
+        input_data.topic_id.as_str(),
+        delete_after,
+    )
+    .await
+    {
+        Ok(_) => HttpOutput::Empty.into_ok_result(true).into(),
+        Err(crate::operations::OperationError::TopicNotFound(topic)) => Err(
+            HttpFailResult::as_not_found(format!("Topic {} not found", topic), true),
+        ),
+        Err(err) => Err(HttpFailResult::as_fatal_error(format!("{:?}", err))),
     }
-
-    let index = index.unwrap();
-
-    topics_snapshot.snapshot.data.remove(index);
-
-    action
-        .app
-        .topics_snapshot
-        .update(topics_snapshot.snapshot.data)
-        .await;
-
-    return HttpOutput::Empty.into_ok_result(true).into();
 }
