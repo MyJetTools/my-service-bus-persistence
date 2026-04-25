@@ -11,6 +11,7 @@ use my_service_bus::shared::sub_page::SubPageId;
 use crate::{app::AppContext, message_pages::SubPageInner};
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum RestorePagesError {
     AzureStorageError(AzureStorageError),
     Other(String),
@@ -112,13 +113,13 @@ pub async fn restore(
 }
 
 pub async fn write(app: &AppContext) {
-    let topics = app.topics_list.get_all().await;
+    let topics = app.topics_list.get_all();
 
     let mut result: ActivePages = ActivePages {
         sub_pages: Vec::new(),
     };
 
-    for topic in topics {
+    for topic in topics.iter() {
         let sub_page = topic.pages_list.get_active_sub_page().await;
 
         if let Some(sub_page) = sub_page {

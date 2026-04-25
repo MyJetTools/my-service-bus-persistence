@@ -11,9 +11,9 @@ pub async fn execute_before_shutdown(app: Arc<AppContext>) {
 
     println!("Topic snapshot is flushed");
 
-    let topics = app.topics_list.get_all().await;
+    let topics = app.topics_list.get_all();
 
-    for topic_data in topics {
+    for topic_data in topics.iter() {
         println!("Flushing data for topic {} to blob ", topic_data.topic_id);
         topic_data
             .yearly_index_by_minute

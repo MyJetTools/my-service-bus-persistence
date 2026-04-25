@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use my_service_bus::shared::sub_page::{SizeAndAmount, SubPageId};
 use rust_extensions::sorted_vec::SortedVecOfArc;
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
 use super::{SubPage, SubPageInner};
 
@@ -21,7 +21,6 @@ impl PagesList {
         match self
             .sub_pages
             .lock()
-            .await
             .insert_or_if_not_exists(sub_page_inner.sub_page_id.as_ref())
         {
             rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
@@ -36,7 +35,6 @@ impl PagesList {
         match self
             .sub_pages
             .lock()
-            .await
             .insert_or_if_not_exists(sub_page.get_id().as_ref())
         {
             rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
@@ -50,7 +48,6 @@ impl PagesList {
         match self
             .sub_pages
             .lock()
-            .await
             .insert_or_if_not_exists(sub_page_id.as_ref())
         {
             rust_extensions::sorted_vec::InsertIfNotExists::Insert(entry) => {
@@ -61,13 +58,13 @@ impl PagesList {
     }
 
     pub async fn get(&self, sub_page_id: SubPageId) -> Option<Arc<SubPage>> {
-        let pages_access = self.sub_pages.lock().await;
+        let pages_access = self.sub_pages.lock();
         let result = pages_access.get(sub_page_id.as_ref())?;
         Some(result.clone())
     }
 
     pub async fn get_all(&self) -> Vec<Arc<SubPage>> {
-        let read_access = self.sub_pages.lock().await;
+        let read_access = self.sub_pages.lock();
         let mut result = Vec::with_capacity(read_access.len());
         for page in read_access.iter() {
             let itm = page.clone();
@@ -78,7 +75,7 @@ impl PagesList {
     }
 
     pub async fn gc(&self) -> Option<Arc<SubPage>> {
-        let mut pages_access = self.sub_pages.lock().await;
+        let mut pages_access = self.sub_pages.lock();
 
         if pages_access.len() <= 1 {
             return None;
@@ -89,7 +86,7 @@ impl PagesList {
     }
 
     pub async fn get_active_sub_page(&self) -> Option<Arc<SubPage>> {
-        let read_access = self.sub_pages.lock().await;
+        let read_access = self.sub_pages.lock();
 
         let last_key = read_access.last().unwrap().get_id().clone();
 
@@ -98,14 +95,20 @@ impl PagesList {
     }
 
     pub async fn get_messages_amount_to_save(&self) -> SizeAndAmount {
+        let active_sub_pages: Vec<Arc<SubPage>> = {
+            let read_access = self.sub_pages.lock();
+            read_access
+                .iter()
+                .filter(|sp| sp.is_active())
+                .cloned()
+                .collect()
+        };
+
         let mut result = SizeAndAmount::new();
-        let read_access = self.sub_pages.lock().await;
-        for sub_page in read_access.iter() {
-            if sub_page.is_active() {
-                let size_and_amount = sub_page.get_size_and_amount().await;
-                result.size += size_and_amount.size;
-                result.amount += size_and_amount.amount;
-            }
+        for sub_page in active_sub_pages {
+            let size_and_amount = sub_page.get_size_and_amount().await;
+            result.size += size_and_amount.size;
+            result.amount += size_and_amount.amount;
         }
 
         result

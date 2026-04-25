@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum RestoreSubPageError {
     NotFound,
     PageBlobRandomAccessError(PageBlobRandomAccessError),

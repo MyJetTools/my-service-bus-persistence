@@ -158,7 +158,7 @@ impl StatusModel {
         let now = DateTimeAsMicroseconds::now();
 
         for snapshot in &topics_snapshot.snapshot.data {
-            let topic_data = app.topics_list.get(snapshot.topic_id.as_str()).await;
+            let topic_data = app.topics_list.get(snapshot.topic_id.as_str());
 
             let topic_info_model = get_topics_model(snapshot, topic_data.as_ref(), now).await;
 

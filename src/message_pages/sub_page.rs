@@ -6,7 +6,7 @@ use my_service_bus::shared::{
     sub_page::{SizeAndAmount, SubPageId},
 };
 use rust_extensions::sorted_vec::{EntityWithKey, SortedVecOfArc};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
 use super::{SubPageInner, SubPageReadCopy};
 
@@ -50,7 +50,7 @@ impl SubPage {
     pub async fn new_messages(&self, messages: Vec<MessageProtobufModel>) {
         match self {
             SubPage::Active(_, inner) => {
-                let mut data = inner.lock().await;
+                let mut data = inner.lock();
                 for message in messages {
                     data.add_message(Arc::new(message));
                 }
@@ -63,7 +63,7 @@ impl SubPage {
     pub async fn get_message(&self, message_id: MessageId) -> Option<Arc<MessageProtobufModel>> {
         match self {
             SubPage::Active(_, inner) => {
-                let data = inner.lock().await;
+                let data = inner.lock();
                 data.get_message(message_id).cloned()
             }
             SubPage::FromArchive(data) => data.get_message(message_id).cloned(),
@@ -74,7 +74,7 @@ impl SubPage {
     pub async fn get_all_messages(&self) -> SubPageReadCopy {
         match self {
             SubPage::Active(_, inner) => {
-                let data = inner.lock().await;
+                let data = inner.lock();
                 let messages = data.get_all_messages();
 
                 SubPageReadCopy::new(self.get_id(), messages)
@@ -97,7 +97,7 @@ impl SubPage {
 
         match self {
             SubPage::Active(_, inner) => {
-                let access = inner.lock().await;
+                let access = inner.lock();
                 for message_id in from_message_id.get_value()
                     ..access
                         .sub_page_id
@@ -134,7 +134,7 @@ impl SubPage {
                     my_service_bus::shared::page_compressor::CompressedPageBuilder::new_as_single_file();
 
                 {
-                    let data = sub_page_inner.lock().await;
+                    let data = sub_page_inner.lock();
 
                     for msg in data.messages.iter() {
                         page_compressor.add_message(msg).unwrap();
@@ -152,7 +152,7 @@ impl SubPage {
     pub async fn get_size_and_amount(&self) -> SizeAndAmount {
         match self {
             SubPage::Active(_, data) => {
-                let read_access = data.lock().await;
+                let read_access = data.lock();
                 read_access.get_size_and_amount().clone()
             }
             SubPage::FromArchive(archive) => archive.get_size_and_amount().clone(),

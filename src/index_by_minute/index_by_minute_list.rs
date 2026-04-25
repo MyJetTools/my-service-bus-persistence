@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use rust_extensions::date_time::DateTimeAsMicroseconds;
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
 use crate::typing::Year;
 
@@ -19,7 +19,7 @@ impl IndexByMinuteList {
     }
 
     pub async fn add(&self, year: Year, yearly_index_by_minute: Arc<YearlyIndexByMinute>) {
-        let mut write_access = self.data.write().await;
+        let mut write_access = self.data.write();
         write_access.insert(year.get_value(), yearly_index_by_minute);
     }
 
@@ -28,7 +28,7 @@ impl IndexByMinuteList {
         year: Year,
         update_read_time: Option<DateTimeAsMicroseconds>,
     ) -> Option<Arc<YearlyIndexByMinute>> {
-        let read_access = self.data.read().await;
+        let read_access = self.data.read();
         let result = read_access.get(year.value_as_ref()).cloned();
 
         if let Some(result) = &result {
@@ -41,14 +41,14 @@ impl IndexByMinuteList {
     }
 
     pub async fn get_all(&self) -> Vec<Arc<YearlyIndexByMinute>> {
-        let read_access = self.data.read().await;
+        let read_access = self.data.read();
         read_access.values().cloned().collect()
     }
 
     pub async fn gc(&self) {
         let removed = {
             let now = DateTimeAsMicroseconds::now();
-            let mut write_access = self.data.write().await;
+            let mut write_access = self.data.write();
 
             if write_access.len() <= 1 {
                 return;
@@ -81,7 +81,7 @@ impl IndexByMinuteList {
     pub async fn save_before_shutdown(&self) {
         loop {
             let removed = {
-                let mut write_access = self.data.write().await;
+                let mut write_access = self.data.write();
 
                 if write_access.len() == 0 {
                     return;

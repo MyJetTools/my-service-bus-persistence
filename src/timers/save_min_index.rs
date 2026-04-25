@@ -17,8 +17,8 @@ impl SaveMinIndexTimer {
 #[async_trait::async_trait]
 impl MyTimerTick for SaveMinIndexTimer {
     async fn tick(&self) {
-        let topics_snapshot = self.app.topics_list.get_all().await;
-        for topic_data in &topics_snapshot {
+        let topics_snapshot = self.app.topics_list.get_all();
+        for topic_data in topics_snapshot.iter() {
             for index in topic_data.yearly_index_by_minute.get_all().await {
                 index.flush_to_storage().await;
             }

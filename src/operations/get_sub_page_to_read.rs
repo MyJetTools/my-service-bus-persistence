@@ -23,7 +23,7 @@ pub async fn get_sub_page_to_read(
 }
 
 async fn read(app: &AppContext, topic_id: &str, sub_page_id: SubPageId) -> Option<Arc<SubPage>> {
-    let topic = app.topics_list.get(topic_id).await?;
+    let topic = app.topics_list.get(topic_id)?;
 
     if let Some(sub_page) = topic.pages_list.get(sub_page_id).await {
         return Some(sub_page);

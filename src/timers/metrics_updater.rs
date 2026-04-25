@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+
+use ahash::AHashMap;
 
 use my_http_server::HttpConnectionsCounter;
 use rust_extensions::MyTimerTick;
@@ -24,10 +26,10 @@ impl MyTimerTick for MetricsUpdater {
     async fn tick(&self) {
         let topics_list = self.app.topics_snapshot.get_topics_list().await;
 
-        let mut metrics = HashMap::new();
+        let mut metrics = AHashMap::new();
 
         for topic_id in &topics_list {
-            match self.app.topics_list.get(topic_id).await {
+            match self.app.topics_list.get(topic_id) {
                 Some(topic_data) => {
                     let queue_size = topic_data.pages_list.get_messages_amount_to_save().await;
                     metrics.insert(

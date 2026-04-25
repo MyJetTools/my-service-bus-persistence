@@ -144,7 +144,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let topic_id = req.topic_id;
 
-        let mut streamed_response = StreamedResponseWriter::new(1024);
+        let streamed_response = StreamedResponseWriter::new(1024);
 
         let producer = streamed_response.get_stream_producer();
 
@@ -173,7 +173,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let from_message_id = sub_page_id.get_first_message_id();
         let to_message_id = sub_page_id.get_last_message_id();
 
-        let mut streamed_response = StreamedResponseWriter::new(1024);
+        let streamed_response = StreamedResponseWriter::new(1024);
 
         let producer = streamed_response.get_stream_producer();
 
@@ -212,48 +212,24 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         Ok(tonic::Response::new(()))
     }
 
+    // TODO: soft-delete + GC flow is being reworked, see TODO.md.
     async fn delete_topic(
         &self,
-        request: tonic::Request<DeleteTopicGrpcRequest>,
+        _request: tonic::Request<DeleteTopicGrpcRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
-        let request = request.into_inner();
-
-        match crate::operations::delete_topic(
-            self.app.as_ref(),
-            &request.topic_id,
-            request.delete_after.into(),
-        )
-        .await
-        {
-            Ok(_) => Ok(tonic::Response::new(())),
-            Err(crate::operations::OperationError::TopicNotFound(_)) => {
-                Err(tonic::Status::not_found("Topic not found"))
-            }
-            Err(err) => Err(tonic::Status::internal(format!("{:?}", err))),
-        }
+        Err(tonic::Status::unimplemented(
+            "delete_topic is temporarily disabled while soft-delete + GC flow is being reworked",
+        ))
     }
 
+    // TODO: soft-delete + GC flow is being reworked, see TODO.md.
     async fn restore_topic(
         &self,
-        request: tonic::Request<RestoreTopicGrpcRequest>,
+        _request: tonic::Request<RestoreTopicGrpcRequest>,
     ) -> Result<tonic::Response<RestoreTopicGrpcResponse>, tonic::Status> {
-        let request = request.into_inner();
-
-        let response = if let Some(restored) =
-            crate::operations::restore_topic(self.app.as_ref(), &request.topic_id).await
-        {
-            RestoreTopicGrpcResponse {
-                result: true,
-                message_id: restored.message_id,
-            }
-        } else {
-            RestoreTopicGrpcResponse {
-                result: false,
-                message_id: 0,
-            }
-        };
-
-        return Ok(tonic::Response::new(response));
+        Err(tonic::Status::unimplemented(
+            "restore_topic is temporarily disabled while soft-delete + GC flow is being reworked",
+        ))
     }
 
     generate_server_stream!(stream_name:"GetHistoryByDateStream", item_name:"MessageContentGrpcModel");

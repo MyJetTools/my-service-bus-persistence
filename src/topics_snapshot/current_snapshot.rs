@@ -1,7 +1,5 @@
 use my_logger::LogEventCtx;
-use my_service_bus::abstractions::MessageId;
-use rust_extensions::date_time::DateTimeAsMicroseconds;
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
 use super::{page_blob_storage::TopicsSnapshotPageBlobStorage, protobuf_model::*};
 
@@ -36,47 +34,48 @@ impl TopicsSnapshotData {
         self.last_saved_snapshot_id = saved_id;
     }
 
-    pub fn add_deleted_topic(
-        &mut self,
-        topic_id: &str,
-        message_id: MessageId,
-        gc_after: DateTimeAsMicroseconds,
-    ) {
-        self.snapshot
-            .deleted_topics
-            .retain(|itm| itm.topic_id != topic_id);
-
-        let deleted_topic = DeletedTopicProtobufModel {
-            topic_id: topic_id.to_string(),
-            message_id: message_id.get_value(),
-            gc_after: gc_after.unix_microseconds,
-        };
-
-        self.snapshot.deleted_topics.push(deleted_topic);
-    }
-
-    pub fn remove_deleted_topic(&mut self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
-        let mut index = None;
-
-        for (idx, itm) in self.snapshot.deleted_topics.iter().enumerate() {
-            if itm.topic_id == topic_id {
-                index = Some(idx);
-                break;
-            }
-        }
-
-        if index.is_none() {
-            return None;
-        }
-
-        let index = index.unwrap();
-
-        let result = self.snapshot.deleted_topics[index].clone();
-
-        self.snapshot.deleted_topics.remove(index);
-
-        Some(result)
-    }
+    // TODO: soft-delete + GC flow is being reworked. See `TODO.md`.
+    // pub fn add_deleted_topic(
+    //     &mut self,
+    //     topic_id: &str,
+    //     message_id: MessageId,
+    //     gc_after: DateTimeAsMicroseconds,
+    // ) {
+    //     self.snapshot
+    //         .deleted_topics
+    //         .retain(|itm| itm.topic_id != topic_id);
+    //
+    //     let deleted_topic = DeletedTopicProtobufModel {
+    //         topic_id: topic_id.to_string(),
+    //         message_id: message_id.get_value(),
+    //         gc_after: gc_after.unix_microseconds,
+    //     };
+    //
+    //     self.snapshot.deleted_topics.push(deleted_topic);
+    // }
+    //
+    // pub fn remove_deleted_topic(&mut self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
+    //     let mut index = None;
+    //
+    //     for (idx, itm) in self.snapshot.deleted_topics.iter().enumerate() {
+    //         if itm.topic_id == topic_id {
+    //             index = Some(idx);
+    //             break;
+    //         }
+    //     }
+    //
+    //     if index.is_none() {
+    //         return None;
+    //     }
+    //
+    //     let index = index.unwrap();
+    //
+    //     let result = self.snapshot.deleted_topics[index].clone();
+    //
+    //     self.snapshot.deleted_topics.remove(index);
+    //
+    //     Some(result)
+    // }
 }
 
 pub struct CurrentTopicsSnapshot {
@@ -95,12 +94,12 @@ impl CurrentTopicsSnapshot {
     }
 
     pub async fn get(&self) -> TopicsSnapshotData {
-        let read_access = self.data.read().await;
+        let read_access = self.data.read();
         read_access.clone()
     }
 
     pub async fn get_topics_list(&self) -> Vec<String> {
-        let read_access = self.data.read().await;
+        let read_access = self.data.read();
         read_access
             .snapshot
             .data
@@ -110,49 +109,38 @@ impl CurrentTopicsSnapshot {
     }
 
     pub async fn update(&self, snapshot: Vec<TopicSnapshotProtobufModel>) {
-        let mut write_access = self.data.write().await;
+        let mut write_access = self.data.write();
         write_access.update(snapshot);
     }
 
-    pub async fn add_deleted_topic(
-        &self,
-        topic_id: &str,
-        message_id: MessageId,
-        gc_after: DateTimeAsMicroseconds,
-    ) {
-        let mut write_access = self.data.write().await;
-        write_access.add_deleted_topic(topic_id, message_id, gc_after);
-    }
-
-    pub async fn remove_deleted_topic(&self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
-        let mut write_access = self.data.write().await;
-        write_access.remove_deleted_topic(topic_id)
-    }
+    // TODO: soft-delete + GC flow is being reworked. See `TODO.md`.
+    // pub async fn add_deleted_topic(
+    //     &self,
+    //     topic_id: &str,
+    //     message_id: MessageId,
+    //     gc_after: DateTimeAsMicroseconds,
+    // ) {
+    //     let mut write_access = self.data.write();
+    //     write_access.add_deleted_topic(topic_id, message_id, gc_after);
+    // }
+    //
+    // pub async fn remove_deleted_topic(&self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
+    //     let mut write_access = self.data.write();
+    //     write_access.remove_deleted_topic(topic_id)
+    // }
 
     pub async fn update_snapshot_id_as_saved(&self, saved_id: i64) {
-        let mut write_access = self.data.write().await;
+        let mut write_access = self.data.write();
         write_access.update_snapshot_id(saved_id);
     }
 
     pub async fn get_snapshot_if_there_are_changes(&self) -> Option<TopicsSnapshotData> {
-        let read_access = self.data.read().await;
+        let read_access = self.data.read();
         if read_access.snapshot_id == read_access.last_saved_snapshot_id {
             return None;
         }
 
         return Some(read_access.clone());
-    }
-
-    pub async fn get_current_message_id(&self, topic_id: &str) -> Option<MessageId> {
-        let read_access = self.data.read().await;
-
-        for topic in &read_access.snapshot.data {
-            if topic.topic_id == topic_id {
-                return Some(topic.get_message_id());
-            }
-        }
-
-        None
     }
 
     pub async fn flush_topics_snapshot_to_blob(&self) {

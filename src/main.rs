@@ -23,9 +23,8 @@ use crate::{
     app::AppContext,
     settings::SettingsModel,
     timers::{
-        deleted_topics_gc::DeletedTopicsGcTimer, metrics_updater::MetricsUpdater,
-        pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
-        topics_snapshot_saver::TopicsSnapshotSaverTimer,
+        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer,
+        save_min_index::SaveMinIndexTimer, topics_snapshot_saver::TopicsSnapshotSaverTimer,
     },
 };
 #[allow(non_snake_case)]
@@ -64,12 +63,13 @@ async fn main() {
 
     timer_persist_queues.start(app.app_states.clone(), my_logger::LOGGER.clone());
 
-    let mut timer_30s = MyTimer::new(Duration::from_secs(30));
-    timer_30s.register_timer(
-        "DeletedTopicsGc",
-        Arc::new(DeletedTopicsGcTimer::new(app.clone())),
-    );
-    timer_30s.start(app.app_states.clone(), my_logger::LOGGER.clone());
+    // TODO: re-enable DeletedTopicsGc timer once soft-delete + GC flow is reimplemented (see TODO.md)
+    // let mut timer_30s = MyTimer::new(Duration::from_secs(30));
+    // timer_30s.register_timer(
+    //     "DeletedTopicsGc",
+    //     Arc::new(DeletedTopicsGcTimer::new(app.clone())),
+    // );
+    // timer_30s.start(app.app_states.clone(), my_logger::LOGGER.clone());
 
     let http_connections_counter = crate::http::start_up::setup_server(&app, 7123);
 

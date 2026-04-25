@@ -32,7 +32,7 @@ async fn gc_pages(
     topics: &Vec<TopicSnapshotProtobufModel>,
 ) -> Result<(), OperationError> {
     for topic_snapshot in topics {
-        let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str()).await;
+        let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str());
 
         if topic_data.is_none() {
             continue;
@@ -43,8 +43,7 @@ async fn gc_pages(
         if let Some(persist) = topic_snapshot.persist {
             if !persist {
                 app.topics_list
-                    .remove(topic_snapshot.topic_id.as_str())
-                    .await;
+                    .remove(topic_snapshot.topic_id.as_str());
                 continue;
             }
         }

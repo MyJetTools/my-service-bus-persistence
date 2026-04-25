@@ -137,14 +137,18 @@ impl AppContext {
         self.topics_and_queue_conn_string.clone()
     }
 
+    // TODO: used by hard_delete_topic when soft-delete + GC flow is reimplemented (see TODO.md)
+    #[allow(dead_code)]
     pub fn get_topics_conn(&self) -> Arc<AzureStorageConnection> {
         self.topics_and_queue_conn_string.clone()
     }
 
+    #[allow(dead_code)]
     pub fn get_messages_conn(&self) -> Arc<AzureStorageConnection> {
         self.messages_conn_string.clone()
     }
 
+    #[allow(dead_code)]
     pub fn get_archive_conn(&self) -> Arc<AzureStorageConnection> {
         self.archive_conn_string.clone()
     }

@@ -24,13 +24,14 @@ pub fn build(app: &Arc<AppContext>) -> ControllersMiddleware {
        ));
     */
     //Controller Topic
-    result.register_delete_action(Arc::new(
-        super::controllers::topic_controller::DeleteTopicAction::new(app.clone()),
-    ));
-
-    result.register_get_action(Arc::new(
-        super::controllers::topic_controller::GetDeletedTopicsAction::new(app.clone()),
-    ));
+    // TODO: re-enable with soft-delete + GC (see TODO.md)
+    // result.register_delete_action(Arc::new(
+    //     super::controllers::topic_controller::DeleteTopicAction::new(app.clone()),
+    // ));
+    //
+    // result.register_get_action(Arc::new(
+    //     super::controllers::topic_controller::GetDeletedTopicsAction::new(app.clone()),
+    // ));
 
     result.register_get_action(Arc::new(
         super::controllers::prometheus_controller::MetricsAction::new(app.clone()),

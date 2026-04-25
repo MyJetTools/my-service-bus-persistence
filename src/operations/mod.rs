@@ -2,14 +2,16 @@ mod archive_io;
 pub mod compressed_page_compiler;
 mod current_sub_pages_io;
 pub mod data_initializer;
-mod delete_topic;
+// TODO: re-enable once soft-delete + GC flow is reimplemented (see TODO.md)
+// mod delete_topic;
 mod error;
 mod gc_pages;
 
 mod get_message_by_id;
 mod get_messages_from_date;
 mod get_sub_page_to_read;
-mod hard_delete_topic;
+// TODO: re-enable with soft-delete + GC (see TODO.md)
+// mod hard_delete_topic;
 mod send_messages_to_channel;
 
 mod get_page_to_read;
@@ -20,10 +22,10 @@ mod init_new_topic;
 pub mod before_shut_down;
 mod new_messages;
 mod topics;
-pub use delete_topic::*;
+// pub use delete_topic::*;
 pub use error::*;
 pub use gc_pages::*;
-pub use hard_delete_topic::*;
+// pub use hard_delete_topic::*;
 
 pub use get_message_by_id::*;
 pub use get_messages_from_date::*;
@@ -35,5 +37,6 @@ pub use init_new_topic::*;
 pub use new_messages::*;
 pub use send_messages_to_channel::*;
 
-mod restore_topic;
-pub use restore_topic::*;
+// TODO: re-enable with soft-delete + GC (see TODO.md)
+// mod restore_topic;
+// pub use restore_topic::*;

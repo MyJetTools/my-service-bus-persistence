@@ -33,7 +33,7 @@ async fn restore_pages(app: &Arc<AppContext>) {
         let sw = StopWatch::new();
 
         for (topic_id, sub_page_inner) in sub_pages {
-            let topic_data = app.topics_list.init_topic_data(topic_id.as_str()).await;
+            let topic_data = app.topics_list.init_topic_data(topic_id.as_str());
 
             my_logger::LOGGER.write_info(
                 "Initialization".to_string(),

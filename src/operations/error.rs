@@ -43,14 +43,3 @@ impl From<AzureStorageError> for OperationError {
     }
 }
 
-//
-
-pub enum RestorePageError {
-    AzureStorageError(AzureStorageError),
-}
-
-impl From<AzureStorageError> for RestorePageError {
-    fn from(src: AzureStorageError) -> Self {
-        Self::AzureStorageError(src)
-    }
-}

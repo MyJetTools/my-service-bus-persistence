@@ -1,7 +1,6 @@
-use std::collections::{HashMap, HashSet};
-
+use ahash::{AHashMap, AHashSet};
 use prometheus::{Encoder, IntGauge, Registry, TextEncoder};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
 use super::GaugeByTopic;
 
@@ -14,7 +13,7 @@ pub struct PrometheusMetrics {
     registry: Registry,
     topic_persist_queue_size: GaugeByTopic,
     cached_messages_size: GaugeByTopic,
-    active_topics: Mutex<HashSet<String>>,
+    active_topics: Mutex<AHashSet<String>>,
     http_connections_amount: IntGauge,
 }
 
@@ -40,17 +39,17 @@ impl PrometheusMetrics {
             registry,
             topic_persist_queue_size,
             cached_messages_size,
-            active_topics: Mutex::new(HashSet::new()),
+            active_topics: Mutex::new(AHashSet::new()),
             http_connections_amount,
         };
     }
     pub async fn update(
         &self,
-        mut update_data: HashMap<&str, PrometheusMetricsToUpdate>,
+        mut update_data: AHashMap<&str, PrometheusMetricsToUpdate>,
         http_connections_amount: i64,
     ) {
         self.http_connections_amount.set(http_connections_amount);
-        let mut active_topics = self.active_topics.lock().await;
+        let mut active_topics = self.active_topics.lock();
 
         for active_topic_id in active_topics.iter() {
             match update_data.remove(active_topic_id.as_str()) {

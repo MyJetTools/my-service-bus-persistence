@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
 use my_azure_storage_sdk::page_blob::MyAzurePageBlobStorage;
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
 use super::{
     consts::{CALCULATED_TOC_PAGES_AMOUNT, TOC_SIZE},
@@ -29,12 +29,12 @@ impl ArchiveStorageList {
         }
     }
 
-    async fn get_existing(
+    fn get_existing(
         &self,
         topic_id: &str,
         archive_file_no: ArchiveFileNo,
     ) -> Option<Arc<ArchiveStorage>> {
-        let read_access = self.items.lock().await;
+        let read_access = self.items.lock();
 
         if let Some(archive_storages) = read_access.get(topic_id) {
             if let Some(archive_storage) = archive_storages.get(&archive_file_no.get_value()) {
@@ -45,13 +45,13 @@ impl ArchiveStorageList {
         None
     }
 
-    async fn insert(
+    fn insert(
         &self,
         topic_id: &str,
         archive_file_no: ArchiveFileNo,
         storage: Arc<ArchiveStorage>,
     ) {
-        let mut write_access = self.items.lock().await;
+        let mut write_access = self.items.lock();
 
         if !write_access.contains_key(topic_id) {
             write_access.insert(topic_id.to_string(), BTreeMap::new());
@@ -68,7 +68,7 @@ impl ArchiveStorageList {
         topic_id: &str,
         page_blob_creator: &impl ArchivePageBlobCreator,
     ) -> Arc<ArchiveStorage> {
-        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no).await {
+        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no) {
             return page_blob;
         }
 
@@ -90,8 +90,7 @@ impl ArchiveStorageList {
 
         let archive_storage = Arc::new(archive_storage);
 
-        self.insert(topic_id, archive_file_no, archive_storage.clone())
-            .await;
+        self.insert(topic_id, archive_file_no, archive_storage.clone());
 
         archive_storage
     }
@@ -102,7 +101,7 @@ impl ArchiveStorageList {
         topic_id: &str,
         page_blob_creator: &impl ArchivePageBlobCreator,
     ) -> Option<Arc<ArchiveStorage>> {
-        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no).await {
+        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no) {
             return Some(page_blob);
         }
 
@@ -127,8 +126,7 @@ impl ArchiveStorageList {
 
         let archive_storage = Arc::new(archive_storage);
 
-        self.insert(topic_id, archive_file_no, archive_storage.clone())
-            .await;
+        self.insert(topic_id, archive_file_no, archive_storage.clone());
 
         Some(archive_storage)
     }
