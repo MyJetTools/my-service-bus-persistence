@@ -27,6 +27,7 @@ message TopicAndQueuesSnapshotGrpcModel {
   int64 MessageId = 2;
   repeated persistence.QueueSnapshotGrpcModel QueueSnapshots = 3;
   optional bool Persist = 4;
+  int64 Deleted = 5;
 }
 
 
@@ -39,7 +40,7 @@ message GetHistoryByDateGrpcRequest {
 
 message SaveMessagesGrpcRequest{
   string TopicId = 1;
-  repeated MessageContentGrpcModel Messages = 2; 
+  repeated MessageContentGrpcModel Messages = 2;
 }
 
 message MessageContentGrpcModel {
@@ -90,24 +91,13 @@ message GetVersionGrpcResponse{
   string Version = 1;
 }
 
-message DeleteTopicGrpcRequest {
+message HardDeleteTopicGrpcRequest {
   string TopicId = 1;
-  int64 DeleteAfter = 2;
 }
 
 message GetSubPageGrpcRequest{
   string TopicId = 1;
   int64 SubPageNo = 2;
-}
-
-
-message RestoreTopicGrpcRequest{
-  string TopicId = 1;
-}
-
-message RestoreTopicGrpcResponse{
-  bool Result = 1;
-  int64 MessageId = 2;
 }
 
 service MyServiceBusMessagesPersistenceGrpcService {
@@ -123,8 +113,6 @@ service MyServiceBusMessagesPersistenceGrpcService {
    rpc GetPage(GetPageGrpcRequest) returns (stream MessageContentGrpcModel);
    rpc GetSubPage(GetSubPageGrpcRequest) returns (stream MessageContentGrpcModel);
    rpc SaveMessages(stream SaveMessagesGrpcRequest) returns (google.protobuf.Empty);
-   rpc DeleteTopic(DeleteTopicGrpcRequest) returns (google.protobuf.Empty);
-   rpc RestoreTopic(RestoreTopicGrpcRequest) returns (RestoreTopicGrpcResponse);
+   rpc HardDeleteTopic(HardDeleteTopicGrpcRequest) returns (google.protobuf.Empty);
    rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
-

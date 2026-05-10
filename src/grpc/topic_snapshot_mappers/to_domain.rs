@@ -23,6 +23,7 @@ impl From<TopicAndQueuesSnapshotGrpcModel> for TopicSnapshotProtobufModel {
             value.message_id.as_message_id(),
             queues,
             value.persist,
+            value.deleted,
         )
     }
 }

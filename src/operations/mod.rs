@@ -10,8 +10,8 @@ mod gc_pages;
 mod get_message_by_id;
 mod get_messages_from_date;
 mod get_sub_page_to_read;
-// TODO: re-enable with soft-delete + GC (see TODO.md)
-// mod hard_delete_topic;
+mod hard_delete_topic;
+pub use hard_delete_topic::*;
 mod send_messages_to_channel;
 
 mod get_page_to_read;

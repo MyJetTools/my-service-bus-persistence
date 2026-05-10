@@ -13,6 +13,7 @@ impl From<TopicSnapshotProtobufModel> for TopicAndQueuesSnapshotGrpcModel {
             message_id,
             queue_snapshots: value.queues.into_iter().map(|itm| itm.into()).collect(),
             persist: value.persist,
+            deleted: value.deleted,
         }
     }
 }

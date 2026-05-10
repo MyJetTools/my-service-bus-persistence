@@ -212,24 +212,19 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         Ok(tonic::Response::new(()))
     }
 
-    // TODO: soft-delete + GC flow is being reworked, see TODO.md.
-    async fn delete_topic(
+    async fn hard_delete_topic(
         &self,
-        _request: tonic::Request<DeleteTopicGrpcRequest>,
+        request: tonic::Request<HardDeleteTopicGrpcRequest>,
     ) -> Result<tonic::Response<()>, tonic::Status> {
-        Err(tonic::Status::unimplemented(
-            "delete_topic is temporarily disabled while soft-delete + GC flow is being reworked",
-        ))
-    }
+        contracts::check_flags(self.app.as_ref())?;
 
-    // TODO: soft-delete + GC flow is being reworked, see TODO.md.
-    async fn restore_topic(
-        &self,
-        _request: tonic::Request<RestoreTopicGrpcRequest>,
-    ) -> Result<tonic::Response<RestoreTopicGrpcResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented(
-            "restore_topic is temporarily disabled while soft-delete + GC flow is being reworked",
-        ))
+        let req = request.into_inner();
+
+        crate::operations::hard_delete_topic(self.app.as_ref(), req.topic_id.as_str())
+            .await
+            .map_err(|err| tonic::Status::internal(format!("hard_delete_topic failed: {:?}", err)))?;
+
+        Ok(tonic::Response::new(()))
     }
 
     generate_server_stream!(stream_name:"GetHistoryByDateStream", item_name:"MessageContentGrpcModel");

@@ -30,6 +30,9 @@ pub struct TopicSnapshotProtobufModel {
 
     #[prost(bool, optional, tag = "5")]
     pub persist: Option<bool>,
+
+    #[prost(int64, tag = "6")]
+    pub deleted: i64,
 }
 
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -48,6 +51,7 @@ impl TopicSnapshotProtobufModel {
         message_id: MessageId,
         queues: Vec<QueueSnapshotProtobufModel>,
         persist: Option<bool>,
+        deleted: i64,
     ) -> Self {
         Self {
             topic_id,
@@ -55,6 +59,7 @@ impl TopicSnapshotProtobufModel {
             not_used: 0,
             queues,
             persist,
+            deleted,
         }
     }
     pub fn get_message_id(&self) -> MessageId {
