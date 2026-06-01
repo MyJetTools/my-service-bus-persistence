@@ -51,6 +51,8 @@ impl PrometheusMetrics {
         self.http_connections_amount.set(http_connections_amount);
         let mut active_topics = self.active_topics.lock();
 
+        let mut topics_to_remove = Vec::new();
+
         for active_topic_id in active_topics.iter() {
             match update_data.remove(active_topic_id.as_str()) {
                 Some(metrics) => {
@@ -66,8 +68,14 @@ impl PrometheusMetrics {
 
                     self.cached_messages_size
                         .remove_topic(active_topic_id.as_str());
+
+                    topics_to_remove.push(active_topic_id.clone());
                 }
             }
+        }
+
+        for topic_id in topics_to_remove {
+            active_topics.remove(&topic_id);
         }
 
         for (topic_id, metrics) in update_data {
