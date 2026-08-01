@@ -105,15 +105,32 @@ impl TopicsDataList {
         topic_data
     }
 
+    /// Rebuilt without the removed topic rather than rebuilt-then-removed, and that is not a
+    /// stylistic choice.
+    ///
+    /// `SortedVecOfArcWith2StrKey::remove` takes the row out of its namespace partition but leaves
+    /// the partition behind, empty. `PartitionOfArc::get_key` is `rows.get(0).unwrap()`, so the
+    /// next lookup of *any* topic panics on it - deleting the last topic of a namespace would
+    /// otherwise take the whole service down. Building the copy without the item never creates an
+    /// empty partition, because a partition only comes into existence when something is inserted
+    /// into it.
     pub fn remove(&self, topic_key: TopicKeyRef<'_>) {
         let _guard = self.write_lock.lock().unwrap();
         let current = self.inner.load_full();
 
-        let mut new_data = copy_of(&current.data);
-        if new_data
-            .remove(topic_key.namespace, topic_key.topic_id)
-            .is_none()
-        {
+        let mut new_data = SortedVecOfArcWith2StrKey::new();
+        let mut removed = false;
+
+        for topic_data in current.data.iter() {
+            if topic_data.get_topic_key() == topic_key {
+                removed = true;
+                continue;
+            }
+
+            new_data.insert_or_replace(topic_data.clone());
+        }
+
+        if !removed {
             return;
         }
 
@@ -137,4 +154,57 @@ impl TopicsDataList {
     //
     //     Some(removed)
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Removing the last topic of a namespace must leave the list usable. It used not to: the
+    /// namespace partition survived empty and the next lookup panicked inside rust-extensions.
+    #[test]
+    fn removing_the_last_topic_of_a_namespace_does_not_brick_the_list() {
+        let list = TopicsDataList::new();
+
+        list.create_topic_data(TopicKeyRef::new("default", "orders"));
+        list.create_topic_data(TopicKeyRef::new("alpha", "orders"));
+
+        list.remove(TopicKeyRef::new("alpha", "orders"));
+
+        // The lookup that used to panic
+        assert!(list.get(TopicKeyRef::new("default", "orders")).is_some());
+        assert!(list.get(TopicKeyRef::new("alpha", "orders")).is_none());
+        assert!(list.get(TopicKeyRef::new("beta", "whatever")).is_none());
+        assert_eq!(1, list.get_all().len());
+
+        // and the namespace can come back
+        list.create_topic_data(TopicKeyRef::new("alpha", "orders"));
+        assert!(list.get(TopicKeyRef::new("alpha", "orders")).is_some());
+        assert_eq!(2, list.get_all().len());
+    }
+
+    #[test]
+    fn removing_one_of_several_leaves_the_rest() {
+        let list = TopicsDataList::new();
+
+        list.create_topic_data(TopicKeyRef::new("default", "a"));
+        list.create_topic_data(TopicKeyRef::new("default", "b"));
+
+        list.remove(TopicKeyRef::new("default", "a"));
+
+        assert!(list.get(TopicKeyRef::new("default", "a")).is_none());
+        assert!(list.get(TopicKeyRef::new("default", "b")).is_some());
+        assert_eq!(1, list.get_all().len());
+    }
+
+    #[test]
+    fn removing_something_that_is_not_there_changes_nothing() {
+        let list = TopicsDataList::new();
+        list.create_topic_data(TopicKeyRef::new("default", "a"));
+
+        list.remove(TopicKeyRef::new("default", "nope"));
+        list.remove(TopicKeyRef::new("nope", "a"));
+
+        assert_eq!(1, list.get_all().len());
+    }
 }

@@ -32,6 +32,10 @@ pub async fn restore_sub_page(
     topic_data: &TopicData,
     sub_page_id: SubPageId,
 ) -> Result<SubPage, RestoreSubPageError> {
+    // Held across the open AND the read: the background archiver takes it exclusively before it
+    // deletes a local file, so nothing can vanish between the two.
+    let _guard = app.archive_locks.read(topic_data.get_topic_key()).await;
+
     // The app-wide list, the same one `save_sub_page` writes through: a second cache would hand
     // out a second `FileStorage` for the same file, and two independent `seek(End) + write` pairs
     // can interleave into one offset.
@@ -63,6 +67,8 @@ pub async fn restore_sub_page(
 pub async fn save_sub_page(app: &AppContext, topic_data: &TopicData, sub_page: &SubPage) {
     let sub_page_id = sub_page.get_id();
     if let Some(zip_payload) = sub_page.to_compressed_payload().await {
+        let _guard = app.archive_locks.read(topic_data.get_topic_key()).await;
+
         let storage = app
             .archive_storage_list
             .get_or_create(sub_page_id.into(), topic_data.get_topic_key(), app)

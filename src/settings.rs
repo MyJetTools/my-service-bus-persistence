@@ -7,16 +7,25 @@ use tokio::{fs::File, io::AsyncReadExt};
 /// used, so there is no new convention to learn:
 ///
 /// ```text
-/// s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=...;SecretKey=...;Bucket=my-sb-persistence"
+/// s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=...;SecretKey=...;Bucket=my-sb"
 /// ```
 ///
-/// Leave it out and nothing is ever uploaded - every file stays on the local disk forever.
+/// There is one bucket per namespace. `Bucket` is an optional prefix for their names - see
+/// `ColdStorage`. Leave the whole setting out and nothing is ever uploaded: every file stays on
+/// the local disk forever.
 #[derive(Debug, Clone)]
 pub struct S3ConnectionSettings {
     pub endpoint: String,
     pub region: String,
     pub access_key: String,
     pub secret_key: String,
+    /// Prefix of the per-namespace buckets: the bucket of a namespace is `{bucket}-{namespace}`.
+    ///
+    /// Required, because a bucket name is not yours to pick freely: on AWS it is unique across the
+    /// whole partition, and on Hetzner "unique amongst all Hetzner Object Storage users and across
+    /// all locations". A bare `default` or `alpha` belongs to somebody else; the prefix is what
+    /// makes the name yours. Pick something stable you own - never generate it, or a restart would
+    /// orphan every bucket.
     pub bucket: String,
 }
 

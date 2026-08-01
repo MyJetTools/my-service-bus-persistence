@@ -50,6 +50,8 @@ enum ArchiveSource {
 
 struct ColdArchive {
     cold_storage: Arc<ColdStorage>,
+    /// Which bucket - one per namespace.
+    namespace: String,
     key: String,
     toc: Mutex<Option<Arc<Vec<u8>>>>,
 }
@@ -92,12 +94,14 @@ impl ArchiveStorage {
     pub fn open_cold(
         archive_file_no: ArchiveFileNo,
         cold_storage: Arc<ColdStorage>,
+        namespace: String,
         key: String,
     ) -> Self {
         Self {
             archive_file_no,
             source: ArchiveSource::Cold(ColdArchive {
                 cold_storage,
+                namespace,
                 key,
                 toc: Mutex::new(None),
             }),
@@ -208,7 +212,7 @@ impl ColdArchive {
 
     async fn read_range(&self, from: u64, to: u64) -> Result<Vec<u8>, ArchiveStorageError> {
         self.cold_storage
-            .download_range(self.key.as_str(), from, to)
+            .download_range(self.namespace.as_str(), self.key.as_str(), from, to)
             .await
             .map_err(ArchiveStorageError::ColdStorageError)
     }
@@ -410,13 +414,18 @@ mod tests {
             bucket: "sb".to_string(),
         }));
 
-        let key = "default/orders/0000000000000000000.archive".to_string();
+        let key = "orders/0000000000000000000.archive".to_string();
         cold_storage
-            .upload(key.as_str(), std::fs::read(&path).unwrap())
+            .upload("default", key.as_str(), std::fs::read(&path).unwrap())
             .await
             .unwrap();
 
-        let cold = ArchiveStorage::open_cold(ArchiveFileNo::new(0), cold_storage, key);
+        let cold = ArchiveStorage::open_cold(
+            ArchiveFileNo::new(0),
+            cold_storage,
+            "default".to_string(),
+            key,
+        );
 
         assert_eq!(
             vec![11u8; 40],

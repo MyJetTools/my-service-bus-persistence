@@ -36,6 +36,9 @@ async fn read(
 
     let archive_file_no = sub_page_id.into();
 
+    // See `archive_io::restore_sub_page` - the guard spans the open and the read.
+    let _guard = app.archive_locks.read(topic_key).await;
+
     let archive_storage = app
         .archive_storage_list
         .try_get_or_open(archive_file_no, topic_key, app)

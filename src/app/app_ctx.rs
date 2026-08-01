@@ -9,12 +9,12 @@ use crate::{
     index_by_minute::{IndexByMinuteUtils, YearlyIndexByMinute},
     settings::SettingsModel,
     topic_data::TopicsDataList,
-    topic_key::TopicKeyRef,
+    topic_key::{TopicKeyRef, DEFAULT_NAMESPACE},
     topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     typing::Year,
 };
 
-use super::{storage_layout, PrometheusMetrics};
+use super::{storage_layout, PrometheusMetrics, StorageLocks};
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -30,6 +30,13 @@ pub struct AppContext {
 
     pub archive_storage_list: ArchiveStorageList,
 
+    /// Held while an archive is read or uploaded; taken exclusively to delete it. See
+    /// [`StorageLocks`] - this is what keeps the background archiver from pulling a file out from
+    /// under a reader.
+    pub archive_locks: StorageLocks,
+    /// The same, for the per-year minute index.
+    pub index_locks: StorageLocks,
+
     /// `None` when no S3 section is configured - then nothing is ever uploaded and every file
     /// stays local forever.
     cold_storage: Option<Arc<ColdStorage>>,
@@ -40,6 +47,16 @@ impl AppContext {
         let cold_storage = settings
             .get_s3_connection()
             .map(|s3| Arc::new(ColdStorage::new(&s3)));
+
+        // Doubles as the connectivity check: a wrong endpoint, region or key pair fails here
+        // rather than silently at the first upload hours later. Other namespaces get their bucket
+        // on first touch.
+        if let Some(cold_storage) = cold_storage.as_ref() {
+            cold_storage
+                .ensure_bucket(DEFAULT_NAMESPACE)
+                .await
+                .unwrap_or_else(|err| panic!("Can not reach the cold storage: {}", err));
+        }
 
         let topics_snapshot = CurrentTopicsSnapshot::read_or_create(settings.data.clone()).await;
 
@@ -52,6 +69,8 @@ impl AppContext {
             index_by_minute_utils: IndexByMinuteUtils::new(),
             app_states: Arc::new(AppStates::create_un_initialized()),
             archive_storage_list: ArchiveStorageList::new(),
+            archive_locks: StorageLocks::new(),
+            index_locks: StorageLocks::new(),
             cold_storage,
         }
     }
@@ -138,10 +157,10 @@ impl AppContext {
             return;
         }
 
-        let key = storage_layout::get_year_index_relative_path(topic_key, year);
+        let key = storage_layout::get_year_index_cold_key(topic_key, year);
 
         let content = cold_storage
-            .download(key.as_str())
+            .download(topic_key.namespace, key.as_str())
             .await
             .unwrap_or_else(|err| panic!("Can not read {} from the cold storage: {}", key, err));
 
@@ -195,14 +214,13 @@ impl ArchiveFileOpener for AppContext {
         // Not on disk - it may have been sealed and uploaded. Reads then go over ranged GETs.
         let cold_storage = self.get_cold_storage()?;
 
+        let cold_key = storage_layout::get_archive_cold_key(topic_key, archive_file_no);
+
         let exists = cold_storage
-            .exists(relative_path.as_str())
+            .exists(topic_key.namespace, cold_key.as_str())
             .await
             .unwrap_or_else(|err| {
-                panic!(
-                    "Can not check {} in the cold storage: {}",
-                    relative_path, err
-                )
+                panic!("Can not check {} in the cold storage: {}", cold_key, err)
             });
 
         if !exists {
@@ -212,7 +230,8 @@ impl ArchiveFileOpener for AppContext {
         Some(ArchiveStorage::open_cold(
             archive_file_no,
             cold_storage.clone(),
-            relative_path,
+            topic_key.namespace.to_string(),
+            cold_key,
         ))
     }
 }

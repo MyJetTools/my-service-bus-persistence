@@ -162,6 +162,35 @@ A second pass over the migration, snapshot and settings code produced 14 finding
 Both migration bugs were found by *running* the service, not by the tests: each function behaved
 correctly on its own and only their composition was wrong.
 
+### The archiver's locking
+
+`StorageLocks` holds one `tokio::sync::RwLock` per topic, one set for archives and one for year
+indexes. The background archiver uses them in two phases:
+
+1. **read** lock while the file is read and uploaded - the slow part, and readers pass through it
+   freely since the file is still on disk and unchanged;
+2. **write** lock to delete the local copy and drop the cached handle - it waits out every reader,
+   so nothing is left holding a handle to a file that is about to disappear.
+
+Hard delete takes both exclusively, since the whole topic folder goes.
+
+`tokio::sync::RwLock` rather than `parking_lot` on purpose: the guard spans the upload and the
+ranged read, both of which are awaits. No path takes the same lock twice, which matters because
+tokio's RwLock is write-preferring and a re-entrant read behind a queued writer would deadlock.
+
+### Upstream: `SortedVecOfArcWith2StrKey::remove` leaves an empty partition
+
+`rust-extensions`' `PartitionOfArc::get_key` is `rows.get(0).unwrap()`, and `remove(primary,
+secondary)` takes the row out without dropping a partition that just became empty. The next lookup
+of *any* key then panics inside the binary search. Deleting the last topic of a namespace took the
+whole service down until `TopicsDataList::remove` was changed to rebuild without the item instead
+of rebuilding-then-removing - a partition only exists once something is inserted into it, so the
+empty one is never created. Worth fixing in the crate; anything else using that container has the
+same landmine.
+
+Found by hard-deleting a topic on a running process. Neither audit saw it - it lives in a
+dependency - and no unit test removed the last topic of a namespace.
+
 ### Still open
 
 - **`active`: dump on shutdown, or an append-only journal?** It is still a dump,
@@ -172,6 +201,8 @@ correctly on its own and only their composition was wrong.
   file the tail could be appended to as messages arrive, shrinking the loss window
   to the last fsync and removing the shutdown path entirely. It changes the file
   format, so it is a deliberate decision rather than a refactor.
+- **`my-s3`: `BucketAlreadyOwnedByYou`** is not modelled, so a restart against your own bucket
+  arrives as `Other` and has to be matched by string in `cold_storage::already_ours`.
 - **`my-s3`: a typed `KeyNotFound`** instead of `Other("Status Code: 404...")`, which
   `cold_storage::is_not_found` has to match by string today. `If-Match` on PUT is not
   needed while a topic has a single writer, and listing is not needed at all.

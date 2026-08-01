@@ -60,7 +60,10 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
   `(namespace, topic_id)` onto a path / S3 key), Prometheus metrics.
 - `file_storage/` — random-access file (`read`/`write` at offset, `append`, `read_all`/`write_all`). Reads past EOF
   come back zero-filled, which is what the offset-addressed TOC and year index rely on.
-- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete.
+- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete. **One bucket
+  per namespace** (`{Bucket}-{namespace}`, where `Bucket` from `s3_conn_string` is a prefix), so the
+  key inside it is `{topic}/{file}` — the namespace is the bucket, not part of the key. Buckets are
+  created on first touch and remembered.
 - `topic_key/` — `Namespace` (validated `[a-z0-9-]`, 1..=63, no leading `-`), `TopicKey` / `TopicKeyRef`.
 - `grpc/` — tonic service impl (`persistence_grpc_service.rs`), server bootstrap, request/response mappers and contracts.
 - `http/` — `my-http-server` controllers (api/home/logs/prometheus/read/topic), builder, start_up.
@@ -93,7 +96,7 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
             {:019}.archive      .{year}.yearindex      active
 ```
 
-`{namespace}/{topic}/...` is the S3 key verbatim. `default` is not special — it has its own folder, and pre-namespace
+Locally the namespace is a folder; in the cold tier it is the bucket. `default` is not special — it has its own folder, and pre-namespace
 data sitting at the root is renamed into `default/` on first start (`operations::migrate_legacy_layout`), guarded by
 `.layout-version` — its *absence* is the marker, because before namespaces every folder at the root was a topic.
 A second marker, `.layout-migrating`, makes an interrupted run resumable: without it a resumed migration can not

@@ -148,10 +148,9 @@ impl LegacyMigration {
     ) {
         let from = PathBuf::from(legacy_folder).join(topic_id).join(file_name);
 
-        let key = storage_layout::get_relative_path(
-            TopicKeyRef::new(DEFAULT_NAMESPACE, topic_id),
-            file_name,
-        );
+        let topic_key = TopicKeyRef::new(DEFAULT_NAMESPACE, topic_id);
+        // Everything legacy belongs to `default`, so it lands in the `default` bucket.
+        let key = storage_layout::get_cold_key(topic_key, file_name);
 
         let content = match tokio::fs::read(from.as_path()).await {
             Ok(content) => content,
@@ -163,7 +162,10 @@ impl LegacyMigration {
             }
         };
 
-        if let Err(err) = cold_storage.upload(key.as_str(), content).await {
+        if let Err(err) = cold_storage
+            .upload(topic_key.namespace, key.as_str(), content)
+            .await
+        {
             panic!("Can not upload {} to the cold storage: {}", key, err);
         }
 

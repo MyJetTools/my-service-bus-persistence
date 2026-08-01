@@ -4,7 +4,7 @@ use my_logger::LogEventCtx;
 use rust_extensions::{MyTimerTick, RepeatTimerIteration};
 
 use crate::{
-    app::{storage_layout, AppContext},
+    app::{storage_layout, AppContext, StorageLocks},
     archive_storage::ArchiveFileNo,
     file_storage::{delete_file_if_exists, FileStorage},
     topic_key::{TopicKey, TopicKeyRef},
@@ -98,19 +98,25 @@ async fn upload_sealed_files(app: &AppContext, topic_folder: &TopicFolder) {
     }
 
     for (archive_file_no, file_name) in take_all_but_the_highest(archives) {
-        if upload_and_drop(app, topic_folder, file_name.as_str()).await {
-            // The cached handle points at a file that is gone now - the next read has to reopen
-            // it against the cold tier. Only this one: the handle of the archive still being
-            // written must survive, see `ArchiveStorageList::forget_archive`.
-            app.archive_storage_list.forget_archive(
-                topic_folder.get_topic_key(),
-                ArchiveFileNo::new(archive_file_no),
-            );
-        }
+        upload_and_drop(
+            app,
+            topic_folder,
+            file_name.as_str(),
+            &app.archive_locks,
+            Some(ArchiveFileNo::new(archive_file_no)),
+        )
+        .await;
     }
 
     for (_, file_name) in take_all_but_the_highest(year_indexes) {
-        upload_and_drop(app, topic_folder, file_name.as_str()).await;
+        upload_and_drop(
+            app,
+            topic_folder,
+            file_name.as_str(),
+            &app.index_locks,
+            None,
+        )
+        .await;
     }
 }
 
@@ -128,53 +134,83 @@ fn take_all_but_the_highest<TOrder: Ord>(
     items
 }
 
-/// Upload, then delete locally - and only in that order, so a crash in between costs a repeated
-/// upload rather than the file. Uploading the same file twice is idempotent.
-async fn upload_and_drop(app: &AppContext, topic_folder: &TopicFolder, file_name: &str) -> bool {
+/// The two-lock pattern, and the reason this is not just "upload then delete":
+///
+/// 1. the **read** lock is held while the file is read and uploaded. That is the slow part, and
+///    readers pass through it freely - the file is still on disk and unchanged;
+/// 2. the lock is released and the **write** lock taken to delete the local copy and drop the
+///    cached handle. It waits out every reader, so nothing is left holding a handle to a file
+///    that is about to disappear.
+///
+/// Upload strictly before delete, so a crash in between costs a repeated upload - which is
+/// idempotent - rather than the file.
+async fn upload_and_drop(
+    app: &AppContext,
+    topic_folder: &TopicFolder,
+    file_name: &str,
+    locks: &StorageLocks,
+    archive_file_no: Option<ArchiveFileNo>,
+) {
     let Some(cold_storage) = app.get_cold_storage() else {
-        return false;
+        return;
     };
 
-    let key = storage_layout::get_relative_path(topic_folder.get_topic_key(), file_name);
+    let topic_key = topic_folder.get_topic_key();
+    // The namespace is the bucket, so the key is what is left of the path.
+    let key = storage_layout::get_cold_key(topic_key, file_name);
 
     let mut path = topic_folder.path.clone();
     path.push(file_name);
 
-    let file = match FileStorage::open_if_exists(&path).await {
-        Ok(Some(file)) => file,
-        Ok(None) => return false,
-        Err(err) => {
-            write_error(&key, format!("Can not open the file. Err: {}", err));
-            return false;
-        }
-    };
+    // Phase 1 - shared: read and upload while everyone else keeps reading.
+    {
+        let _guard = locks.read(topic_key).await;
 
-    let content = match file.read_all().await {
-        Ok(content) => content,
-        Err(err) => {
-            write_error(&key, format!("Can not read the file. Err: {}", err));
-            return false;
-        }
-    };
+        let file = match FileStorage::open_if_exists(&path).await {
+            Ok(Some(file)) => file,
+            Ok(None) => return,
+            Err(err) => {
+                write_error(&key, format!("Can not open the file. Err: {}", err));
+                return;
+            }
+        };
 
-    if let Err(err) = cold_storage.upload(key.as_str(), content).await {
-        write_error(&key, format!("Can not upload. Err: {}", err));
-        return false;
+        let content = match file.read_all().await {
+            Ok(content) => content,
+            Err(err) => {
+                write_error(&key, format!("Can not read the file. Err: {}", err));
+                return;
+            }
+        };
+
+        if let Err(err) = cold_storage
+            .upload(topic_key.namespace, key.as_str(), content)
+            .await
+        {
+            write_error(&key, format!("Can not upload. Err: {}", err));
+            return;
+        }
     }
 
-    drop(file);
+    // Phase 2 - exclusive: nothing is mid-read, so the local copy can go.
+    let _guard = locks.write(topic_key).await;
 
     if let Err(err) = delete_file_if_exists(&path).await {
         write_error(
             &key,
             format!("Uploaded, but can not delete the local copy. Err: {}", err),
         );
-        return false;
+        return;
+    }
+
+    // The cached handle points at a file that is gone - the next read reopens it against the cold
+    // tier. Only this one: the handle of the archive still being written must survive.
+    if let Some(archive_file_no) = archive_file_no {
+        app.archive_storage_list
+            .forget_archive(topic_key, archive_file_no);
     }
 
     println!("Moved {} to the cold storage", key);
-
-    true
 }
 
 fn write_error(key: &str, message: String) {

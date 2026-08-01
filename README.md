@@ -38,7 +38,8 @@ delete_topic_secret_key: "some-shared-secret"
 # listen_unix_socket: "/tmp/my-sb-persistence.sock"
 
 # Optional cold tier. Omit it and everything stays on the local disk forever.
-# s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKIA...;SecretKey=...;Bucket=my-sb-persistence"
+# Bucket is a PREFIX: each namespace gets its own bucket, {Bucket}-{namespace}.
+# s3_conn_string: "Endpoint=https://fsn1.your-objectstorage.com;Region=fsn1;AccessKey=...;SecretKey=...;Bucket=myjet-sbp"
 
 # Only for the first start after upgrading from the three-folder layout. Remove it afterwards.
 # legacy:
@@ -65,10 +66,57 @@ Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKI
 | `Region`    | Region used for the SigV4 signature.                            |
 | `AccessKey` | Access key id.                                                  |
 | `SecretKey` | Secret access key. Only the **first** `=` separates, so a base64 secret with its own `=` is fine. |
-| `Bucket`    | Bucket that holds the cold tier.                                |
+| `Bucket`    | **Prefix** of the per-namespace buckets — see below.            |
 
 All five are required; a missing or misspelled key fails at startup
 rather than silently disabling the cold tier.
+
+### One bucket per namespace
+
+Each namespace gets its own bucket, named `{Bucket}-{namespace}`. A
+namespace is a separate product, so the separation goes all the way
+down: its own bucket means its own access keys, lifecycle rules,
+storage class and line on the invoice, and retiring a product is
+deleting a bucket.
+
+The namespace is therefore **not** part of the key — it *is* the bucket:
+
+```
+local   {data}/alpha/orders/0000000000000000000.archive
+cold    bucket a1vrrew3-alpha, key orders/0000000000000000000.archive
+```
+
+`Bucket` is a prefix, and not decoration: a bucket name is unique across
+*every customer of the provider* — AWS partition-wide, and on Hetzner
+"unique amongst all Hetzner Object Storage users and across all
+locations" — so a bare `default` or `alpha` already belongs to somebody
+else. The prefix is what makes the name yours.
+
+Pick it once and keep it in the config — never generate it at runtime,
+or a restart would create fresh empty buckets and orphan the old ones.
+Something you own reads best (`myjet-sbp`); a random string works too,
+as long as it is written down.
+
+Two consequences worth knowing:
+
+- **Account-wide bucket limits apply** — 100 on Hetzner, 100 (raisable)
+  on AWS. One bucket per namespace means roughly that many namespaces.
+- **A bucket cannot be renamed.** Moving a namespace to another
+  persistence server costs nothing if that server uses the same prefix;
+  otherwise it is a server-side copy into a new bucket.
+
+Name rules, checked before the bucket is created: 3–63 characters,
+lowercase letters, digits and hyphens, first and last character
+alphanumeric. Note that a namespace *may* end with a hyphen while a
+bucket may not, so that combination fails loudly rather than at the
+first upload.
+
+A bucket is created on first use of its namespace and the fact is
+remembered, so it is one call per namespace per process; an existing
+bucket of your own is not an error. The `default` bucket is created at
+startup, which doubles as the connectivity check — a wrong endpoint,
+region or key pair fails immediately instead of hours later on the
+first upload.
 
 ### 4. Build & run
 
@@ -176,8 +224,9 @@ service directly from application code.
             active                the open tail - the sub page still being filled
 ```
 
-`{namespace}/{topic}/...` doubles as the **S3 key**, so a file and its
-cold copy are addressed by the same string.
+In the cold tier the namespace becomes the **bucket**, so the key is
+what is left of the path: `{topic}/{file}`. See the settings section
+above.
 
 `default` is not special — it gets its own folder like any other
 namespace. Data written before namespaces existed sits directly at the

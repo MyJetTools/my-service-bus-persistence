@@ -18,6 +18,7 @@ use tokio::{
 pub struct FakeS3State {
     /// Whatever path the client actually asked for, exactly as it arrived.
     pub objects: HashMap<String, Vec<u8>>,
+    pub buckets: Vec<String>,
     pub requests: Vec<String>,
 }
 
@@ -130,6 +131,28 @@ async fn handle(
 
     let response = match method.as_str() {
         "PUT" => {
+            // One path segment means the bucket itself, not an object in it
+            let is_bucket = path.trim_matches('/').split('/').count() == 1;
+
+            if is_bucket {
+                let existed = {
+                    let mut state = state.lock().unwrap();
+                    let existed = state.buckets.contains(&path);
+                    if !existed {
+                        state.buckets.push(path.clone());
+                    }
+                    existed
+                };
+
+                let response = if existed {
+                    bucket_already_owned_by_you()
+                } else {
+                    ok_response(200, "OK", Vec::new(), None)
+                };
+
+                return write_response(socket, response).await;
+            }
+
             state.lock().unwrap().objects.insert(path.clone(), body);
             ok_response(200, "OK", Vec::new(), None)
         }
@@ -161,10 +184,21 @@ async fn handle(
         _ => ok_response(405, "Method Not Allowed", Vec::new(), None),
     };
 
+    write_response(socket, response).await
+}
+
+async fn write_response(
+    socket: &mut tokio::net::TcpStream,
+    response: Vec<u8>,
+) -> std::io::Result<()> {
     socket.write_all(response.as_slice()).await?;
     socket.flush().await?;
-
     Ok(())
+}
+
+fn bucket_already_owned_by_you() -> Vec<u8> {
+    let body = b"<Error><Code>BucketAlreadyOwnedByYou</Code><Message>Your previous request to create the named bucket succeeded and you already own it.</Message></Error>".to_vec();
+    ok_response(409, "Conflict", body, None)
 }
 
 fn find_header_end(buffer: &[u8]) -> Option<usize> {

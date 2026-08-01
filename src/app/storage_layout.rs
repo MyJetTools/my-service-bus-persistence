@@ -15,8 +15,9 @@ use crate::{archive_storage::ArchiveFileNo, topic_key::TopicKeyRef, typing::Year
 ///             active                the open tail - the sub page still being filled
 /// ```
 ///
-/// `{namespace}/{topic}/...` is also the **S3 key** verbatim, so a file and its cold copy are
-/// addressed by the same string - see [`get_relative_path`] versus [`get_local_path`].
+/// In the cold tier the namespace becomes the **bucket** (`{prefix}-{namespace}`), so the key is
+/// what is left: `{topic}/{file}`. Locally the namespace is a folder, in S3 it is a bucket, and
+/// [`get_cold_key`] is the one place that spells the difference.
 ///
 /// `default` is not special: it gets its own folder like every other namespace, so the layout has
 /// no exceptions. Data written before namespaces existed sits directly at the root and is moved
@@ -105,6 +106,20 @@ pub fn get_active_relative_path(topic_key: TopicKeyRef<'_>) -> String {
     get_relative_path(topic_key, ACTIVE_FILE_NAME)
 }
 
+/// The key inside that namespace's bucket: `{topic}/{file}`. The namespace is not in it - it is
+/// the bucket.
+pub fn get_cold_key(topic_key: TopicKeyRef<'_>, file_name: &str) -> String {
+    format!("{}/{}", topic_key.topic_id, file_name)
+}
+
+pub fn get_archive_cold_key(topic_key: TopicKeyRef<'_>, archive_file_no: ArchiveFileNo) -> String {
+    get_cold_key(topic_key, get_archive_file_name(archive_file_no).as_str())
+}
+
+pub fn get_year_index_cold_key(topic_key: TopicKeyRef<'_>, year: Year) -> String {
+    get_cold_key(topic_key, get_year_index_file_name(year).as_str())
+}
+
 /// `0000000000000042.archive` -> `42`. `None` for anything that is not an archive file name.
 pub fn parse_archive_file_name(file_name: &str) -> Option<ArchiveFileNo> {
     let value = file_name.strip_suffix(ARCHIVE_FILE_EXTENSION)?;
@@ -124,8 +139,29 @@ pub fn parse_year_index_file_name(file_name: &str) -> Option<Year> {
 mod tests {
     use super::*;
 
+    /// Locally the namespace is a folder; in the cold tier it is the bucket, so the key drops it.
     #[test]
-    fn relative_path_is_the_s3_key() {
+    fn the_cold_key_drops_the_namespace() {
+        let default_ns = TopicKeyRef::new("default", "orders");
+        let alpha_ns = TopicKeyRef::new("alpha", "orders");
+
+        assert_eq!(
+            "orders/0000000000000000007.archive",
+            get_archive_cold_key(default_ns, ArchiveFileNo::new(7))
+        );
+        // Same key in both - they are told apart by the bucket
+        assert_eq!(
+            get_archive_cold_key(default_ns, ArchiveFileNo::new(7)),
+            get_archive_cold_key(alpha_ns, ArchiveFileNo::new(7))
+        );
+        assert_eq!(
+            "orders/.2024.yearindex",
+            get_year_index_cold_key(default_ns, Year::new(2024))
+        );
+    }
+
+    #[test]
+    fn relative_path_is_the_local_layout() {
         let key = TopicKeyRef::new("default", "orders");
 
         assert_eq!("default/orders", get_topic_relative_path(key));

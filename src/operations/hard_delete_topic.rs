@@ -41,12 +41,22 @@ async fn delete_topic_data(app: Arc<AppContext>, topic_key: TopicKey) {
 
     let folder = storage_layout::get_topic_folder(app.get_data_folder(), topic_key_ref);
 
-    if let Err(err) = delete_folder_if_exists(folder.as_path()).await {
-        write_error(
-            topic_key_ref,
-            format!("Can not delete {:?}. Err: {}", folder, err),
-        );
+    {
+        // Exclusive on both: the whole folder is going, so no read of any archive or index of this
+        // topic may be in flight.
+        let _archives = app.archive_locks.write(topic_key_ref).await;
+        let _indexes = app.index_locks.write(topic_key_ref).await;
+
+        if let Err(err) = delete_folder_if_exists(folder.as_path()).await {
+            write_error(
+                topic_key_ref,
+                format!("Can not delete {:?}. Err: {}", folder, err),
+            );
+        }
     }
+
+    app.archive_locks.forget(topic_key_ref);
+    app.index_locks.forget(topic_key_ref);
 
     delete_from_cold_storage(app.as_ref(), topic_key_ref, highest_archive_file_no).await;
 
@@ -84,8 +94,7 @@ async fn delete_from_cold_storage(
     // Archive numbering follows from the topic's message id, so the range is exact.
     if let Some(highest) = highest_archive_file_no {
         for file_no in 0..=highest.get_value() {
-            let key =
-                storage_layout::get_archive_relative_path(topic_key, ArchiveFileNo::new(file_no));
+            let key = storage_layout::get_archive_cold_key(topic_key, ArchiveFileNo::new(file_no));
             delete_key(app, topic_key, key.as_str()).await;
         }
     }
@@ -93,11 +102,11 @@ async fn delete_from_cold_storage(
     let current_year = DateTimeAsMicroseconds::now().to_chrono_utc().year() as u32;
 
     for year in OLDEST_POSSIBLE_YEAR..=current_year + 1 {
-        let key = storage_layout::get_year_index_relative_path(topic_key, Year::new(year));
+        let key = storage_layout::get_year_index_cold_key(topic_key, Year::new(year));
         delete_key(app, topic_key, key.as_str()).await;
     }
 
-    let key = storage_layout::get_active_relative_path(topic_key);
+    let key = storage_layout::get_cold_key(topic_key, storage_layout::ACTIVE_FILE_NAME);
     delete_key(app, topic_key, key.as_str()).await;
 }
 
@@ -110,7 +119,7 @@ async fn delete_key(app: &AppContext, topic_key: TopicKeyRef<'_>, key: &str) {
     };
 
     for attempt_no in 1..=DELETE_ATTEMPTS {
-        match cold_storage.delete(key).await {
+        match cold_storage.delete(topic_key.namespace, key).await {
             Ok(_) => return,
             Err(err) => {
                 if attempt_no == DELETE_ATTEMPTS {
