@@ -2,6 +2,10 @@ syntax = "proto3";
 import "google/protobuf/empty.proto";
 package persistence;
 
+// Namespace: missing or empty value means the "default" namespace - exactly what a client
+// which knows nothing about namespaces sends. Compatible both ways: an old node does not send
+// the field and lands in default, an old persistence ignores the field.
+
 
 enum QueueTypePersistenceGrpcEnum {
    Permanent = 0;
@@ -28,6 +32,7 @@ message TopicAndQueuesSnapshotGrpcModel {
   repeated persistence.QueueSnapshotGrpcModel QueueSnapshots = 3;
   optional bool Persist = 4;
   int64 Deleted = 5;
+  optional string Namespace = 6;
 }
 
 
@@ -36,11 +41,13 @@ message TopicAndQueuesSnapshotGrpcModel {
 message GetHistoryByDateGrpcRequest {
   string TopicId = 1;
   int64 FromDateTime = 2;
+  optional string Namespace = 3;
 }
 
 message SaveMessagesGrpcRequest{
   string TopicId = 1;
   repeated MessageContentGrpcModel Messages = 2;
+  optional string Namespace = 3;
 }
 
 message MessageContentGrpcModel {
@@ -69,6 +76,7 @@ message UnCompressedMessageChunkModel {
 message GetMessageGrpcRequest {
   string TopicId = 1;
   int64 MessageId = 2;
+  optional string Namespace = 3;
 }
 
 message GetPageCompressedGrpcRequest {
@@ -77,6 +85,7 @@ message GetPageCompressedGrpcRequest {
   int64 FromMessageId = 3;
   int64 ToMessageId = 4;
   int32 Version = 5;
+  optional string Namespace = 6;
 }
 
 message GetPageGrpcRequest {
@@ -85,6 +94,7 @@ message GetPageGrpcRequest {
   int64 FromMessageId = 3;
   int64 ToMessageId = 4;
   int32 Version = 5;
+  optional string Namespace = 6;
 }
 
 message GetVersionGrpcResponse{
@@ -93,11 +103,13 @@ message GetVersionGrpcResponse{
 
 message HardDeleteTopicGrpcRequest {
   string TopicId = 1;
+  optional string Namespace = 2;
 }
 
 message GetSubPageGrpcRequest{
   string TopicId = 1;
   int64 SubPageNo = 2;
+  optional string Namespace = 3;
 }
 
 service MyServiceBusMessagesPersistenceGrpcService {

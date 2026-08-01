@@ -1,4 +1,3 @@
-use my_azure_page_blob_random_access::PageBlobRandomAccessError;
 use my_service_bus::shared::{page_compressor::CompressedPageReaderError, sub_page::SubPageId};
 use rust_extensions::{date_time::DateTimeAsMicroseconds, StopWatch};
 
@@ -12,7 +11,7 @@ use crate::{
 #[allow(dead_code)]
 pub enum RestoreSubPageError {
     NotFound,
-    PageBlobRandomAccessError(PageBlobRandomAccessError),
+    ArchiveStorageError(crate::archive_storage::ArchiveStorageError),
     CompressedPageReaderError(CompressedPageReaderError),
 }
 
@@ -22,9 +21,9 @@ impl From<CompressedPageReaderError> for RestoreSubPageError {
     }
 }
 
-impl From<PageBlobRandomAccessError> for RestoreSubPageError {
-    fn from(err: PageBlobRandomAccessError) -> Self {
-        Self::PageBlobRandomAccessError(err)
+impl From<crate::archive_storage::ArchiveStorageError> for RestoreSubPageError {
+    fn from(err: crate::archive_storage::ArchiveStorageError) -> Self {
+        Self::ArchiveStorageError(err)
     }
 }
 
@@ -33,9 +32,12 @@ pub async fn restore_sub_page(
     topic_data: &TopicData,
     sub_page_id: SubPageId,
 ) -> Result<SubPage, RestoreSubPageError> {
-    let page_blob_storage = topic_data
-        .archive_pages_list
-        .try_get_or_open(sub_page_id.into(), topic_data.topic_id.as_str(), app)
+    // The app-wide list, the same one `save_sub_page` writes through: a second cache would hand
+    // out a second `FileStorage` for the same file, and two independent `seek(End) + write` pairs
+    // can interleave into one offset.
+    let page_blob_storage = app
+        .archive_storage_list
+        .try_get_or_open(sub_page_id.into(), topic_data.get_topic_key(), app)
         .await;
 
     if page_blob_storage.is_none() {
@@ -63,14 +65,22 @@ pub async fn save_sub_page(app: &AppContext, topic_data: &TopicData, sub_page: &
     if let Some(zip_payload) = sub_page.to_compressed_payload().await {
         let storage = app
             .archive_storage_list
-            .get_or_create(sub_page_id.into(), topic_data.topic_id.as_str(), app)
+            .get_or_create(sub_page_id.into(), topic_data.get_topic_key(), app)
             .await;
 
         let sw = StopWatch::new();
 
-        storage
+        if let Err(err) = storage
             .write_payload(sub_page_id, zip_payload.as_slice())
-            .await;
+            .await
+        {
+            panic!(
+                "Can not archive sub page {} of topic {}: {:?}",
+                sub_page_id.get_value(),
+                topic_data.get_topic_key(),
+                err
+            );
+        }
 
         topic_data.metrics.update_last_saved_duration(sw.duration());
 

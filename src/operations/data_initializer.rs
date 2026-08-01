@@ -25,27 +25,25 @@ async fn restore_pages(app: &Arc<AppContext>) {
         "Loading messages since last shutdown".to_string(),
         LogEventCtx::new(),
     );
-    let sub_pages = crate::operations::current_sub_pages_io::restore(&app)
-        .await
-        .unwrap();
+    let sub_pages = crate::operations::current_sub_pages_io::restore(&app).await;
 
-    if let Some(sub_pages) = sub_pages {
+    if !sub_pages.is_empty() {
         let sw = StopWatch::new();
 
-        for (topic_id, sub_page_inner) in sub_pages {
-            let topic_data = app.topics_list.init_topic_data(topic_id.as_str());
+        for restored in sub_pages {
+            let topic_data = app.topics_list.init_topic_data(restored.topic_key.to_ref());
 
             my_logger::LOGGER.write_info(
                 "Initialization".to_string(),
                 format!(
-                    "Loaded sub page {} for topic {}in {}",
-                    sub_page_inner.sub_page_id.get_value(),
-                    topic_id,
+                    "Loaded sub page {} for topic {} in {}",
+                    restored.sub_page.sub_page_id.get_value(),
+                    restored.topic_key,
                     sw.duration_as_string()
                 ),
                 LogEventCtx::new(),
             );
-            topic_data.pages_list.insert(sub_page_inner).await;
+            topic_data.pages_list.insert(restored.sub_page).await;
         }
     } else {
         my_logger::LOGGER.write_info(

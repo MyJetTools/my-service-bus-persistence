@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rust_extensions::MyTimerTick;
+use rust_extensions::{MyTimerTick, RepeatTimerIteration};
 
 use crate::app::AppContext;
 
@@ -16,10 +16,12 @@ impl TopicsSnapshotSaverTimer {
 
 #[async_trait::async_trait]
 impl MyTimerTick for TopicsSnapshotSaverTimer {
-    async fn tick(&self) {
+    async fn tick(&self) -> RepeatTimerIteration {
         self.app
             .topics_snapshot
             .flush_topics_snapshot_to_blob()
             .await;
+
+        RepeatTimerIteration::WithInterval
     }
 }

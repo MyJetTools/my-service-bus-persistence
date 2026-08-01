@@ -1,25 +1,38 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc};
 
-use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
-use my_azure_storage_sdk::page_blob::MyAzurePageBlobStorage;
 use parking_lot::Mutex;
 
-use super::{
-    consts::{CALCULATED_TOC_PAGES_AMOUNT, TOC_SIZE},
-    ArchiveFileNo, ArchiveStorage,
-};
+use crate::topic_key::TopicKeyRef;
 
+use super::{ArchiveFileNo, ArchiveStorage};
+
+/// Opens archive files. Implemented by `AppContext`, which is the only thing that knows the data
+/// folder and whether a cold tier is configured - the list itself stays free of storage details.
 #[async_trait::async_trait]
-pub trait ArchivePageBlobCreator {
-    async fn create(
+pub trait ArchiveFileOpener {
+    /// Opens the local file, creating it if needed. Only ever used for the file being written.
+    async fn open_or_create_archive(
         &self,
-        topic_id: &str,
+        topic_key: TopicKeyRef<'_>,
         archive_file_no: ArchiveFileNo,
-    ) -> my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
+    ) -> ArchiveStorage;
+
+    /// Local file first, cold tier on miss. `None` when the archive exists in neither.
+    async fn try_open_archive(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        archive_file_no: ArchiveFileNo,
+    ) -> Option<ArchiveStorage>;
 }
 
+/// archive_file_no -> storage, within one topic of one namespace.
+type ArchivesOfTopic = BTreeMap<i64, Arc<ArchiveStorage>>;
+/// topic_id -> its archives, within one namespace.
+type TopicsOfNamespace = BTreeMap<String, ArchivesOfTopic>;
+
+/// Keyed by the full topic key, so the same topic name in two namespaces never shares an archive.
 pub struct ArchiveStorageList {
-    items: Mutex<BTreeMap<String, BTreeMap<i64, Arc<ArchiveStorage>>>>,
+    items: Mutex<BTreeMap<String, TopicsOfNamespace>>,
 }
 
 impl ArchiveStorageList {
@@ -31,66 +44,85 @@ impl ArchiveStorageList {
 
     fn get_existing(
         &self,
-        topic_id: &str,
+        topic_key: TopicKeyRef<'_>,
         archive_file_no: ArchiveFileNo,
     ) -> Option<Arc<ArchiveStorage>> {
         let read_access = self.items.lock();
 
-        if let Some(archive_storages) = read_access.get(topic_id) {
-            if let Some(archive_storage) = archive_storages.get(&archive_file_no.get_value()) {
-                return Some(archive_storage.clone());
-            }
-        }
+        let archive_storage = read_access
+            .get(topic_key.namespace)?
+            .get(topic_key.topic_id)?
+            .get(&archive_file_no.get_value())?;
 
-        None
+        Some(archive_storage.clone())
     }
 
     fn insert(
         &self,
-        topic_id: &str,
+        topic_key: TopicKeyRef<'_>,
         archive_file_no: ArchiveFileNo,
         storage: Arc<ArchiveStorage>,
     ) {
         let mut write_access = self.items.lock();
 
-        if !write_access.contains_key(topic_id) {
-            write_access.insert(topic_id.to_string(), BTreeMap::new());
-        }
         write_access
-            .get_mut(topic_id)
-            .unwrap()
+            .entry(topic_key.namespace.to_string())
+            .or_default()
+            .entry(topic_key.topic_id.to_string())
+            .or_default()
             .insert(archive_file_no.get_value(), storage);
+    }
+
+    /// Drops the cached handle of **one** archive - used after it was uploaded and its local file
+    /// removed, so the next read reopens it against the cold tier.
+    ///
+    /// Deliberately not "forget the whole topic": the file currently being written must keep its
+    /// handle. Dropping it would let a reopen hand out a second `FileStorage` for the same path
+    /// while an in-flight `save_sub_page` still holds the first one, and two independent
+    /// `seek(End) + write` pairs can interleave into the same offset.
+    pub fn forget_archive(&self, topic_key: TopicKeyRef<'_>, archive_file_no: ArchiveFileNo) {
+        let mut write_access = self.items.lock();
+
+        let Some(topics) = write_access.get_mut(topic_key.namespace) else {
+            return;
+        };
+
+        let Some(archives) = topics.get_mut(topic_key.topic_id) else {
+            return;
+        };
+
+        archives.remove(&archive_file_no.get_value());
+    }
+
+    /// Drops every cached handle of a topic. Only for hard delete, where the topic is already
+    /// gone from `TopicsDataList` and nothing is supposed to be writing to it any more.
+    pub fn forget_topic(&self, topic_key: TopicKeyRef<'_>) {
+        let mut write_access = self.items.lock();
+
+        let Some(topics) = write_access.get_mut(topic_key.namespace) else {
+            return;
+        };
+
+        topics.remove(topic_key.topic_id);
     }
 
     pub async fn get_or_create(
         &self,
         archive_file_no: ArchiveFileNo,
-        topic_id: &str,
-        page_blob_creator: &impl ArchivePageBlobCreator,
+        topic_key: TopicKeyRef<'_>,
+        opener: &impl ArchiveFileOpener,
     ) -> Arc<ArchiveStorage> {
-        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no) {
-            return page_blob;
+        if let Some(archive_storage) = self.get_existing(topic_key, archive_file_no) {
+            return archive_storage;
         }
 
-        let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
-
-        let page_blob =
-            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(1));
-
-        let page_blob_props = page_blob
-            .create_if_not_exists(TOC_SIZE, true)
-            .await
-            .unwrap();
-
-        if page_blob_props.get_pages_amount() < CALCULATED_TOC_PAGES_AMOUNT {
-            page_blob.resize(CALCULATED_TOC_PAGES_AMOUNT).await.unwrap();
-        }
-
-        let archive_storage = ArchiveStorage::open_or_create(archive_file_no, page_blob).await;
+        let archive_storage = opener
+            .open_or_create_archive(topic_key, archive_file_no)
+            .await;
 
         let archive_storage = Arc::new(archive_storage);
 
-        self.insert(topic_id, archive_file_no, archive_storage.clone());
+        self.insert(topic_key, archive_file_no, archive_storage.clone());
 
         archive_storage
     }
@@ -98,35 +130,18 @@ impl ArchiveStorageList {
     pub async fn try_get_or_open(
         &self,
         archive_file_no: ArchiveFileNo,
-        topic_id: &str,
-        page_blob_creator: &impl ArchivePageBlobCreator,
+        topic_key: TopicKeyRef<'_>,
+        opener: &impl ArchiveFileOpener,
     ) -> Option<Arc<ArchiveStorage>> {
-        if let Some(page_blob) = self.get_existing(topic_id, archive_file_no) {
-            return Some(page_blob);
+        if let Some(archive_storage) = self.get_existing(topic_key, archive_file_no) {
+            return Some(archive_storage);
         }
 
-        let page_blob = page_blob_creator.create(topic_id, archive_file_no).await;
-
-        let page_blob =
-            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(3));
-
-        let blob_props = page_blob.get_blob_properties().await;
-
-        if blob_props.is_err() {
-            return None;
-        }
-
-        let blob_props = blob_props.unwrap();
-
-        if blob_props.get_pages_amount() < CALCULATED_TOC_PAGES_AMOUNT {
-            return None;
-        }
-
-        let archive_storage = ArchiveStorage::open_if_exists(archive_file_no, page_blob).await?;
+        let archive_storage = opener.try_open_archive(topic_key, archive_file_no).await?;
 
         let archive_storage = Arc::new(archive_storage);
 
-        self.insert(topic_id, archive_file_no, archive_storage.clone());
+        self.insert(topic_key, archive_file_no, archive_storage.clone());
 
         Some(archive_storage)
     }

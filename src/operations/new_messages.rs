@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use my_service_bus::shared::{protobuf_models::MessageProtobufModel, sub_page::SubPageId};
 
-use crate::app::AppContext;
+use crate::{app::AppContext, topic_key::TopicKeyRef};
 
 pub async fn new_messages(
     app: &AppContext,
-    topic_id: String,
+    topic_key: TopicKeyRef<'_>,
     messages: impl Iterator<Item = MessageProtobufModel>,
 ) {
     let mut messages_by_sub_page: BTreeMap<SubPageId, Vec<MessageProtobufModel>> = BTreeMap::new();
@@ -24,7 +24,7 @@ pub async fn new_messages(
         }
     }
 
-    let topic_data = crate::operations::get_topic_data_to_write(app, topic_id.as_str()).await;
+    let topic_data = crate::operations::get_topic_data_to_write(app, topic_key).await;
     for (sub_page_id, messages) in messages_by_sub_page {
         let page = topic_data
             .get_sub_page_to_publish_messages(sub_page_id)

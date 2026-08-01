@@ -1,7 +1,7 @@
 mod app_ctx;
 
-pub mod file_name_generators;
 mod prometheus_metrics;
+pub mod storage_layout;
 
 pub use app_ctx::*;
 

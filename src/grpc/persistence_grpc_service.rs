@@ -1,5 +1,6 @@
 use crate::persistence_grpc::my_service_bus_messages_persistence_grpc_service_server::MyServiceBusMessagesPersistenceGrpcService;
 use crate::persistence_grpc::*;
+use crate::topic_key::{NamespaceError, TopicKey, TopicKeyRef};
 use crate::topics_snapshot::TopicSnapshotProtobufModel;
 
 use my_grpc_extensions::{server::*, StreamedRequestReader, StreamedResponseWriter};
@@ -40,7 +41,25 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let values = StreamedRequestReader::new(stream);
 
-        let snapshot: Vec<TopicSnapshotProtobufModel> = values.into_vec().await.unwrap();
+        // One stream carries every namespace at once - that is how the node restores and saves
+        // everything in a single call.
+        let grpc_models: Vec<TopicAndQueuesSnapshotGrpcModel> = values.into_vec().await?;
+
+        let mut snapshot: Vec<TopicSnapshotProtobufModel> = Vec::with_capacity(grpc_models.len());
+
+        for grpc_model in grpc_models {
+            let topic_snapshot: TopicSnapshotProtobufModel =
+                grpc_model.try_into().map_err(|err: NamespaceError| {
+                    tonic::Status::invalid_argument(format!("Invalid Namespace. {}", err))
+                })?;
+
+            contracts::check_namespace_is_supported(topic_snapshot.get_namespace())?;
+            contracts::check_topic_id(topic_snapshot.topic_id.as_str())?;
+
+            snapshot.push(topic_snapshot);
+        }
+
+        contracts::check_flags(self.app.as_ref())?;
 
         self.app.topics_snapshot.update(snapshot).await;
 
@@ -66,13 +85,28 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
+        let namespace = contracts::get_namespace(req.namespace)?;
+        contracts::check_topic_id(req.topic_id.as_str())?;
+
         let message = crate::operations::get_message_by_id(
             self.app.as_ref(),
-            req.topic_id.as_ref(),
+            TopicKeyRef::new(namespace.as_str(), req.topic_id.as_str()),
             req.message_id.into(),
         )
-        .await
-        .unwrap();
+        .await;
+
+        let message = match message {
+            Ok(message) => message,
+            // An unknown topic is a business answer, not a failure: it reads the same as
+            // "no such message". Panicking here would tear the stream down with RST_STREAM.
+            Err(crate::operations::OperationError::TopicNotFound(_)) => None,
+            Err(err) => {
+                return Err(tonic::Status::internal(format!(
+                    "get_message failed: {:?}",
+                    err
+                )))
+            }
+        };
 
         let result = match message {
             Some(msg) => msg.as_ref().into(),
@@ -96,6 +130,9 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
+        let namespace = contracts::get_namespace(req.namespace)?;
+        contracts::check_topic_id(req.topic_id.as_str())?;
+
         let app = self.app.clone();
 
         let page_id = PageId::new(req.page_no);
@@ -110,7 +147,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let compressed = crate::operations::compressed_page_compiler::get_compressed_page(
             app,
-            &req.topic_id,
+            TopicKeyRef::new(namespace.as_str(), req.topic_id.as_str()),
             from_message_id,
             to_message_id,
             req.version == 0,
@@ -130,6 +167,9 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
+        let namespace = contracts::get_namespace(req.namespace)?;
+        contracts::check_topic_id(req.topic_id.as_str())?;
+
         let app = self.app.clone();
 
         let page_id = PageId::new(req.page_no);
@@ -142,7 +182,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             to_message_id = MessageId::new(req.to_message_id);
         }
 
-        let topic_id = req.topic_id;
+        let topic_key = TopicKey::new(namespace, req.topic_id);
 
         let streamed_response = StreamedResponseWriter::new(1024);
 
@@ -150,7 +190,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         tokio::spawn(crate::operations::send_messages_to_channel(
             app,
-            topic_id,
+            topic_key,
             from_message_id,
             to_message_id,
             producer,
@@ -168,6 +208,9 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
+        let namespace = contracts::get_namespace(req.namespace)?;
+        contracts::check_topic_id(req.topic_id.as_str())?;
+
         let sub_page_id = SubPageId::new(req.sub_page_no);
 
         let from_message_id = sub_page_id.get_first_message_id();
@@ -179,7 +222,7 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         tokio::spawn(crate::operations::send_messages_to_channel(
             self.app.clone(),
-            req.topic_id,
+            TopicKey::new(namespace, req.topic_id),
             from_message_id,
             to_message_id,
             producer,
@@ -199,11 +242,17 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
         let mut stream_reader = StreamedRequestReader::new(request);
 
         while let Some(message) = stream_reader.get_next().await {
+            contracts::check_flags(self.app.as_ref())?;
+
             let message = message.unwrap();
+
+            // Each message batch carries its own namespace - one stream may span several.
+            let namespace = contracts::get_namespace(message.namespace)?;
+            contracts::check_topic_id(message.topic_id.as_str())?;
 
             crate::operations::new_messages(
                 &self.app,
-                message.topic_id,
+                TopicKeyRef::new(namespace.as_str(), message.topic_id.as_str()),
                 message.messages.into_iter().map(|itm| itm.into()),
             )
             .await;
@@ -220,9 +269,15 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
 
         let req = request.into_inner();
 
-        crate::operations::hard_delete_topic(self.app.as_ref(), req.topic_id.as_str())
-            .await
-            .map_err(|err| tonic::Status::internal(format!("hard_delete_topic failed: {:?}", err)))?;
+        let namespace = contracts::get_namespace(req.namespace)?;
+        contracts::check_topic_id(req.topic_id.as_str())?;
+
+        // Deletes the topic within this namespace only. Returns as soon as the topic stops being
+        // served; wiping the data runs as a background job.
+        crate::operations::hard_delete_topic(
+            &self.app,
+            TopicKeyRef::new(namespace.as_str(), req.topic_id.as_str()),
+        );
 
         Ok(tonic::Response::new(()))
     }
@@ -230,9 +285,13 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
     generate_server_stream!(stream_name:"GetHistoryByDateStream", item_name:"MessageContentGrpcModel");
     async fn get_history_by_date(
         &self,
-        _request: tonic::Request<GetHistoryByDateGrpcRequest>,
+        request: tonic::Request<GetHistoryByDateGrpcRequest>,
     ) -> Result<tonic::Response<Self::GetHistoryByDateStream>, tonic::Status> {
         contracts::check_flags(self.app.as_ref())?;
+
+        // TODO: not implemented yet (see TODO.md). The namespace is still resolved so a caller
+        // gets the same validation as everywhere else once this is filled in.
+        let _namespace = contracts::get_namespace(request.into_inner().namespace)?;
 
         my_grpc_extensions::grpc_server_streams::send_from_iterator([].into_iter()).await
     }

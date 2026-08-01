@@ -1,6 +1,8 @@
 use ahash::{AHashMap, AHashSet};
-use prometheus::{Encoder, IntGauge, Registry, TextEncoder};
 use parking_lot::Mutex;
+use prometheus::{Encoder, IntGauge, Registry, TextEncoder};
+
+use crate::topic_key::TopicKey;
 
 use super::GaugeByTopic;
 
@@ -13,7 +15,7 @@ pub struct PrometheusMetrics {
     registry: Registry,
     topic_persist_queue_size: GaugeByTopic,
     cached_messages_size: GaugeByTopic,
-    active_topics: Mutex<AHashSet<String>>,
+    active_topics: Mutex<AHashSet<TopicKey>>,
     http_connections_amount: IntGauge,
 }
 
@@ -45,7 +47,7 @@ impl PrometheusMetrics {
     }
     pub async fn update(
         &self,
-        mut update_data: AHashMap<&str, PrometheusMetricsToUpdate>,
+        mut update_data: AHashMap<TopicKey, PrometheusMetricsToUpdate>,
         http_connections_amount: i64,
     ) {
         self.http_connections_amount.set(http_connections_amount);
@@ -53,39 +55,39 @@ impl PrometheusMetrics {
 
         let mut topics_to_remove = Vec::new();
 
-        for active_topic_id in active_topics.iter() {
-            match update_data.remove(active_topic_id.as_str()) {
+        for active_topic_key in active_topics.iter() {
+            match update_data.remove(active_topic_key) {
                 Some(metrics) => {
                     self.topic_persist_queue_size
-                        .update_value(active_topic_id.as_str(), metrics.not_persisted_size as i64);
+                        .update_value(active_topic_key.to_ref(), metrics.not_persisted_size as i64);
 
                     self.cached_messages_size
-                        .update_value(active_topic_id.as_str(), metrics.content_size as i64);
+                        .update_value(active_topic_key.to_ref(), metrics.content_size as i64);
                 }
                 None => {
                     self.topic_persist_queue_size
-                        .remove_topic(active_topic_id.as_str());
+                        .remove_topic(active_topic_key.to_ref());
 
                     self.cached_messages_size
-                        .remove_topic(active_topic_id.as_str());
+                        .remove_topic(active_topic_key.to_ref());
 
-                    topics_to_remove.push(active_topic_id.clone());
+                    topics_to_remove.push(active_topic_key.clone());
                 }
             }
         }
 
-        for topic_id in topics_to_remove {
-            active_topics.remove(&topic_id);
+        for topic_key in topics_to_remove {
+            active_topics.remove(&topic_key);
         }
 
-        for (topic_id, metrics) in update_data {
+        for (topic_key, metrics) in update_data {
             self.topic_persist_queue_size
-                .update_value(topic_id, metrics.not_persisted_size as i64);
+                .update_value(topic_key.to_ref(), metrics.not_persisted_size as i64);
 
             self.cached_messages_size
-                .update_value(topic_id, metrics.content_size as i64);
+                .update_value(topic_key.to_ref(), metrics.content_size as i64);
 
-            active_topics.insert(topic_id.to_string());
+            active_topics.insert(topic_key);
         }
     }
 

@@ -11,9 +11,8 @@ my-service-bus = { tag = "1.1.5", git = "https://github.com/MyJetTools/my-servic
     "shared",
 
 ] }
-my-azure-storage-sdk = { tag = "0.5.1", git = "https://github.com/MyJetTools/my-azure-storage.git" }
-my-azure-page-blob-random-access = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-azure-page-blob-random-access.git" }
-my-azure-page-blob-ext = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-azure-page-blob-ext.git" }
+my-s3 = { tag = "0.1.0", git = "https://github.com/MyJetTools/my-s3.git" }
+
 
 my-http-server = { tag = "0.8.3", git = "https://github.com/MyJetTools/my-http-server.git", features = [
     "static-files",

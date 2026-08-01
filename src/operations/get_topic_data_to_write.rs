@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
-use crate::{app::AppContext, topic_data::TopicData};
+use crate::{app::AppContext, topic_data::TopicData, topic_key::TopicKeyRef};
 
-pub async fn get_topic_data_to_write(app: &AppContext, topic_id: &str) -> Arc<TopicData> {
+pub async fn get_topic_data_to_write(
+    app: &AppContext,
+    topic_key: TopicKeyRef<'_>,
+) -> Arc<TopicData> {
     loop {
-        if let Some(topic_data) = app.topics_list.get(topic_id) {
+        if let Some(topic_data) = app.topics_list.get(topic_key) {
             return topic_data;
         }
 
-        super::init_new_topic(app, topic_id).await;
+        super::init_new_topic(app, topic_key).await;
     }
 }

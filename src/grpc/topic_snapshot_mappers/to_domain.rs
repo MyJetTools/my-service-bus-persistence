@@ -6,25 +6,34 @@ use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 use crate::{
     persistence_grpc::*,
+    topic_key::{Namespace, NamespaceError},
     topics_snapshot::{
         QueueRangeProtobufModel, QueueSnapshotProtobufModel, TopicSnapshotProtobufModel,
     },
 };
 
-impl From<TopicAndQueuesSnapshotGrpcModel> for TopicSnapshotProtobufModel {
-    fn from(value: TopicAndQueuesSnapshotGrpcModel) -> Self {
+/// Fallible because the namespace arrives from the wire: it is validated on the node, and
+/// re-validated here before it can become part of a storage key.
+impl TryFrom<TopicAndQueuesSnapshotGrpcModel> for TopicSnapshotProtobufModel {
+    type Error = NamespaceError;
+
+    fn try_from(value: TopicAndQueuesSnapshotGrpcModel) -> Result<Self, Self::Error> {
+        let namespace = Namespace::parse(value.namespace.as_deref())?;
+
         let queues = value
             .queue_snapshots
             .into_iter()
             .map(|itm| itm.into())
             .collect();
-        Self::new(
+
+        Ok(Self::new(
+            &namespace,
             value.topic_id.to_string(),
             value.message_id.as_message_id(),
             queues,
             value.persist,
             value.deleted,
-        )
+        ))
     }
 }
 

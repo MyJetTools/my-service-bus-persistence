@@ -4,8 +4,10 @@ use my_http_server::{HttpContext, HttpFailResult, HttpOkResult, HttpOutput};
 use my_service_bus::abstractions::AsMessageId;
 
 use crate::app::AppContext;
+use crate::topic_key::TopicKeyRef;
 
 use super::contracts::*;
+use super::{check_topic_id, parse_namespace};
 
 #[my_http_server::macros::http_route(
     method:"GET",
@@ -35,9 +37,12 @@ async fn handle_request(
     input_data: GetMessageByIdInputContract,
     _ctx: &mut HttpContext,
 ) -> Result<HttpOkResult, HttpFailResult> {
+    let namespace = parse_namespace(input_data.namespace.as_str())?;
+    check_topic_id(input_data.topic_id.as_str())?;
+
     let message = crate::operations::get_message_by_id(
         action.app.as_ref(),
-        input_data.topic_id.as_str(),
+        TopicKeyRef::new(namespace.as_str(), input_data.topic_id.as_str()),
         input_data.message_id.as_message_id(),
     )
     .await?;

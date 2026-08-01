@@ -2,8 +2,14 @@
 
 Companion persistence node for [`my-service-bus`](https://github.com/MyJetTools/my-service-bus).
 The main node calls this service over gRPC for durable storage of
-topics, queues and messages, kept in Azure Page Blobs (or local
-emulated page-blob files for development).
+topics, queues and messages, written straight to files, with S3 as an
+optional cold tier for sealed data.
+
+Topics are addressed by a `(namespace, topic_id)` pair: a topic name is
+unique only within its namespace, so `orders` in `default` and `orders`
+in `alpha` are two different topics with independent messages, queues
+and cursors. A missing or empty namespace always means `default`, which
+is what a node that knows nothing about namespaces sends.
 
 ## Run
 
@@ -15,28 +21,54 @@ https://www.rust-lang.org/tools/install
 
 The service reads its configuration file from
 `$HOME/.myservicebus-persistence` on Linux/macOS and
-`%HOME%\.myservicebus-persistence` on Windows. This is resolved at
-compile time via `env!("HOME")`, so the variable must be present in
-the environment of whoever runs the binary.
+`%HOME%\.myservicebus-persistence` on Windows. It is resolved at run time from
+`$HOME`, so the variable must be present in the environment of whoever
+runs the binary.
 
 ### 3. Create the config file
 
 `$HOME/.myservicebus-persistence` is a YAML file. Minimal example:
 
 ```yaml
-topics_connection_string: "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
-messages_connection_string: "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
-archive_connection_string: "DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+data: "~/my-sb-persistence-data"
 max_response_records_amount: 500
 delete_topic_secret_key: "some-shared-secret"
+
 # Optional, omit if you don't want a Unix-socket gRPC endpoint:
 # listen_unix_socket: "/tmp/my-sb-persistence.sock"
+
+# Optional cold tier. Omit it and everything stays on the local disk forever.
+# s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKIA...;SecretKey=...;Bucket=my-sb-persistence"
+
+# Only for the first start after upgrading from the three-folder layout. Remove it afterwards.
+# legacy:
+#   topics: "/home/runners/Topics"
+#   messages: "/home/runners/Messages"
+#   archive: "/home/runners/Archive"
 ```
 
-For local development you can point any of the connection strings to
-a local file-system emulator instead of Azure (e.g.
-`AccountName=devstoreaccount1;...`, or a `~/path` for the file-backed
-implementation — see `messages_connection_string` note below).
+`data` is all a local-only deployment needs — no external storage at
+all.
+
+### `s3_conn_string` format
+
+One string of `Key=Value` pairs separated by `;`, the same shape the
+Azure connection strings used:
+
+```
+Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKIA...;SecretKey=...;Bucket=my-sb-persistence
+```
+
+| Key         | Meaning                                                        |
+| ----------- | -------------------------------------------------------------- |
+| `Endpoint`  | S3 endpoint URL, including the scheme.                          |
+| `Region`    | Region used for the SigV4 signature.                            |
+| `AccessKey` | Access key id.                                                  |
+| `SecretKey` | Secret access key. Only the **first** `=` separates, so a base64 secret with its own `=` is fine. |
+| `Bucket`    | Bucket that holds the cold tier.                                |
+
+All five are required; a missing or misspelled key fails at startup
+rather than silently disabling the cold tier.
 
 ### 4. Build & run
 
@@ -62,17 +94,14 @@ All fields live in `$HOME/.myservicebus-persistence` (YAML) and map
 
 | Field                          | Type             | Required | Description                                                                                                                                          |
 | ------------------------------ | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `topics_connection_string`     | `string`         | yes      | Azure Storage connection string used for the topics-snapshot blob (`topics/topicsdata`).                                                             |
-| `messages_connection_string`   | `string`         | yes      | Azure Storage connection string used for messages page blobs and active sub-page state. A leading `~` is expanded to `$HOME` (file-backed dev mode). |
-| `archive_connection_string`    | `string`         | yes      | Azure Storage connection string used for archive page blobs (rotated history per topic).                                                             |
+| `data`                         | `string`         | yes      | Root of every file the service owns. A leading `~` is expanded to `$HOME`.                                                                            |
 | `max_response_records_amount`  | `usize`          | yes      | Upper bound on records returned per HTTP read response.                                                                                              |
 | `delete_topic_secret_key`      | `string`         | yes      | Shared secret for the HTTP `DELETE /api/Topic` endpoint. Currently unused while soft-delete + GC is being reworked — see [TODO.md](TODO.md).         |
 | `listen_unix_socket`           | `string` (opt.)  | no       | If set, gRPC additionally listens on this Unix socket path (in addition to TCP `:7124`). Useful for sidecar deployments.                             |
+| `s3_conn_string`               | `string` (opt.)  | no       | Cold tier — see the format above. Omit it to keep every file local forever.                                                                           |
+| `legacy`                       | `object` (opt.)  | no       | One-time migration from the three-folder layout: `topics`, `messages`, `archive`. Either the whole section is absent or all three are given — none of them is optional, so a half-filled section fails to parse instead of migrating half the data. |
 
 Notes:
-- Tilde (`~`) expansion is currently only applied to
-  `messages_connection_string`. `topics_connection_string` and
-  `archive_connection_string` do not expand `~` — see [TODO.md](TODO.md).
 - The settings file is read once at startup; changing it requires a
   process restart.
 
@@ -118,26 +147,109 @@ service directly from application code.
 
 ## Lifecycle & timers
 
-- On startup `data_initializer` restores active sub-pages from the
-  topics-snapshot blob; gRPC requests respond with
-  `Initializing` until that finishes.
+- On startup, if `legacy` is configured, only the **working set** is
+  brought over before the service opens: the snapshot, the shared tail,
+  and per topic the one archive and the one year index still being
+  written. Everything else follows in a background task, one file at a
+  time, so the live traffic keeps the disk to itself.
+- Then any pre-namespace topic folder is moved into `default/` (once,
+  see below) and the open tail of every topic is restored; gRPC
+  requests respond with `Initializing` until that finishes.
 - Background timers:
   - 3 s tick — topic-snapshot saver, min-index saver.
   - 1 s tick — page GC, metrics updater.
-- Graceful shutdown runs `before_shut_down` to flush yearly
-  index, archive in-flight sub-pages, and persist the topics
-  snapshot before the process exits.
+  - 60 s tick — cold-storage uploader (no-op without an `s3` section).
+- Graceful shutdown runs `before_shut_down` to flush the yearly index,
+  archive in-flight sub-pages, and persist the topics snapshot before
+  the process exits.
 
 ## Storage layout
 
-- Topics-snapshot blob: `topics/topicsdata` (page blob in
-  `topics_connection_string`).
-- Messages: page blobs per topic in `messages_connection_string`,
-  organised by sub-page (derived from `MessageId` →
-  `SubPageId`).
-- Archive: rotated page blobs per topic in
-  `archive_connection_string`, indexed by `ArchiveFileNo`.
-- Per-topic per-year minute index drives time-based reads.
+```text
+{data_folder}/
+    .layout-version               marks the folder as laid out by namespace
+    {namespace}/
+        topics-and-queue.yaml     that namespace's topics + queues, human readable
+        {topic}/
+            {:019}.archive        sealed sub pages: TOC + compressed blocks
+            .{year}.yearindex     527 040 minutes x 8 bytes, addressed at minute*8
+            active                the open tail - the sub page still being filled
+```
+
+`{namespace}/{topic}/...` doubles as the **S3 key**, so a file and its
+cold copy are addressed by the same string.
+
+`default` is not special — it gets its own folder like any other
+namespace. Data written before namespaces existed sits directly at the
+root; the first start after upgrading moves those folders into
+`default/`. The marker is `.layout-version`, and its *absence* is what
+matters: before namespaces the concept did not exist, so every folder at
+the root is a topic, with nothing to guess. A second marker,
+`.layout-migrating`, makes an interrupted run resumable — without it a
+resumed migration could not tell a topic named `default` from the
+namespace folder a previous run had already created.
+
+### Migrating from the three-folder layout
+
+Older deployments kept three roots (`topics`, `messages`, `archive`).
+Point `legacy` at them for one start and the service folds them into
+`data`:
+
+```text
+{topics}/topics/topicsdata          -> {data}/topicsdata  (then converted to YAML)
+{topics}/topics/.active-pages       -> {data}/.active-pages
+{messages}/{topic}/.{year}.yearindex\
+{archive}/{topic}/{:019}.archive    -> {data}/default/{topic}/
+```
+
+The same topic existed as **two** folders — one under `messages`, one
+under `archive` — so files are moved individually rather than by
+renaming a folder onto another.
+
+Files are moved, not copied: each one is written to its new home and
+only then removed from the legacy folder. What is still in the legacy
+folder is therefore exactly what has not been migrated yet, which is
+what makes an interrupted run resumable with no bookkeeping. A file is
+copied to a `.migrating` name next to its destination and renamed into
+place, so a crash mid-copy can never leave a truncated archive under a
+real name.
+
+With `s3_conn_string` set, a sealed file goes from the legacy folder
+**straight to S3** and never lands on the new local disk at all.
+
+The snapshot is one YAML file per namespace, so a namespace folder is
+self-contained — copy `alpha/` somewhere else and its snapshot travels
+with it. In memory it stays flat, because `GetQueueSnapshot` is
+deliberately one stream for every namespace at once: that is how the
+node restores everything in one call and learns which namespaces exist.
+It is written atomically (write next to it, rename), since it is the
+source of truth for which topics exist.
+
+### Hot and cold
+
+A file is either **mutable** (local disk) or **sealed** (uploaded, then
+read over ranged GETs and never changed again). S3 objects cannot be
+appended to or partially overwritten, so only sealed files ever go
+there:
+
+- mutable: the highest-numbered `.archive`, the newest `.yearindex`,
+  and `active`;
+- sealed: everything below those.
+
+The uploader timer applies exactly that rule per topic: whichever
+archive carries the highest number is the one being written, so it
+stays, and **every** other one goes up — not just the one below it,
+since a backlog of two or three is normal after the cold tier was
+unreachable or after a restart. Years follow the same rule. Nothing is
+persisted to track it: "the highest number on disk is the current one"
+stays true by itself across rollovers and restarts.
+
+Reads look local first and fall back to the cold tier. A cold archive is
+never downloaded whole — the TOC is fetched once (it can be cached
+forever, the object is immutable) and each sub page is a single ranged
+GET. A cold year index is the exception: it is 4 MB and addressed by
+offset, so it is pulled back to the local disk in full, which also makes
+a late write for a closed year work without any special case.
 
 ## Development
 

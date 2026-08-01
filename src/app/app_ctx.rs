@@ -1,21 +1,20 @@
-use std::{sync::Arc, time::Duration};
-
-use my_azure_storage_sdk::{
-    blob_container::BlobContainersApi, page_blob::AzurePageBlobStorage, AzureStorageConnection,
-};
+use std::sync::Arc;
 
 use rust_extensions::AppStates;
 
 use crate::{
-    archive_storage::{ArchiveFileNo, ArchivePageBlobCreator, ArchiveStorageList},
+    archive_storage::{ArchiveFileNo, ArchiveFileOpener, ArchiveStorage, ArchiveStorageList},
+    cold_storage::ColdStorage,
+    file_storage::FileStorage,
     index_by_minute::{IndexByMinuteUtils, YearlyIndexByMinute},
     settings::SettingsModel,
     topic_data::TopicsDataList,
+    topic_key::TopicKeyRef,
     topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     typing::Year,
 };
 
-use super::PrometheusMetrics;
+use super::{storage_layout, PrometheusMetrics};
 
 pub const APP_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -26,44 +25,34 @@ pub struct AppContext {
     pub topics_list: TopicsDataList,
     pub settings: SettingsModel,
 
-    archive_conn_string: Arc<AzureStorageConnection>,
-    messages_conn_string: Arc<AzureStorageConnection>,
-
     pub metrics_keeper: PrometheusMetrics,
     pub index_by_minute_utils: IndexByMinuteUtils,
 
-    topics_and_queue_conn_string: Arc<AzureStorageConnection>,
-
     pub archive_storage_list: ArchiveStorageList,
+
+    /// `None` when no S3 section is configured - then nothing is ever uploaded and every file
+    /// stays local forever.
+    cold_storage: Option<Arc<ColdStorage>>,
 }
 
 impl AppContext {
     pub async fn new(settings: SettingsModel) -> AppContext {
-        let messages_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
-            settings.messages_connection_string.as_str(),
-        ));
+        let cold_storage = settings
+            .get_s3_connection()
+            .map(|s3| Arc::new(ColdStorage::new(&s3)));
 
-        let topics_and_queue_conn_string = Arc::new(AzureStorageConnection::from_conn_string(
-            settings.topics_connection_string.as_str(),
-        ));
-
-        let archive_conn_string =
-            AzureStorageConnection::from_conn_string(settings.archive_connection_string.as_str());
-
-        let topics_repo = settings.get_topics_snapshot_repository().await;
+        let topics_snapshot = CurrentTopicsSnapshot::read_or_create(settings.data.clone()).await;
 
         AppContext {
-            topics_snapshot: CurrentTopicsSnapshot::read_or_create(topics_repo).await,
+            topics_snapshot,
             topics_list: TopicsDataList::new(),
             settings,
 
             metrics_keeper: PrometheusMetrics::new(),
             index_by_minute_utils: IndexByMinuteUtils::new(),
-            messages_conn_string,
             app_states: Arc::new(AppStates::create_un_initialized()),
             archive_storage_list: ArchiveStorageList::new(),
-            topics_and_queue_conn_string,
-            archive_conn_string: Arc::new(archive_conn_string),
+            cold_storage,
         }
     }
 
@@ -76,92 +65,154 @@ impl AppContext {
         }
     }
 
-    pub async fn create_topic_container(&self, topic_id: &str) {
-        let conn_string = AzureStorageConnection::from_conn_string(
-            self.settings.topics_connection_string.as_str(),
-        );
+    pub fn get_data_folder(&self) -> &str {
+        self.settings.data.as_str()
+    }
 
-        let mut attempt_no = 0;
-        loop {
-            let result = conn_string.create_container_if_not_exists(topic_id).await;
+    pub fn get_cold_storage(&self) -> Option<&Arc<ColdStorage>> {
+        self.cold_storage.as_ref()
+    }
 
-            if result.is_ok() {
-                break;
-            }
+    pub async fn create_topic_folder(&self, topic_key: TopicKeyRef<'_>) {
+        let folder = storage_layout::get_topic_folder(self.get_data_folder(), topic_key);
 
-            attempt_no += 1;
-            if attempt_no > 3 {
-                result.unwrap();
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
+        tokio::fs::create_dir_all(folder.as_path())
+            .await
+            .unwrap_or_else(|err| {
+                panic!("Can not create the folder of topic {}: {}", topic_key, err)
+            });
     }
 
     pub async fn open_or_create_index_by_minute(
         &self,
-        topic_id: &str,
+        topic_key: TopicKeyRef<'_>,
         year: Year,
     ) -> YearlyIndexByMinute {
-        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+        // A closed year may have been uploaded and dropped locally; pull it back so a late write
+        // lands on the real index rather than on an empty one.
+        self.restore_year_index_from_cold_storage(topic_key, year)
+            .await;
 
-        let page_blob = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
-            topic_id.to_string(),
-            blob_name,
-        )
-        .await;
-
-        YearlyIndexByMinute::open_or_create(page_blob).await
+        YearlyIndexByMinute::open_or_create(self.get_year_index_path(topic_key, year)).await
     }
 
     pub async fn try_open_index_by_minute(
         &self,
-        topic_id: &str,
+        topic_key: TopicKeyRef<'_>,
         year: Year,
     ) -> Option<Arc<YearlyIndexByMinute>> {
-        let blob_name = super::file_name_generators::generate_year_index_blob_name(year);
+        let path = self.get_year_index_path(topic_key, year);
 
-        let page_blob = AzurePageBlobStorage::new(
-            self.messages_conn_string.clone(),
-            topic_id.to_string(),
-            blob_name,
-        )
-        .await;
+        if let Some(result) = YearlyIndexByMinute::load_if_exists(&path).await {
+            return Some(Arc::new(result));
+        }
 
-        let result = YearlyIndexByMinute::load_if_exists(page_blob).await?;
+        self.restore_year_index_from_cold_storage(topic_key, year)
+            .await;
+
+        let result = YearlyIndexByMinute::load_if_exists(&path).await?;
 
         Some(Arc::new(result))
     }
 
-    pub fn get_storage_for_active_pages(&self) -> Arc<AzureStorageConnection> {
-        self.topics_and_queue_conn_string.clone()
+    fn get_year_index_path(&self, topic_key: TopicKeyRef<'_>, year: Year) -> std::path::PathBuf {
+        storage_layout::get_local_path(
+            self.get_data_folder(),
+            storage_layout::get_year_index_relative_path(topic_key, year).as_str(),
+        )
     }
 
-    // TODO: used by hard_delete_topic when soft-delete + GC flow is reimplemented (see TODO.md)
-    #[allow(dead_code)]
-    pub fn get_topics_conn(&self) -> Arc<AzureStorageConnection> {
-        self.topics_and_queue_conn_string.clone()
-    }
+    /// Materializes a cold year index back onto the local disk.
+    ///
+    /// The index is 4 MB and addressed by offset, so instead of reading it over ranged GETs we
+    /// bring the whole file back. That also gives the read-modify-write story for free: a late
+    /// write for a closed year updates the local copy, and the uploader sends it back up.
+    async fn restore_year_index_from_cold_storage(&self, topic_key: TopicKeyRef<'_>, year: Year) {
+        let Some(cold_storage) = self.get_cold_storage() else {
+            return;
+        };
 
-    #[allow(dead_code)]
-    pub fn get_messages_conn(&self) -> Arc<AzureStorageConnection> {
-        self.messages_conn_string.clone()
-    }
+        let path = self.get_year_index_path(topic_key, year);
 
-    #[allow(dead_code)]
-    pub fn get_archive_conn(&self) -> Arc<AzureStorageConnection> {
-        self.archive_conn_string.clone()
+        if path.exists() {
+            return;
+        }
+
+        let key = storage_layout::get_year_index_relative_path(topic_key, year);
+
+        let content = cold_storage
+            .download(key.as_str())
+            .await
+            .unwrap_or_else(|err| panic!("Can not read {} from the cold storage: {}", key, err));
+
+        let Some(content) = content else {
+            return;
+        };
+
+        println!("Restoring {} from the cold storage", key);
+
+        let file = FileStorage::open_or_create(&path)
+            .await
+            .expect("Can not create the year index file");
+
+        file.write_all(content.as_slice())
+            .await
+            .expect("Can not write the restored year index");
     }
 }
 
 #[async_trait::async_trait]
-impl ArchivePageBlobCreator for AppContext {
-    async fn create(&self, topic_id: &str, archive_file_no: ArchiveFileNo) -> AzurePageBlobStorage {
-        AzurePageBlobStorage::new(
-            self.archive_conn_string.clone(),
-            topic_id.to_string(),
-            archive_file_no.get_file_name(),
-        )
-        .await
+impl ArchiveFileOpener for AppContext {
+    async fn open_or_create_archive(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        archive_file_no: ArchiveFileNo,
+    ) -> ArchiveStorage {
+        let relative_path = storage_layout::get_archive_relative_path(topic_key, archive_file_no);
+        let path = storage_layout::get_local_path(self.get_data_folder(), relative_path.as_str());
+
+        ArchiveStorage::open_or_create_local(archive_file_no, path)
+            .await
+            .unwrap_or_else(|err| panic!("Can not open the archive {}: {:?}", relative_path, err))
+    }
+
+    async fn try_open_archive(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        archive_file_no: ArchiveFileNo,
+    ) -> Option<ArchiveStorage> {
+        let relative_path = storage_layout::get_archive_relative_path(topic_key, archive_file_no);
+        let path = storage_layout::get_local_path(self.get_data_folder(), relative_path.as_str());
+
+        let local = ArchiveStorage::open_local_if_exists(archive_file_no, path)
+            .await
+            .unwrap_or_else(|err| panic!("Can not open the archive {}: {:?}", relative_path, err));
+
+        if local.is_some() {
+            return local;
+        }
+
+        // Not on disk - it may have been sealed and uploaded. Reads then go over ranged GETs.
+        let cold_storage = self.get_cold_storage()?;
+
+        let exists = cold_storage
+            .exists(relative_path.as_str())
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Can not check {} in the cold storage: {}",
+                    relative_path, err
+                )
+            });
+
+        if !exists {
+            return None;
+        }
+
+        Some(ArchiveStorage::open_cold(
+            archive_file_no,
+            cold_storage.clone(),
+            relative_path,
+        ))
     }
 }

@@ -12,6 +12,9 @@ pub struct GetMessageByIdInputContract {
 
     #[http_query(name = "messageId"; description="Id of message")]
     pub message_id: i64,
+
+    #[http_query(name = "namespace"; description="Namespace of the topic. Empty means 'default'"; default: "")]
+    pub namespace: String,
 }
 
 #[derive(MyHttpInput)]
@@ -24,6 +27,9 @@ pub struct GetMessagesByIdInputContract {
 
     #[http_query(name = "fromDate"; description="From date")]
     pub from_date: String,
+
+    #[http_query(name = "namespace"; description="Namespace of the topic. Empty means 'default'"; default: "")]
+    pub namespace: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, MyHttpObjectStructure)]

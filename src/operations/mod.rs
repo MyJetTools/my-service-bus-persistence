@@ -1,6 +1,6 @@
 mod archive_io;
 pub mod compressed_page_compiler;
-mod current_sub_pages_io;
+pub mod current_sub_pages_io;
 pub mod data_initializer;
 // TODO: re-enable once soft-delete + GC flow is reimplemented (see TODO.md)
 // mod delete_topic;
@@ -18,6 +18,12 @@ mod get_page_to_read;
 mod get_topic_data_to_write;
 pub mod index_by_minute;
 mod init_new_topic;
+mod merge_legacy_folders;
+pub use merge_legacy_folders::*;
+mod migrate_legacy_topics;
+pub use migrate_legacy_topics::*;
+mod scan_topic_folders;
+pub use scan_topic_folders::*;
 
 pub mod before_shut_down;
 mod new_messages;

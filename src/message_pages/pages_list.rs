@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use my_service_bus::shared::sub_page::{SizeAndAmount, SubPageId};
-use rust_extensions::sorted_vec::SortedVecOfArc;
 use parking_lot::Mutex;
+use rust_extensions::sorted_vec::SortedVecOfArc;
 
 use super::{SubPage, SubPageInner};
 
@@ -85,13 +85,12 @@ impl PagesList {
         pages_access.remove(first_key.as_ref())
     }
 
+    /// The newest sub page - the open tail. `None` when the topic holds nothing, which happens
+    /// for a topic that is known but has never received a message.
     pub async fn get_active_sub_page(&self) -> Option<Arc<SubPage>> {
         let read_access = self.sub_pages.lock();
-
-        let last_key = read_access.last().unwrap().get_id().clone();
-
-        let result = read_access.get(last_key.as_ref()).unwrap().clone();
-        Some(result)
+        let result = read_access.last()?;
+        Some(result.clone())
     }
 
     pub async fn get_messages_amount_to_save(&self) -> SizeAndAmount {

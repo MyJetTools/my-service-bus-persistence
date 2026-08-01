@@ -1,6 +1,6 @@
 use my_service_bus::abstractions::MessageId;
-use rust_extensions::sorted_vec::{EntityWithKey, SortedVec};
 use parking_lot::Mutex;
+use rust_extensions::sorted_vec::{EntityWithKey, SortedVec};
 
 use super::MinuteWithinYear;
 

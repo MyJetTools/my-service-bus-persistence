@@ -7,13 +7,14 @@ use crate::{
     app::AppContext,
     index_by_minute::{MinuteWithinYear, YearlyIndexByMinute},
     topic_data::TopicData,
+    topic_key::TopicKeyRef,
 };
 
 use super::OperationError;
 
 pub async fn get_messages_from_date(
     app: &AppContext,
-    topic_id: &str,
+    topic_key: TopicKeyRef<'_>,
     get_messages_from_date: DateTimeAsMicroseconds,
     max_amount: usize,
 ) -> Result<Vec<Arc<MessageProtobufModel>>, OperationError> {
@@ -21,14 +22,14 @@ pub async fn get_messages_from_date(
         .index_by_minute_utils
         .get_minute_within_the_year(get_messages_from_date);
 
-    let topic_data = super::topics::get_topic(app, topic_id).await?;
+    let topic_data = super::topics::get_topic(app, topic_key).await?;
 
     let now = DateTimeAsMicroseconds::now();
 
     let mut yearly_index = topic_data.yearly_index_by_minute.get(year, Some(now)).await;
 
     if yearly_index.is_none() {
-        yearly_index = app.try_open_index_by_minute(topic_id, year).await;
+        yearly_index = app.try_open_index_by_minute(topic_key, year).await;
     }
 
     if yearly_index.is_none() {

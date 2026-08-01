@@ -2,8 +2,9 @@ use std::{sync::Arc, time::Duration};
 mod app;
 
 mod archive_storage;
+mod cold_storage;
 
-//mod azure_storage_with_retries;
+mod file_storage;
 mod grpc;
 mod http;
 mod index_by_minute;
@@ -13,6 +14,7 @@ mod operations;
 mod settings;
 mod timers;
 mod topic_data;
+mod topic_key;
 mod topics_snapshot;
 mod utils;
 
@@ -23,8 +25,9 @@ use crate::{
     app::AppContext,
     settings::SettingsModel,
     timers::{
-        metrics_updater::MetricsUpdater, pages_gc::PagesGcTimer,
-        save_min_index::SaveMinIndexTimer, topics_snapshot_saver::TopicsSnapshotSaverTimer,
+        cold_storage_uploader::ColdStorageUploaderTimer, metrics_updater::MetricsUpdater,
+        pages_gc::PagesGcTimer, save_min_index::SaveMinIndexTimer,
+        topics_snapshot_saver::TopicsSnapshotSaverTimer,
     },
 };
 #[allow(non_snake_case)]
@@ -38,6 +41,19 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[tokio::main]
 async fn main() {
     let settings = SettingsModel::read().await;
+
+    // Two phases, both before anything reads the snapshot or opens a topic. The first only brings
+    // over what is needed to serve; the rest follows in the background once the service is up.
+    let legacy_migration = settings
+        .legacy
+        .as_ref()
+        .map(|legacy| operations::LegacyMigration::new(settings.data.clone(), legacy.clone()));
+
+    if let Some(migration) = legacy_migration.as_ref() {
+        migration.move_working_files().await;
+    }
+
+    operations::migrate_legacy_layout(settings.data.as_str()).await;
 
     let app = AppContext::new(settings).await;
 
@@ -79,6 +95,22 @@ async fn main() {
         Arc::new(MetricsUpdater::new(app.clone(), http_connections_counter)),
     );
     timer_1s.start(app.app_states.clone(), my_logger::LOGGER.clone());
+
+    let mut timer_60s = MyTimer::new(Duration::from_secs(60));
+    timer_60s.register_timer(
+        "ColdStorageUploader",
+        Arc::new(ColdStorageUploaderTimer::new(app.clone())),
+    );
+    timer_60s.start(app.app_states.clone(), my_logger::LOGGER.clone());
+
+    if let Some(migration) = legacy_migration {
+        let app = app.clone();
+        tokio::spawn(async move {
+            migration
+                .move_the_rest(app.get_cold_storage().map(|itm| itm.as_ref()))
+                .await;
+        });
+    }
 
     tokio::spawn(operations::data_initializer::init(app.clone()));
 

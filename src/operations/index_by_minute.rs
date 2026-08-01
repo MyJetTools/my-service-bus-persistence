@@ -18,11 +18,20 @@ pub async fn new_messages(
             let mut yearly_index = topic_data.yearly_index_by_minute.get(year, Some(now)).await;
 
             if yearly_index.is_none() {
-                let new_index = app
-                    .open_or_create_index_by_minute(&topic_data.topic_id, year)
-                    .await;
+                let new_index = Arc::new(
+                    app.open_or_create_index_by_minute(topic_data.get_topic_key(), year)
+                        .await,
+                );
 
-                let new_index = Arc::new(new_index);
+                // Registering is what makes the write durable: `update_minute_index_if_new` only
+                // queues in memory, and the only things that flush the queue - SaveMinIndexTimer,
+                // the pages GC and shutdown - all iterate `IndexByMinuteList`. An unregistered
+                // instance is dropped at the end of this iteration together with everything queued
+                // on it, and it makes every message re-open the 4 MB index file.
+                topic_data
+                    .yearly_index_by_minute
+                    .add(year, new_index.clone())
+                    .await;
 
                 yearly_index = Some(new_index);
             }

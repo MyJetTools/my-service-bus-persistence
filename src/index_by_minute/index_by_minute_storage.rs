@@ -1,98 +1,76 @@
-use std::time::Duration;
+use std::path::PathBuf;
 
-use my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries;
-use my_azure_page_blob_random_access::PageBlobRandomAccess;
-use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageError};
 use my_service_bus::abstractions::MessageId;
 
-use super::{
-    utils::{MINUTE_INDEX_FILE_SIZE, MINUTE_INDEX_PAGES_AMOUNT},
-    MinuteWithinYear,
-};
+use crate::file_storage::FileStorage;
 
-pub struct IndexByMinutePageBlob {
-    page_blob: PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries>,
+use super::{utils::MINUTE_INDEX_FILE_SIZE, MinuteWithinYear};
+
+/// One file per topic per year: a flat array of 527 040 slots, 8 bytes each, addressed at
+/// `minute * 8`. A slot holds the id of the first message of that minute, or zero when the
+/// minute saw no traffic - which is why a read past the end has to come back zero-filled rather
+/// than fail.
+pub struct IndexByMinuteFile {
+    file: FileStorage,
 }
 
-impl IndexByMinutePageBlob {
-    pub fn new(page_blob: AzurePageBlobStorage) -> Self {
-        let page_blob =
-            MyAzurePageBlobStorageWithRetries::new(page_blob, 3, Duration::from_secs(3));
-        Self {
-            page_blob: PageBlobRandomAccess::new(page_blob, true, MINUTE_INDEX_PAGES_AMOUNT),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn get_page_blob(&self) -> &PageBlobRandomAccess<MyAzurePageBlobStorageWithRetries> {
-        &self.page_blob
-    }
-
-    pub async fn check_index_by_minute_blob(&self) -> Option<()> {
-        let result = self.page_blob.get_blob_properties().await;
-
-        match result {
-            Ok(props) => {
-                let file_size = props.get_blob_size();
-                if file_size < MINUTE_INDEX_FILE_SIZE {
-                    return None;
-                }
-
-                return Some(());
-            }
-
-            Err(err) => {
-                if let AzureStorageError::BlobNotFound = &err {
-                    return None;
-                }
-
-                if let AzureStorageError::ContainerNotFound = &err {
-                    return None;
-                }
-
-                panic!("Error: {:?}", err);
-            }
-        }
-    }
-
-    pub async fn init_index_by_minute(&self) {
-        let page_blob_props = self
-            .page_blob
-            .create_blob_if_not_exists(MINUTE_INDEX_PAGES_AMOUNT, true)
+impl IndexByMinuteFile {
+    pub async fn open_or_create(path: impl Into<PathBuf>) -> Self {
+        let file = FileStorage::open_or_create(path)
             .await
-            .unwrap();
+            .expect("Can not open the year index file");
 
-        if page_blob_props.get_pages_amount() < MINUTE_INDEX_PAGES_AMOUNT {
-            self.page_blob
-                .resize(MINUTE_INDEX_PAGES_AMOUNT)
-                .await
-                .unwrap();
-        }
+        file.ensure_size(MINUTE_INDEX_FILE_SIZE as u64)
+            .await
+            .expect("Can not size the year index file");
+
+        Self { file }
     }
+
+    pub async fn open_if_exists(path: impl Into<PathBuf>) -> Option<Self> {
+        let file = FileStorage::open_if_exists(path)
+            .await
+            .expect("Can not open the year index file")?;
+
+        let size = file
+            .get_size()
+            .await
+            .expect("Can not read the year index size");
+
+        if (size as usize) < MINUTE_INDEX_FILE_SIZE {
+            return None;
+        }
+
+        Some(Self { file })
+    }
+
     pub async fn write_message_id_to_minute_index(
         &self,
         minute: MinuteWithinYear,
         message_id: MessageId,
     ) {
-        let message_id = message_id.get_value() as i64;
+        let payload = message_id.get_value().to_le_bytes();
 
-        let payload = message_id.to_le_bytes();
-        let position_in_file = minute.get_position_in_file();
-        self.page_blob
-            .write(position_in_file, payload.as_slice())
+        self.file
+            .write(minute.get_position_in_file(), payload.as_slice())
             .await
-            .unwrap();
+            .expect("Can not write into the year index");
     }
 
     pub async fn read_message_id_from_minute_index(
         &self,
         minute: MinuteWithinYear,
     ) -> Option<MessageId> {
-        let position_in_file = minute.get_position_in_file();
+        let payload = self
+            .file
+            .read(minute.get_position_in_file(), 8)
+            .await
+            .expect("Can not read the year index");
 
-        let mut payload = self.page_blob.read(position_in_file, 8).await.unwrap();
+        let mut value = [0u8; 8];
+        value.copy_from_slice(payload.as_slice());
 
-        let result = payload.read_i64();
+        let result = i64::from_le_bytes(value);
 
         if result == 0 {
             return None;
@@ -100,88 +78,91 @@ impl IndexByMinutePageBlob {
 
         Some(MessageId::new(result))
     }
+
+    #[cfg(test)]
+    pub fn get_file(&self) -> &FileStorage {
+        &self.file
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use super::*;
 
     use crate::index_by_minute::MinuteWithinYear;
-
-    use super::IndexByMinutePageBlob;
-    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus::abstractions::MessageId;
 
+    fn temp_path(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("my-sb-persistence-yearindex-{}", name));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
     #[tokio::test]
-    async fn test_create_new_blob_then_write_and_read() {
-        let connection = AzureStorageConnection::new_in_memory();
-        let page_blob =
-            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
-                .await;
-
-        page_blob.create_container_if_not_exists().await.unwrap();
-
-        let page_blob = IndexByMinutePageBlob::new(page_blob);
-
-        page_blob.init_index_by_minute().await;
+    async fn test_create_new_file_then_write_and_read() {
+        let path = temp_path("write_and_read");
+        let storage = IndexByMinuteFile::open_or_create(&path).await;
 
         let minute = MinuteWithinYear::new(15);
-
         let message_id = MessageId::new(123);
-        page_blob
+
+        storage
             .write_message_id_to_minute_index(minute, message_id)
             .await;
 
-        let result = page_blob.read_message_id_from_minute_index(minute).await;
+        let result = storage.read_message_id_from_minute_index(minute).await;
 
         assert_eq!(result.unwrap(), message_id);
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn test_create_new_blob_then_read() {
-        let connection = AzureStorageConnection::new_in_memory();
-        let page_blob =
-            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
-                .await;
+    async fn test_create_new_file_then_read() {
+        let path = temp_path("read_empty");
+        let storage = IndexByMinuteFile::open_or_create(&path).await;
 
-        page_blob.create_container_if_not_exists().await.unwrap();
-
-        let page_blob = IndexByMinutePageBlob::new(page_blob);
-
-        page_blob.init_index_by_minute().await;
-
-        let minute = MinuteWithinYear::new(15);
-
-        let result = page_blob.read_message_id_from_minute_index(minute).await;
-
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_position_in_blob() {
-        let connection = AzureStorageConnection::new_in_memory();
-        let page_blob =
-            AzurePageBlobStorage::new(Arc::new(connection), "test".to_string(), "test".to_string())
-                .await;
-
-        page_blob.create_container_if_not_exists().await.unwrap();
-
-        let page_blob = IndexByMinutePageBlob::new(page_blob);
-
-        page_blob.init_index_by_minute().await;
-
-        let minute = MinuteWithinYear::new(15);
-
-        let message_id = MessageId::new(123);
-        page_blob
-            .write_message_id_to_minute_index(minute, message_id)
+        let result = storage
+            .read_message_id_from_minute_index(MinuteWithinYear::new(15))
             .await;
 
-        let blob_payload = page_blob.get_page_blob().download().await.unwrap();
+        assert!(result.is_none());
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn test_position_in_file() {
+        let path = temp_path("position");
+        let storage = IndexByMinuteFile::open_or_create(&path).await;
+
+        let minute = MinuteWithinYear::new(15);
+
+        storage
+            .write_message_id_to_minute_index(minute, MessageId::new(123))
+            .await;
+
+        let payload = storage.get_file().read_all().await.unwrap();
 
         assert_eq!(
-            &blob_payload[minute.get_value() as usize * 8..minute.get_value() as usize * 8 + 8],
+            &payload[minute.get_value() as usize * 8..minute.get_value() as usize * 8 + 8],
             [123u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8]
-        )
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[tokio::test]
+    async fn open_if_exists_returns_none_for_a_missing_file() {
+        let path = temp_path("missing");
+
+        assert!(IndexByMinuteFile::open_if_exists(&path).await.is_none());
+
+        IndexByMinuteFile::open_or_create(&path).await;
+
+        assert!(IndexByMinuteFile::open_if_exists(&path).await.is_some());
+
+        let _ = std::fs::remove_file(&path);
     }
 }

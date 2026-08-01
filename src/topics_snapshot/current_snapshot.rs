@@ -1,13 +1,15 @@
 use my_logger::LogEventCtx;
 use parking_lot::RwLock;
 
-use super::{page_blob_storage::TopicsSnapshotPageBlobStorage, protobuf_model::*};
+use crate::topic_key::TopicKey;
+
+use super::{file_storage::TopicsSnapshotStorage, protobuf_model::*};
 
 #[derive(Clone)]
 pub struct TopicsSnapshotData {
     pub snapshot_id: i64,
     pub last_saved_snapshot_id: i64,
-    pub snapshot: TopicsSnapshotProtobufModelV2,
+    pub snapshot: TopicsSnapshotProtobufModelV3,
 }
 
 impl TopicsSnapshotData {
@@ -16,7 +18,7 @@ impl TopicsSnapshotData {
         deleted_topics: Vec<DeletedTopicProtobufModel>,
     ) -> Self {
         Self {
-            snapshot: TopicsSnapshotProtobufModelV2 {
+            snapshot: TopicsSnapshotProtobufModelV3 {
                 data,
                 deleted_topics,
             },
@@ -33,63 +35,26 @@ impl TopicsSnapshotData {
     pub fn update_snapshot_id(&mut self, saved_id: i64) {
         self.last_saved_snapshot_id = saved_id;
     }
-
-    // TODO: soft-delete + GC flow is being reworked. See `TODO.md`.
-    // pub fn add_deleted_topic(
-    //     &mut self,
-    //     topic_id: &str,
-    //     message_id: MessageId,
-    //     gc_after: DateTimeAsMicroseconds,
-    // ) {
-    //     self.snapshot
-    //         .deleted_topics
-    //         .retain(|itm| itm.topic_id != topic_id);
-    //
-    //     let deleted_topic = DeletedTopicProtobufModel {
-    //         topic_id: topic_id.to_string(),
-    //         message_id: message_id.get_value(),
-    //         gc_after: gc_after.unix_microseconds,
-    //     };
-    //
-    //     self.snapshot.deleted_topics.push(deleted_topic);
-    // }
-    //
-    // pub fn remove_deleted_topic(&mut self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
-    //     let mut index = None;
-    //
-    //     for (idx, itm) in self.snapshot.deleted_topics.iter().enumerate() {
-    //         if itm.topic_id == topic_id {
-    //             index = Some(idx);
-    //             break;
-    //         }
-    //     }
-    //
-    //     if index.is_none() {
-    //         return None;
-    //     }
-    //
-    //     let index = index.unwrap();
-    //
-    //     let result = self.snapshot.deleted_topics[index].clone();
-    //
-    //     self.snapshot.deleted_topics.remove(index);
-    //
-    //     Some(result)
-    // }
 }
 
+/// Flat in memory - every namespace in one list, because `GetQueueSnapshot` is deliberately a
+/// single stream for all of them. On disk it is split into one YAML file per namespace.
 pub struct CurrentTopicsSnapshot {
     data: RwLock<TopicsSnapshotData>,
-    pub blob: TopicsSnapshotPageBlobStorage,
+    pub storage: TopicsSnapshotStorage,
 }
 
 impl CurrentTopicsSnapshot {
-    pub async fn read_or_create(blob: TopicsSnapshotPageBlobStorage) -> Self {
-        let snapshot = blob.read_or_create_topics_snapshot().await.unwrap();
-        let result = snapshot.get_result();
+    pub async fn read_or_create(data_folder: String) -> Self {
+        let storage = TopicsSnapshotStorage::new(data_folder);
+        let loaded = storage.read().await;
+
         Self {
-            data: RwLock::new(TopicsSnapshotData::new(result.data, result.deleted_topics)),
-            blob,
+            data: RwLock::new(TopicsSnapshotData::new(
+                loaded.topics,
+                loaded.deleted_topics,
+            )),
+            storage,
         }
     }
 
@@ -98,13 +63,13 @@ impl CurrentTopicsSnapshot {
         read_access.clone()
     }
 
-    pub async fn get_topics_list(&self) -> Vec<String> {
+    pub async fn get_topics_list(&self) -> Vec<TopicKey> {
         let read_access = self.data.read();
         read_access
             .snapshot
             .data
             .iter()
-            .map(|itm| itm.topic_id.clone())
+            .map(|itm| itm.get_topic_key().to_owned_key())
             .collect()
     }
 
@@ -112,22 +77,6 @@ impl CurrentTopicsSnapshot {
         let mut write_access = self.data.write();
         write_access.update(snapshot);
     }
-
-    // TODO: soft-delete + GC flow is being reworked. See `TODO.md`.
-    // pub async fn add_deleted_topic(
-    //     &self,
-    //     topic_id: &str,
-    //     message_id: MessageId,
-    //     gc_after: DateTimeAsMicroseconds,
-    // ) {
-    //     let mut write_access = self.data.write();
-    //     write_access.add_deleted_topic(topic_id, message_id, gc_after);
-    // }
-    //
-    // pub async fn remove_deleted_topic(&self, topic_id: &str) -> Option<DeletedTopicProtobufModel> {
-    //     let mut write_access = self.data.write();
-    //     write_access.remove_deleted_topic(topic_id)
-    // }
 
     pub async fn update_snapshot_id_as_saved(&self, saved_id: i64) {
         let mut write_access = self.data.write();
@@ -140,32 +89,32 @@ impl CurrentTopicsSnapshot {
             return None;
         }
 
-        return Some(read_access.clone());
+        Some(read_access.clone())
     }
 
     pub async fn flush_topics_snapshot_to_blob(&self) {
         let topics_snapshot = self.get_snapshot_if_there_are_changes().await;
 
-        if topics_snapshot.is_none() {
+        let Some(topics_snapshot) = topics_snapshot else {
             return;
-        }
-
-        let topics_snapshot = topics_snapshot.unwrap();
+        };
 
         let mut attempt_no = 0;
 
         loop {
-            let result = {
-                self.blob
-                    .write_topics_snapshot(&topics_snapshot.snapshot)
-                    .await
-            };
+            let result = self
+                .storage
+                .write(
+                    topics_snapshot.snapshot.data.as_slice(),
+                    topics_snapshot.snapshot.deleted_topics.as_slice(),
+                )
+                .await;
 
             if let Err(err) = result {
                 my_logger::LOGGER.write_error(
                     "Write Topics Snapshot".to_string(),
                     format!(
-                        "Can not snapshot with ID #{}. Attempt:{}. Err: {:?}",
+                        "Can not write snapshot with ID #{}. Attempt:{}. Err: {}",
                         topics_snapshot.snapshot_id, attempt_no, err
                     ),
                     LogEventCtx::new(),

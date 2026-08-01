@@ -5,8 +5,8 @@ use my_service_bus::shared::{
     protobuf_models::MessageProtobufModel,
     sub_page::{SizeAndAmount, SubPageId},
 };
-use rust_extensions::sorted_vec::{EntityWithKey, SortedVecOfArc};
 use parking_lot::Mutex;
+use rust_extensions::sorted_vec::{EntityWithKey, SortedVecOfArc};
 
 use super::{SubPageInner, SubPageReadCopy};
 

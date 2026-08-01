@@ -1,11 +1,10 @@
-use my_azure_storage_sdk::AzureStorageError;
 use zip::result::ZipError;
 
 #[derive(Debug)]
 pub enum PageOperationError {
     NotInitialized,
     ZipError(ZipError),
-    AzureStorageError(AzureStorageError),
+    FileStorageError(String),
 }
 
 impl From<ZipError> for PageOperationError {
@@ -14,8 +13,8 @@ impl From<ZipError> for PageOperationError {
     }
 }
 
-impl From<AzureStorageError> for PageOperationError {
-    fn from(src: AzureStorageError) -> Self {
-        Self::AzureStorageError(src)
+impl From<crate::file_storage::FileStorageError> for PageOperationError {
+    fn from(src: crate::file_storage::FileStorageError) -> Self {
+        Self::FileStorageError(format!("{}", src))
     }
 }

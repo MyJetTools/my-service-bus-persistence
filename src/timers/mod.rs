@@ -1,3 +1,4 @@
+pub mod cold_storage_uploader;
 pub mod metrics_updater;
 pub mod pages_gc;
 

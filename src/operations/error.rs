@@ -1,4 +1,3 @@
-use my_azure_storage_sdk::AzureStorageError;
 use zip::result::ZipError;
 
 use crate::message_pages::PageOperationError;
@@ -10,7 +9,7 @@ pub enum OperationError {
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
     ZipError(ZipError),
-    AzureStorageError(AzureStorageError),
+    FileStorageError(String),
 }
 
 impl From<PageOperationError> for OperationError {
@@ -37,9 +36,8 @@ impl From<ZipError> for OperationError {
     }
 }
 
-impl From<AzureStorageError> for OperationError {
-    fn from(src: AzureStorageError) -> Self {
-        Self::AzureStorageError(src)
+impl From<crate::file_storage::FileStorageError> for OperationError {
+    fn from(src: crate::file_storage::FileStorageError) -> Self {
+        Self::FileStorageError(format!("{}", src))
     }
 }
-

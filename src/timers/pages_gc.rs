@@ -4,7 +4,7 @@ use crate::{
     app::AppContext, operations::OperationError, topics_snapshot::TopicSnapshotProtobufModel,
 };
 
-use rust_extensions::MyTimerTick;
+use rust_extensions::{MyTimerTick, RepeatTimerIteration};
 
 pub struct PagesGcTimer {
     app: Arc<AppContext>,
@@ -18,12 +18,14 @@ impl PagesGcTimer {
 
 #[async_trait::async_trait]
 impl MyTimerTick for PagesGcTimer {
-    async fn tick(&self) {
+    async fn tick(&self) -> RepeatTimerIteration {
         let topics_snapshot = self.app.topics_snapshot.get().await;
 
         gc_pages(self.app.clone(), &topics_snapshot.snapshot.data)
             .await
             .unwrap();
+
+        RepeatTimerIteration::WithInterval
     }
 }
 
@@ -32,7 +34,9 @@ async fn gc_pages(
     topics: &Vec<TopicSnapshotProtobufModel>,
 ) -> Result<(), OperationError> {
     for topic_snapshot in topics {
-        let topic_data = app.topics_list.get(topic_snapshot.topic_id.as_str());
+        let topic_key = topic_snapshot.get_topic_key();
+
+        let topic_data = app.topics_list.get(topic_key);
 
         if topic_data.is_none() {
             continue;
@@ -42,8 +46,7 @@ async fn gc_pages(
 
         if let Some(persist) = topic_snapshot.persist {
             if !persist {
-                app.topics_list
-                    .remove(topic_snapshot.topic_id.as_str());
+                app.topics_list.remove(topic_key);
                 continue;
             }
         }

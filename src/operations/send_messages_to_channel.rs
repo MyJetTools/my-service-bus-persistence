@@ -4,15 +4,17 @@ use my_grpc_extensions::StreamedResponseProducer;
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::sub_page::SubPageId;
 
-use crate::{app::AppContext, persistence_grpc::MessageContentGrpcModel};
+use crate::{app::AppContext, persistence_grpc::MessageContentGrpcModel, topic_key::TopicKey};
 
 pub async fn send_messages_to_channel(
     app: Arc<AppContext>,
-    topic_id: String,
+    topic_key: TopicKey,
     from_message_id: MessageId,
     to_message_id: MessageId,
     producer: StreamedResponseProducer<MessageContentGrpcModel>,
 ) {
+    let topic_key = topic_key.to_ref();
+
     let mut sub_page_read_copy = None;
 
     for message_id in from_message_id.get_value()..to_message_id.get_value() + 1 {
@@ -22,14 +24,14 @@ pub async fn send_messages_to_channel(
 
         if sub_page_read_copy.is_none() {
             let sub_page =
-                crate::operations::get_sub_page_to_read(&app, &topic_id, sub_page_id).await;
+                crate::operations::get_sub_page_to_read(&app, topic_key, sub_page_id).await;
 
             sub_page_read_copy = Some(sub_page.get_all_messages().await);
         }
 
         if sub_page_read_copy.as_ref().unwrap().sub_page_id.get_value() != sub_page_id.get_value() {
             let sub_page =
-                crate::operations::get_sub_page_to_read(&app, &topic_id, sub_page_id).await;
+                crate::operations::get_sub_page_to_read(&app, topic_key, sub_page_id).await;
 
             sub_page_read_copy = Some(sub_page.get_all_messages().await);
         }

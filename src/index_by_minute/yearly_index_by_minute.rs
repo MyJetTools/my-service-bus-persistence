@@ -1,42 +1,35 @@
-use my_azure_storage_sdk::page_blob::AzurePageBlobStorage;
+use std::path::PathBuf;
+
 use my_service_bus::abstractions::MessageId;
 use rust_extensions::date_time::AtomicDateTimeAsMicroseconds;
 
-use super::{IndexByMinutePageBlob, MinuteWithinYear, UpdateQueue};
+use super::{IndexByMinuteFile, MinuteWithinYear, UpdateQueue};
 
 pub struct YearlyIndexByMinute {
-    page_blob: IndexByMinutePageBlob,
+    file: IndexByMinuteFile,
     update_queue: UpdateQueue,
     pub last_access: AtomicDateTimeAsMicroseconds,
 }
 
 impl YearlyIndexByMinute {
-    pub async fn open_or_create(page_blob: AzurePageBlobStorage) -> Self {
-        let page_blob = IndexByMinutePageBlob::new(page_blob);
-
-        page_blob.init_index_by_minute().await;
-
+    pub async fn open_or_create(path: impl Into<PathBuf>) -> Self {
         Self {
-            page_blob,
+            file: IndexByMinuteFile::open_or_create(path).await,
             update_queue: UpdateQueue::new(),
             last_access: AtomicDateTimeAsMicroseconds::now(),
         }
     }
+
     #[cfg(test)]
-    pub fn get_page_blob(
-        &self,
-    ) -> &my_azure_page_blob_random_access::PageBlobRandomAccess<
-        my_azure_page_blob_ext::MyAzurePageBlobStorageWithRetries,
-    > {
-        self.page_blob.get_page_blob()
+    pub fn get_file(&self) -> &crate::file_storage::FileStorage {
+        self.file.get_file()
     }
 
-    pub async fn load_if_exists(page_blob: AzurePageBlobStorage) -> Option<Self> {
-        let page_blob = IndexByMinutePageBlob::new(page_blob);
-        page_blob.check_index_by_minute_blob().await?;
+    pub async fn load_if_exists(path: impl Into<PathBuf>) -> Option<Self> {
+        let file = IndexByMinuteFile::open_if_exists(path).await?;
 
         Self {
-            page_blob,
+            file,
             update_queue: UpdateQueue::new(),
             last_access: AtomicDateTimeAsMicroseconds::now(),
         }
@@ -58,7 +51,7 @@ impl YearlyIndexByMinute {
             return Some(result);
         }
 
-        self.page_blob
+        self.file
             .read_message_id_from_minute_index(minute_within_year)
             .await
     }
@@ -87,16 +80,13 @@ impl YearlyIndexByMinute {
     }
 
     async fn write_to_blob(&self, minute: MinuteWithinYear, message_id: MessageId) {
-        let value = self
-            .page_blob
-            .read_message_id_from_minute_index(minute)
-            .await;
+        let value = self.file.read_message_id_from_minute_index(minute).await;
 
         if value.is_some() {
             return;
         }
 
-        self.page_blob
+        self.file
             .write_message_id_to_minute_index(minute, message_id)
             .await;
     }
@@ -105,29 +95,31 @@ impl YearlyIndexByMinute {
 #[cfg(test)]
 mod tests {
 
-    use my_azure_storage_sdk::{page_blob::AzurePageBlobStorage, AzureStorageConnection};
     use my_service_bus::abstractions::MessageId;
 
     use crate::index_by_minute::{MinuteWithinYear, YearlyIndexByMinute};
 
+    fn temp_path(name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("my-sb-persistence-yearly-{}", name));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
     #[tokio::test]
     async fn test_open_not_existing() {
-        let connection = AzureStorageConnection::new_in_memory();
-        let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
+        let path = temp_path("not_existing");
 
-        // let page_blob = PageBlobRandomAccess::new(page_blob, true, 512);
-
-        let index = YearlyIndexByMinute::load_if_exists(page_blob).await;
+        let index = YearlyIndexByMinute::load_if_exists(&path).await;
 
         assert_eq!(index.is_none(), true);
     }
 
     #[tokio::test]
     async fn test_we_already_written() {
-        let connection = AzureStorageConnection::new_in_memory();
-        let page_blob = AzurePageBlobStorage::new(connection.into(), "test", "test").await;
+        let path = temp_path("already_written");
 
-        let index = YearlyIndexByMinute::open_or_create(page_blob).await;
+        let index = YearlyIndexByMinute::open_or_create(&path).await;
 
         //Writing First element
         let minute = MinuteWithinYear::new(0);
@@ -146,10 +138,13 @@ mod tests {
 
         index.flush_to_storage().await;
 
-        let mut result = index.get_page_blob().read(0, 4).await.unwrap();
+        let result = index.get_file().read(0, 8).await.unwrap();
 
-        let result = result.read_i64();
+        let mut value = [0u8; 8];
+        value.copy_from_slice(result.as_slice());
 
-        assert_eq!(result, 15);
+        assert_eq!(i64::from_le_bytes(value), 15);
+
+        let _ = std::fs::remove_file(&path);
     }
 }

@@ -57,6 +57,9 @@ fn get_queues(queue_snapshot: &Vec<QueueSnapshotProtobufModel>) -> Vec<QueueStat
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TopicInfo {
+    #[serde(rename = "namespace")]
+    namespace: String,
+
     #[serde(rename = "topicId")]
     topic_id: String,
 
@@ -158,7 +161,7 @@ impl StatusModel {
         let now = DateTimeAsMicroseconds::now();
 
         for snapshot in &topics_snapshot.snapshot.data {
-            let topic_data = app.topics_list.get(snapshot.topic_id.as_str());
+            let topic_data = app.topics_list.get(snapshot.get_topic_key());
 
             let topic_info_model = get_topics_model(snapshot, topic_data.as_ref(), now).await;
 
@@ -206,6 +209,7 @@ async fn get_topics_model(
     };
 
     TopicInfo {
+        namespace: snapshot.get_namespace().to_string(),
         topic_id: snapshot.topic_id.to_string(),
         message_id: snapshot.get_message_id().get_value(),
         active_pages: active_pages.keys().into_iter().map(|i| *i).collect(),

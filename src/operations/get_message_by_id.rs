@@ -3,16 +3,16 @@ use std::sync::Arc;
 use my_service_bus::abstractions::MessageId;
 use my_service_bus::shared::protobuf_models::MessageProtobufModel;
 
-use crate::app::AppContext;
+use crate::{app::AppContext, topic_key::TopicKeyRef};
 
 use super::OperationError;
 
 pub async fn get_message_by_id(
     app: &AppContext,
-    topic_id: &str,
+    topic_key: TopicKeyRef<'_>,
     message_id: MessageId,
 ) -> Result<Option<Arc<MessageProtobufModel>>, OperationError> {
-    let topic_data = super::topics::get_topic(app, topic_id).await?;
+    let topic_data = super::topics::get_topic(app, topic_key).await?;
 
     let sub_page_id = message_id.into();
 
