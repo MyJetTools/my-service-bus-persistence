@@ -6,7 +6,7 @@ use rust_extensions::{MyTimerTick, RepeatTimerIteration};
 use crate::{
     app::{storage_layout, AppContext, StorageLocks},
     archive_storage::ArchiveFileNo,
-    file_storage::{delete_file_if_exists, FileStorage},
+    file_storage::delete_file_if_exists,
     topic_key::{TopicKey, TopicKeyRef},
 };
 
@@ -162,29 +162,17 @@ async fn upload_and_drop(
     let mut path = topic_folder.path.clone();
     path.push(file_name);
 
-    // Phase 1 - shared: read and upload while everyone else keeps reading.
+    // Phase 1 - shared: upload while everyone else keeps reading. Streamed from the file, so
+    // peak memory is a chunk rather than the whole archive.
     {
         let _guard = locks.read(topic_key).await;
 
-        let file = match FileStorage::open_if_exists(&path).await {
-            Ok(Some(file)) => file,
-            Ok(None) => return,
-            Err(err) => {
-                write_error(&key, format!("Can not open the file. Err: {}", err));
-                return;
-            }
-        };
-
-        let content = match file.read_all().await {
-            Ok(content) => content,
-            Err(err) => {
-                write_error(&key, format!("Can not read the file. Err: {}", err));
-                return;
-            }
-        };
+        if !path.is_file() {
+            return;
+        }
 
         if let Err(err) = cold_storage
-            .upload(topic_key.namespace, key.as_str(), content)
+            .upload_file(topic_key.namespace, key.as_str(), path.as_path())
             .await
         {
             write_error(&key, format!("Can not upload. Err: {}", err));

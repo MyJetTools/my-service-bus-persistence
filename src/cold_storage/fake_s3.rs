@@ -56,6 +56,10 @@ impl FakeS3 {
         }
     }
 
+    pub fn get_object(&self, path: &str) -> Option<Vec<u8>> {
+        self.state.lock().unwrap().objects.get(path).cloned()
+    }
+
     pub fn object_paths(&self) -> Vec<String> {
         let mut result: Vec<String> = self.state.lock().unwrap().objects.keys().cloned().collect();
         result.sort();

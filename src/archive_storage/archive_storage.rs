@@ -416,7 +416,7 @@ mod tests {
 
         let key = "orders/0000000000000000000.archive".to_string();
         cold_storage
-            .upload("default", key.as_str(), std::fs::read(&path).unwrap())
+            .upload_file("default", key.as_str(), path.as_path())
             .await
             .unwrap();
 

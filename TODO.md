@@ -201,13 +201,22 @@ dependency - and no unit test removed the last topic of a namespace.
   file the tail could be appended to as messages arrive, shrinking the loss window
   to the last fsync and removing the shutdown path entirely. It changes the file
   format, so it is a deliberate decision rather than a refactor.
+- **`my-s3`: streaming upload.** `upload_file` takes the body as a `Vec<u8>`, and the caller has
+  read the file whole to produce it, so a upload peaks at roughly twice the file size in RAM. With
+  260 MB archives in a 512 MB container that is an OOM kill - which arrives as SIGKILL, so there is
+  no panic and no log line, only a container restarting every few seconds; and because the
+  migration is idempotent it looks like slow progress rather than a failure. Until the crate can
+  stream (multipart, or a body from an `AsyncRead`), `max_upload_size_mb` refuses anything larger
+  and says why, and the file stays local.
 - **`my-s3`: `BucketAlreadyOwnedByYou`** is not modelled, so a restart against your own bucket
   arrives as `Other` and has to be matched by string in `cold_storage::already_ours`.
 - **`my-s3`: a typed `KeyNotFound`** instead of `Other("Status Code: 404...")`, which
   `cold_storage::is_not_found` has to match by string today. `If-Match` on PUT is not
   needed while a topic has a single writer, and listing is not needed at all.
-- **`ARCHIVE_MESSAGES_PER_FILE`** (10M) drives the local disk peak before upload and
-  should become a setting.
+- **`ARCHIVE_MESSAGES_PER_FILE`** (10M) drives both the local disk peak and the size of a single
+  upload. It can **not** simply be turned into a setting: `ArchiveFileNo::from_sub_page_id` divides
+  by it, so changing it re-numbers every existing archive and silently misaddresses stored data.
+  Changing it needs a layout version and a migration.
 - **Nothing has run against a real AWS/MinIO endpoint yet.** The client is exercised against an
   in-process S3-compatible server (`cold_storage::fake_s3`), which covers SigV4 signing, the
   `Range` header, 200/206/204/404 handling, the key spelling and the cold archive read - but not

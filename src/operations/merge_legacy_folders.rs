@@ -152,18 +152,14 @@ impl LegacyMigration {
         // Everything legacy belongs to `default`, so it lands in the `default` bucket.
         let key = storage_layout::get_cold_key(topic_key, file_name);
 
-        let content = match tokio::fs::read(from.as_path()).await {
-            Ok(content) => content,
-            Err(err) => {
-                if let std::io::ErrorKind::NotFound = err.kind() {
-                    return;
-                }
-                panic!("Can not read {:?}: {}", from, err);
-            }
-        };
+        if !from.is_file() {
+            return;
+        }
+
+        println!("Uploading {:?} to the cold storage as {}", from, key);
 
         if let Err(err) = cold_storage
-            .upload(topic_key.namespace, key.as_str(), content)
+            .upload_file(topic_key.namespace, key.as_str(), from.as_path())
             .await
         {
             panic!("Can not upload {} to the cold storage: {}", key, err);

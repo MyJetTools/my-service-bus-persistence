@@ -41,7 +41,11 @@ pub fn check_namespace_is_supported(namespace: &str) -> Result<(), tonic::Status
 
 pub fn check_flags(app: &AppContext) -> Result<(), tonic::Status> {
     if !app.app_states.is_initialized() {
-        return Err(tonic::Status::cancelled(
+        // `Unavailable`, not `Cancelled`: this is the standard "not ready, retry later" status,
+        // and gRPC retry policies treat it as retryable while `Cancelled` means the caller gave
+        // up. During a joint restart the bus node hits this for a few seconds - it must be able to
+        // tell "come back shortly" from a real failure.
+        return Err(tonic::Status::unavailable(
             "Application is not initialized yet",
         ));
     }
