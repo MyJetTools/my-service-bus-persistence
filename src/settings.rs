@@ -10,9 +10,8 @@ use tokio::{fs::File, io::AsyncReadExt};
 /// s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=...;SecretKey=...;Bucket=my-sb"
 /// ```
 ///
-/// There is one bucket per namespace. `Bucket` is an optional prefix for their names - see
-/// `ColdStorage`. Leave the whole setting out and nothing is ever uploaded: every file stays on
-/// the local disk forever.
+/// There is one bucket per namespace, named `{Bucket}-{namespace}`. Leave the whole setting out
+/// and nothing is ever uploaded: every file stays on the local disk forever.
 #[derive(Debug, Clone)]
 pub struct S3ConnectionSettings {
     pub endpoint: String,

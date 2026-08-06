@@ -55,7 +55,9 @@ impl ColdStorage {
             client: S3Client {
                 access_key: settings.access_key.clone(),
                 secret_key: settings.secret_key.clone(),
-                region: settings.region.clone(),
+                // `S3Region` knows the AWS and Hetzner regions by name and keeps anything else as
+                // `Other`, so an unfamiliar endpoint still signs correctly.
+                region: settings.region.clone().into(),
                 endpoint: settings.endpoint.clone(),
             },
             bucket_prefix: settings.bucket.clone(),
