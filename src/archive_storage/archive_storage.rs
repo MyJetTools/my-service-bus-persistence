@@ -10,7 +10,7 @@ use super::{
     toc::SubPagePosition,
     ArchiveFileNo,
 };
-use crate::cold_storage::ColdStorage;
+use crate::{cold_storage::ColdStorage, topic_key::TopicKey};
 
 #[derive(Debug)]
 // The payloads are read through `{:?}` in panics and logs, which dead-code analysis ignores.
@@ -50,9 +50,10 @@ enum ArchiveSource {
 
 struct ColdArchive {
     cold_storage: Arc<ColdStorage>,
-    /// Which bucket - one per namespace.
-    namespace: String,
-    key: String,
+    /// Owned, because the handle outlives the request that opened it. `ColdStorage` turns the pair
+    /// plus the file name into a bucket and a key, whichever layout is configured.
+    topic_key: TopicKey,
+    file_name: String,
     toc: Mutex<Option<Arc<Vec<u8>>>>,
 }
 
@@ -94,15 +95,15 @@ impl ArchiveStorage {
     pub fn open_cold(
         archive_file_no: ArchiveFileNo,
         cold_storage: Arc<ColdStorage>,
-        namespace: String,
-        key: String,
+        topic_key: TopicKey,
+        file_name: String,
     ) -> Self {
         Self {
             archive_file_no,
             source: ArchiveSource::Cold(ColdArchive {
                 cold_storage,
-                namespace,
-                key,
+                topic_key,
+                file_name,
                 toc: Mutex::new(None),
             }),
         }
@@ -212,7 +213,7 @@ impl ColdArchive {
 
     async fn read_range(&self, from: u64, to: u64) -> Result<Vec<u8>, ArchiveStorageError> {
         self.cold_storage
-            .download_range(self.namespace.as_str(), self.key.as_str(), from, to)
+            .download_range(self.topic_key.to_ref(), self.file_name.as_str(), from, to)
             .await
             .map_err(ArchiveStorageError::ColdStorageError)
     }
@@ -386,7 +387,8 @@ mod tests {
     #[tokio::test]
     async fn a_cold_archive_is_read_over_ranged_gets() {
         use crate::cold_storage::fake_s3::FakeS3;
-        use crate::settings::S3ConnectionSettings;
+        use crate::settings::{S3BucketMode, S3ConnectionSettings};
+        use crate::topic_key::TopicKeyRef;
 
         let path = temp_path("cold_read");
 
@@ -411,20 +413,22 @@ mod tests {
             region: "eu-central-1".to_string(),
             access_key: "AKIATEST".to_string(),
             secret_key: "secret".to_string(),
-            bucket: "sb".to_string(),
+            bucket_mode: S3BucketMode::PerNamespace("sb".to_string()),
         }));
 
-        let key = "orders/0000000000000000000.archive".to_string();
+        let topic_key = TopicKeyRef::new("default", "orders");
+        let file_name = "0000000000000000000.archive".to_string();
+
         cold_storage
-            .upload_file("default", key.as_str(), path.as_path())
+            .upload_file(topic_key, file_name.as_str(), path.as_path())
             .await
             .unwrap();
 
         let cold = ArchiveStorage::open_cold(
             ArchiveFileNo::new(0),
             cold_storage,
-            "default".to_string(),
-            key,
+            topic_key.to_owned_key(),
+            file_name,
         );
 
         assert_eq!(

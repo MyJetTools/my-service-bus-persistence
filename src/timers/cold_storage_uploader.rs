@@ -157,7 +157,6 @@ async fn upload_and_drop(
 
     let topic_key = topic_folder.get_topic_key();
     // The namespace is the bucket, so the key is what is left of the path.
-    let key = storage_layout::get_cold_key(topic_key, file_name);
 
     let mut path = topic_folder.path.clone();
     path.push(file_name);
@@ -172,10 +171,13 @@ async fn upload_and_drop(
         }
 
         if let Err(err) = cold_storage
-            .upload_file(topic_key.namespace, key.as_str(), path.as_path())
+            .upload_file(topic_key, file_name, path.as_path())
             .await
         {
-            write_error(&key, format!("Can not upload. Err: {}", err));
+            write_error(
+                format!("{}/{}", topic_key, file_name).as_str(),
+                format!("Can not upload. Err: {}", err),
+            );
             return;
         }
     }
@@ -185,7 +187,7 @@ async fn upload_and_drop(
 
     if let Err(err) = delete_file_if_exists(&path).await {
         write_error(
-            &key,
+            format!("{}/{}", topic_key, file_name).as_str(),
             format!("Uploaded, but can not delete the local copy. Err: {}", err),
         );
         return;
@@ -198,7 +200,7 @@ async fn upload_and_drop(
             .forget_archive(topic_key, archive_file_no);
     }
 
-    println!("Moved {} to the cold storage", key);
+    println!("Moved {}/{} to the cold storage", topic_key, file_name);
 }
 
 fn write_error(key: &str, message: String) {

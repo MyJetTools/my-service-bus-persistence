@@ -157,18 +157,26 @@ impl AppContext {
             return;
         }
 
-        let key = storage_layout::get_year_index_cold_key(topic_key, year);
+        let file_name = storage_layout::get_year_index_file_name(year);
 
         let content = cold_storage
-            .download(topic_key.namespace, key.as_str())
+            .download(topic_key, file_name.as_str())
             .await
-            .unwrap_or_else(|err| panic!("Can not read {} from the cold storage: {}", key, err));
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Can not read the year index of {} from the cold storage: {}",
+                    topic_key, err
+                )
+            });
 
         let Some(content) = content else {
             return;
         };
 
-        println!("Restoring {} from the cold storage", key);
+        println!(
+            "Restoring {}/{} from the cold storage",
+            topic_key, file_name
+        );
 
         let file = FileStorage::open_or_create(&path)
             .await
@@ -214,13 +222,16 @@ impl ArchiveFileOpener for AppContext {
         // Not on disk - it may have been sealed and uploaded. Reads then go over ranged GETs.
         let cold_storage = self.get_cold_storage()?;
 
-        let cold_key = storage_layout::get_archive_cold_key(topic_key, archive_file_no);
+        let file_name = storage_layout::get_archive_file_name(archive_file_no);
 
         let exists = cold_storage
-            .exists(topic_key.namespace, cold_key.as_str())
+            .exists(topic_key, file_name.as_str())
             .await
             .unwrap_or_else(|err| {
-                panic!("Can not check {} in the cold storage: {}", cold_key, err)
+                panic!(
+                    "Can not check {} in the cold storage: {}",
+                    relative_path, err
+                )
             });
 
         if !exists {
@@ -230,8 +241,8 @@ impl ArchiveFileOpener for AppContext {
         Some(ArchiveStorage::open_cold(
             archive_file_no,
             cold_storage.clone(),
-            topic_key.namespace.to_string(),
-            cold_key,
+            topic_key.to_owned_key(),
+            file_name,
         ))
     }
 }

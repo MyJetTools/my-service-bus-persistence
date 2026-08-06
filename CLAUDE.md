@@ -60,10 +60,12 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
   `(namespace, topic_id)` onto a path / S3 key), Prometheus metrics.
 - `file_storage/` — random-access file (`read`/`write` at offset, `append`, `read_all`/`write_all`). Reads past EOF
   come back zero-filled, which is what the offset-addressed TOC and year index rely on.
-- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete. **One bucket
-  per namespace** (`{Bucket}-{namespace}`, where `Bucket` from `s3_conn_string` is a prefix), so the
-  key inside it is `{topic}/{file}` — the namespace is the bucket, not part of the key. Buckets are
-  created on first touch and remembered.
+- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete. Two layouts,
+  chosen by `s3_conn_string` and never guessed: `Bucket=x` puts everything in one bucket under
+  `/x/{ns}/{topic}/{file}`, `BucketPrefix=x` gives each namespace its own bucket `x-{ns}` with the
+  key starting at the topic. Exactly one of the two, or the connection string fails to parse.
+  Buckets are created on first touch and remembered; uploads are streamed in 512 KB chunks, so
+  memory does not depend on the size of the archive.
 - `topic_key/` — `Namespace` (validated `[a-z0-9-]`, 1..=63, no leading `-`), `TopicKey` / `TopicKeyRef`.
 - `grpc/` — tonic service impl (`persistence_grpc_service.rs`), server bootstrap, request/response mappers and contracts.
 - `http/` — `my-http-server` controllers (api/home/logs/prometheus/read/topic), builder, start_up.

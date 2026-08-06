@@ -148,21 +148,20 @@ impl LegacyMigration {
     ) {
         let from = PathBuf::from(legacy_folder).join(topic_id).join(file_name);
 
+        // Everything legacy belongs to `default`.
         let topic_key = TopicKeyRef::new(DEFAULT_NAMESPACE, topic_id);
-        // Everything legacy belongs to `default`, so it lands in the `default` bucket.
-        let key = storage_layout::get_cold_key(topic_key, file_name);
 
         if !from.is_file() {
             return;
         }
 
-        println!("Uploading {:?} to the cold storage as {}", from, key);
+        println!("Uploading {:?} to the cold storage", from);
 
         if let Err(err) = cold_storage
-            .upload_file(topic_key.namespace, key.as_str(), from.as_path())
+            .upload_file(topic_key, file_name, from.as_path())
             .await
         {
-            panic!("Can not upload {} to the cold storage: {}", key, err);
+            panic!("Can not upload {:?} to the cold storage: {}", from, err);
         }
 
         // Only once the upload is confirmed - a crash in between costs a repeated upload, which is
@@ -171,7 +170,7 @@ impl LegacyMigration {
             .await
             .unwrap_or_else(|err| panic!("Can not remove {:?}: {}", from, err));
 
-        println!("Moved {:?} -> cold storage {}", from, key);
+        println!("Moved {:?} -> cold storage", from);
     }
 
     /// Every topic that exists in any of the three legacy folders.

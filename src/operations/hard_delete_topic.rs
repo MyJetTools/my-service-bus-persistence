@@ -94,40 +94,39 @@ async fn delete_from_cold_storage(
     // Archive numbering follows from the topic's message id, so the range is exact.
     if let Some(highest) = highest_archive_file_no {
         for file_no in 0..=highest.get_value() {
-            let key = storage_layout::get_archive_cold_key(topic_key, ArchiveFileNo::new(file_no));
-            delete_key(app, topic_key, key.as_str()).await;
+            let file_name = storage_layout::get_archive_file_name(ArchiveFileNo::new(file_no));
+            delete_key(app, topic_key, file_name.as_str()).await;
         }
     }
 
     let current_year = DateTimeAsMicroseconds::now().to_chrono_utc().year() as u32;
 
     for year in OLDEST_POSSIBLE_YEAR..=current_year + 1 {
-        let key = storage_layout::get_year_index_cold_key(topic_key, Year::new(year));
-        delete_key(app, topic_key, key.as_str()).await;
+        let file_name = storage_layout::get_year_index_file_name(Year::new(year));
+        delete_key(app, topic_key, file_name.as_str()).await;
     }
 
-    let key = storage_layout::get_cold_key(topic_key, storage_layout::ACTIVE_FILE_NAME);
-    delete_key(app, topic_key, key.as_str()).await;
+    delete_key(app, topic_key, storage_layout::ACTIVE_FILE_NAME).await;
 }
 
 /// A missing key is not an error - `ColdStorage::delete` already treats a 404 as success. Only a
 /// real failure is retried, and only a handful of times: an orphaned object is worse than a slow
 /// delete, but not worth blocking the job forever.
-async fn delete_key(app: &AppContext, topic_key: TopicKeyRef<'_>, key: &str) {
+async fn delete_key(app: &AppContext, topic_key: TopicKeyRef<'_>, file_name: &str) {
     let Some(cold_storage) = app.get_cold_storage() else {
         return;
     };
 
     for attempt_no in 1..=DELETE_ATTEMPTS {
-        match cold_storage.delete(topic_key.namespace, key).await {
+        match cold_storage.delete(topic_key, file_name).await {
             Ok(_) => return,
             Err(err) => {
                 if attempt_no == DELETE_ATTEMPTS {
                     write_error(
                         topic_key,
                         format!(
-                            "Can not delete {} from the cold storage after {} attempts. It stays orphaned. Err: {}",
-                            key, DELETE_ATTEMPTS, err
+                            "Can not delete {}/{} from the cold storage after {} attempts. It stays orphaned. Err: {}",
+                            topic_key, file_name, DELETE_ATTEMPTS, err
                         ),
                     );
                     return;

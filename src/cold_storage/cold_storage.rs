@@ -5,7 +5,10 @@ use my_s3::S3Client;
 use parking_lot::Mutex;
 use tokio::io::AsyncReadExt;
 
-use crate::settings::S3ConnectionSettings;
+use crate::{
+    settings::{S3BucketMode, S3ConnectionSettings},
+    topic_key::TopicKeyRef,
+};
 
 /// Read from the file and handed to the request one chunk at a time, so peak memory is a chunk
 /// rather than the object. An archive is hundreds of megabytes; reading one whole was an OOM kill
@@ -30,22 +33,21 @@ const UPLOAD_RETRIES: usize = 3;
 /// GETs. Nothing here is ever modified in place - S3 objects can only be replaced whole, which is
 /// exactly why only sealed files get here.
 ///
-/// **One bucket per namespace.** That puts the isolation at the S3 level - lifecycle rules, storage
-/// class, retention and IAM policies can differ per namespace - and it moves the namespace out of
-/// the key: locally a file is `{namespace}/{topic}/{file}`, in the cold tier it is bucket
-/// `{prefix}-{namespace}`, key `{topic}/{file}`.
+/// Two layouts, chosen by the connection string and never guessed - see [`S3BucketMode`]:
 ///
-/// The prefix is not decoration: a bucket name is unique across every customer of the provider -
-/// AWS partition-wide, Hetzner "amongst all Hetzner Object Storage users and across all locations" -
-/// so a bare `default` or `alpha` belongs to somebody else. Note the account-wide bucket limits this
-/// implies: 100 on Hetzner, 100 (raisable) on AWS.
+/// ```text
+/// Bucket=sb-data         /sb-data/{namespace}/{topic}/{file}
+/// BucketPrefix=sb-data   /sb-data-{namespace}/{topic}/{file}
+/// ```
 ///
-/// A bucket is created lazily, the first time that namespace is touched, and the fact is remembered
-/// so the call happens once per namespace per process.
+/// Both spell the same thing; they differ only in where the namespace sits - inside the key, or in
+/// the bucket name. Callers never see the difference: they hand over a topic key and a file name,
+/// and this is the only place that knows which layout is in force.
 pub struct ColdStorage {
     client: S3Client,
-    bucket_prefix: String,
-    /// Namespaces whose bucket this process has already ensured.
+    bucket_mode: S3BucketMode,
+    /// Bucket names this process has already created-or-confirmed. Keyed by the bucket rather than
+    /// by the namespace, so the shared layout naturally ensures once for everything.
     ensured: Mutex<AHashSet<String>>,
 }
 
@@ -60,25 +62,45 @@ impl ColdStorage {
                 region: settings.region.clone().into(),
                 endpoint: settings.endpoint.clone(),
             },
-            bucket_prefix: settings.bucket.clone(),
+            bucket_mode: settings.bucket_mode.clone(),
             ensured: Mutex::new(AHashSet::new()),
         }
     }
 
     pub fn get_bucket(&self, namespace: &str) -> String {
-        format!("{}-{}", self.bucket_prefix, namespace)
+        match &self.bucket_mode {
+            S3BucketMode::Shared(bucket) => bucket.clone(),
+            S3BucketMode::PerNamespace(prefix) => format!("{}-{}", prefix, namespace),
+        }
     }
 
-    /// Creates the namespace's bucket unless this process already did.
+    /// Where a file lives: which bucket, and under which key inside it.
+    fn resolve(&self, topic_key: TopicKeyRef<'_>, file_name: &str) -> (String, String) {
+        match &self.bucket_mode {
+            S3BucketMode::Shared(bucket) => (
+                bucket.clone(),
+                format!(
+                    "{}/{}/{}",
+                    topic_key.namespace, topic_key.topic_id, file_name
+                ),
+            ),
+            S3BucketMode::PerNamespace(prefix) => (
+                format!("{}-{}", prefix, topic_key.namespace),
+                format!("{}/{}", topic_key.topic_id, file_name),
+            ),
+        }
+    }
+
+    /// Creates the bucket unless this process already did.
     ///
     /// Every operation goes through it, so a namespace that appears at runtime gets its bucket on
     /// first touch. After the first success it is a set lookup.
     pub async fn ensure_bucket(&self, namespace: &str) -> Result<(), String> {
-        if self.ensured.lock().contains(namespace) {
+        let bucket = self.get_bucket(namespace);
+
+        if self.ensured.lock().contains(bucket.as_str()) {
             return Ok(());
         }
-
-        let bucket = self.get_bucket(namespace);
 
         validate_bucket_name(bucket.as_str())?;
 
@@ -93,7 +115,7 @@ impl ColdStorage {
             }
         }
 
-        self.ensured.lock().insert(namespace.to_string());
+        self.ensured.lock().insert(bucket);
 
         Ok(())
     }
@@ -101,13 +123,18 @@ impl ColdStorage {
     /// Streams a file up, one chunk at a time - the whole point being that memory does not depend
     /// on the size of the object.
     ///
-    /// `key` is relative to the namespace - `{topic}/{file}` - because the namespace is the bucket.
-    ///
     /// Each retry reopens the file from the beginning: a streamed body is consumed as it is sent,
     /// so a half-drained reader can not be reused. `PutObject` replaces the object atomically, so a
     /// failed attempt leaves either the previous object or nothing, never a partial one.
-    pub async fn upload_file(&self, namespace: &str, key: &str, path: &Path) -> Result<(), String> {
-        self.ensure_bucket(namespace).await?;
+    pub async fn upload_file(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        file_name: &str,
+        path: &Path,
+    ) -> Result<(), String> {
+        self.ensure_bucket(topic_key.namespace).await?;
+
+        let (bucket, key) = self.resolve(topic_key, file_name);
 
         let content_length = tokio::fs::metadata(path)
             .await
@@ -118,8 +145,8 @@ impl ColdStorage {
 
         self.client
             .upload_streamed_with_retries(
-                self.get_bucket(namespace).as_str(),
-                key,
+                bucket.as_str(),
+                key.as_str(),
                 content_length,
                 UPLOAD_TIMEOUT,
                 UPLOAD_RETRIES,
@@ -155,25 +182,33 @@ impl ColdStorage {
     /// `from`/`to` are inclusive byte offsets, as in the HTTP `Range` header.
     pub async fn download_range(
         &self,
-        namespace: &str,
-        key: &str,
+        topic_key: TopicKeyRef<'_>,
+        file_name: &str,
         from: u64,
         to: u64,
     ) -> Result<Vec<u8>, String> {
-        self.ensure_bucket(namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await?;
+
+        let (bucket, key) = self.resolve(topic_key, file_name);
 
         self.client
-            .download_file_range(self.get_bucket(namespace).as_str(), key, from, Some(to))
+            .download_file_range(bucket.as_str(), key.as_str(), from, Some(to))
             .await
             .map_err(|err| format!("{:?}", err))
     }
 
-    pub async fn download(&self, namespace: &str, key: &str) -> Result<Option<Vec<u8>>, String> {
-        self.ensure_bucket(namespace).await?;
+    pub async fn download(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        file_name: &str,
+    ) -> Result<Option<Vec<u8>>, String> {
+        self.ensure_bucket(topic_key.namespace).await?;
+
+        let (bucket, key) = self.resolve(topic_key, file_name);
 
         match self
             .client
-            .download_file(self.get_bucket(namespace).as_str(), key)
+            .download_file(bucket.as_str(), key.as_str())
             .await
         {
             Ok(content) => Ok(Some(content)),
@@ -189,12 +224,18 @@ impl ColdStorage {
 
     /// Cheapest existence probe the client can express: ask for a single byte and see whether the
     /// object answers.
-    pub async fn exists(&self, namespace: &str, key: &str) -> Result<bool, String> {
-        self.ensure_bucket(namespace).await?;
+    pub async fn exists(
+        &self,
+        topic_key: TopicKeyRef<'_>,
+        file_name: &str,
+    ) -> Result<bool, String> {
+        self.ensure_bucket(topic_key.namespace).await?;
+
+        let (bucket, key) = self.resolve(topic_key, file_name);
 
         match self
             .client
-            .download_file_range(self.get_bucket(namespace).as_str(), key, 0, Some(0))
+            .download_file_range(bucket.as_str(), key.as_str(), 0, Some(0))
             .await
         {
             Ok(_) => Ok(true),
@@ -208,14 +249,12 @@ impl ColdStorage {
         }
     }
 
-    pub async fn delete(&self, namespace: &str, key: &str) -> Result<(), String> {
-        self.ensure_bucket(namespace).await?;
+    pub async fn delete(&self, topic_key: TopicKeyRef<'_>, file_name: &str) -> Result<(), String> {
+        self.ensure_bucket(topic_key.namespace).await?;
 
-        match self
-            .client
-            .delete_file(self.get_bucket(namespace).as_str(), key)
-            .await
-        {
+        let (bucket, key) = self.resolve(topic_key, file_name);
+
+        match self.client.delete_file(bucket.as_str(), key.as_str()).await {
             Ok(_) => Ok(()),
             Err(err) => {
                 if err.is_key_not_found() {
@@ -231,13 +270,12 @@ impl ColdStorage {
 /// S3 bucket naming, the subset we can produce: 3-63 chars, lowercase letters, digits and hyphens,
 /// starting and ending on a letter or a digit.
 ///
-/// A namespace is `[a-z0-9-]` and may **end** with a hyphen, which a bucket may not - so this is a
-/// reachable misconfiguration, not a theoretical one, and it is worth failing on loudly rather than
-/// discovering it on the first upload.
+/// Reachable rather than theoretical in the per-namespace layout: a namespace is `[a-z0-9-]` and
+/// may **end** with a hyphen, which a bucket may not.
 fn validate_bucket_name(bucket: &str) -> Result<(), String> {
     let invalid = |reason: &str| {
         Err(format!(
-            "'{}' is not a valid bucket name: {}. It is the namespace, prefixed with Bucket= from s3_conn_string",
+            "'{}' is not a valid bucket name: {}",
             bucket, reason
         ))
     };
@@ -278,7 +316,11 @@ mod tests {
     use crate::cold_storage::fake_s3::FakeS3;
     use crate::settings::S3ConnectionSettings;
 
-    async fn connect() -> (FakeS3, ColdStorage) {
+    fn orders(namespace: &str) -> TopicKeyRef<'_> {
+        TopicKeyRef::new(namespace, "orders")
+    }
+
+    async fn connect_with(bucket_mode: S3BucketMode) -> (FakeS3, ColdStorage) {
         let fake = FakeS3::start().await;
 
         let cold_storage = ColdStorage::new(&S3ConnectionSettings {
@@ -286,10 +328,14 @@ mod tests {
             region: "eu-central-1".to_string(),
             access_key: "AKIATEST".to_string(),
             secret_key: "secret".to_string(),
-            bucket: "sb".to_string(),
+            bucket_mode,
         });
 
         (fake, cold_storage)
+    }
+
+    async fn connect() -> (FakeS3, ColdStorage) {
+        connect_with(S3BucketMode::PerNamespace("sb".to_string())).await
     }
 
     fn temp_file(name: &str, content: &[u8]) -> std::path::PathBuf {
@@ -305,41 +351,55 @@ mod tests {
     async fn upload_read_range_and_delete() {
         let (fake, cold_storage) = connect().await;
 
-        let key = "orders/0000000000000000000.archive";
         let content: Vec<u8> = (0..=255u8).collect();
         let path = temp_file("round_trip", content.as_slice());
+        let file_name = "0000000000000000000.archive";
 
         cold_storage
-            .upload_file("default", key, path.as_path())
+            .upload_file(orders("default"), file_name, path.as_path())
             .await
             .unwrap();
 
         assert_eq!(
             Some(content.clone()),
-            cold_storage.download("default", key).await.unwrap()
+            cold_storage
+                .download(orders("default"), file_name)
+                .await
+                .unwrap()
         );
 
         // Inclusive offsets, the way the archive TOC and a sub page are fetched
         let chunk = cold_storage
-            .download_range("default", key, 10, 19)
+            .download_range(orders("default"), file_name, 10, 19)
             .await
             .unwrap();
         assert_eq!(content[10..=19].to_vec(), chunk);
 
-        assert!(cold_storage.exists("default", key).await.unwrap());
-        assert!(!cold_storage
-            .exists("default", "orders/nope.archive")
+        assert!(cold_storage
+            .exists(orders("default"), file_name)
             .await
             .unwrap());
+        assert!(!cold_storage
+            .exists(orders("default"), "nope.archive")
+            .await
+            .unwrap());
+
+        cold_storage
+            .delete(orders("default"), file_name)
+            .await
+            .unwrap();
         assert_eq!(
             None,
-            cold_storage.download("default", "nope").await.unwrap()
+            cold_storage
+                .download(orders("default"), file_name)
+                .await
+                .unwrap()
         );
-
-        cold_storage.delete("default", key).await.unwrap();
-        assert_eq!(None, cold_storage.download("default", key).await.unwrap());
         // Deleting what is not there is fine
-        cold_storage.delete("default", key).await.unwrap();
+        cold_storage
+            .delete(orders("default"), file_name)
+            .await
+            .unwrap();
 
         assert!(fake.object_paths().is_empty());
 
@@ -359,16 +419,19 @@ mod tests {
             .collect();
 
         let path = temp_file("multi_chunk", content.as_slice());
-        let key = "orders/0000000000000000001.archive";
+        let file_name = "0000000000000000001.archive";
 
         cold_storage
-            .upload_file("default", key, path.as_path())
+            .upload_file(orders("default"), file_name, path.as_path())
             .await
             .unwrap();
 
         assert_eq!(
             Some(content.clone()),
-            cold_storage.download("default", key).await.unwrap()
+            cold_storage
+                .download(orders("default"), file_name)
+                .await
+                .unwrap()
         );
         assert_eq!(
             content.len(),
@@ -380,36 +443,73 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    /// A key contains `/`. If the client percent-encoded them the objects would not be browsable
-    /// as folders in the bucket, and the cold layout would stop matching the local one.
+    /// `BucketPrefix=sb` - the namespace is the bucket, so the key starts at the topic.
     #[tokio::test]
-    async fn a_key_with_slashes_stays_a_path() {
+    async fn the_per_namespace_layout_puts_the_namespace_in_the_bucket() {
         let (fake, cold_storage) = connect().await;
 
-        let key = "orders/.2025.yearindex";
-        let path = temp_file("slashes", &[1, 2, 3]);
+        let path = temp_file("per_ns", &[1, 2, 3]);
 
         cold_storage
-            .upload_file("alpha", key, path.as_path())
+            .upload_file(orders("alpha"), ".2025.yearindex", path.as_path())
             .await
             .unwrap();
 
-        let paths = fake.object_paths();
-        assert_eq!(1, paths.len());
-        assert_eq!("/sb-alpha/orders/.2025.yearindex", paths[0]);
+        assert_eq!(
+            vec!["/sb-alpha/orders/.2025.yearindex".to_string()],
+            fake.object_paths()
+        );
+
+        // The same topic in another namespace is another bucket, so it is a different object
+        assert_eq!(
+            None,
+            cold_storage
+                .download(orders("default"), ".2025.yearindex")
+                .await
+                .unwrap()
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// `Bucket=sb-data` - one bucket for everything, the namespace being the first key segment.
+    #[tokio::test]
+    async fn the_shared_layout_puts_the_namespace_in_the_key() {
+        let (fake, cold_storage) = connect_with(S3BucketMode::Shared("sb-data".to_string())).await;
+
+        let path = temp_file("shared", &[1, 2, 3]);
+
+        cold_storage
+            .upload_file(orders("alpha"), ".2025.yearindex", path.as_path())
+            .await
+            .unwrap();
+        cold_storage
+            .upload_file(orders("default"), ".2025.yearindex", path.as_path())
+            .await
+            .unwrap();
 
         assert_eq!(
-            Some(vec![1, 2, 3]),
-            cold_storage.download("alpha", key).await.unwrap()
+            vec![
+                "/sb-data/alpha/orders/.2025.yearindex".to_string(),
+                "/sb-data/default/orders/.2025.yearindex".to_string(),
+            ],
+            fake.object_paths()
         );
-        // The same key in another namespace is another bucket, so it is a different object
-        assert_eq!(None, cold_storage.download("default", key).await.unwrap());
+
+        // Still two different objects, told apart by the key rather than by the bucket
+        assert_eq!(
+            1,
+            fake.requests()
+                .iter()
+                .filter(|itm| itm.as_str() == "PUT /sb-data")
+                .count()
+        );
 
         let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn the_bucket_is_created_once_per_namespace() {
+    async fn the_bucket_is_created_once_per_bucket() {
         let (fake, cold_storage) = connect().await;
 
         cold_storage.ensure_bucket("default").await.unwrap();

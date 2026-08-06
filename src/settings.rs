@@ -1,31 +1,42 @@
 use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncReadExt};
 
+/// How the cold tier lays its objects out. Exactly one of the two has to be given.
+#[derive(Debug, Clone)]
+pub enum S3BucketMode {
+    /// `Bucket=sb-data` - one bucket for everything, the namespace being the first segment of the
+    /// key: `/sb-data/{namespace}/{topic}/{file}`.
+    ///
+    /// One bucket to create, one set of credentials, no account bucket limit to think about.
+    Shared(String),
+
+    /// `BucketPrefix=sb-data` - one bucket per namespace, `sb-data-{namespace}`, and the key starts
+    /// at the topic: `/sb-data-alpha/{topic}/{file}`.
+    ///
+    /// A namespace is then a separate product all the way down: its own access keys, lifecycle
+    /// rules, storage class and line on the invoice, and retiring one is deleting a bucket. The
+    /// cost is the account-wide bucket limit - 100 on Hetzner, 100 (raisable) on AWS.
+    PerNamespace(String),
+}
+
 /// Where sealed archives and closed year indexes are uploaded.
 ///
 /// Expressed as one connection string, in the same `Key=Value;Key=Value` shape the Azure ones
 /// used, so there is no new convention to learn:
 ///
 /// ```text
-/// s3_conn_string: "Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=...;SecretKey=...;Bucket=my-sb"
+/// s3_conn_string: "Endpoint=https://fsn1.your-objectstorage.com;Region=fsn1;AccessKey=...;SecretKey=...;Bucket=sb-data"
 /// ```
 ///
-/// There is one bucket per namespace, named `{Bucket}-{namespace}`. Leave the whole setting out
-/// and nothing is ever uploaded: every file stays on the local disk forever.
+/// Leave the whole setting out and nothing is ever uploaded: every file stays on the local disk
+/// forever.
 #[derive(Debug, Clone)]
 pub struct S3ConnectionSettings {
     pub endpoint: String,
     pub region: String,
     pub access_key: String,
     pub secret_key: String,
-    /// Prefix of the per-namespace buckets: the bucket of a namespace is `{bucket}-{namespace}`.
-    ///
-    /// Required, because a bucket name is not yours to pick freely: on AWS it is unique across the
-    /// whole partition, and on Hetzner "unique amongst all Hetzner Object Storage users and across
-    /// all locations". A bare `default` or `alpha` belongs to somebody else; the prefix is what
-    /// makes the name yours. Pick something stable you own - never generate it, or a restart would
-    /// orphan every bucket.
-    pub bucket: String,
+    pub bucket_mode: S3BucketMode,
 }
 
 impl S3ConnectionSettings {
@@ -35,6 +46,7 @@ impl S3ConnectionSettings {
         let mut access_key = None;
         let mut secret_key = None;
         let mut bucket = None;
+        let mut bucket_prefix = None;
 
         for pair in conn_string.split(';') {
             let pair = pair.trim();
@@ -57,19 +69,37 @@ impl S3ConnectionSettings {
                 "AccessKey" => access_key = Some(value),
                 "SecretKey" => secret_key = Some(value),
                 "Bucket" => bucket = Some(value),
+                "BucketPrefix" => bucket_prefix = Some(value),
                 _ => panic!(
-                    "Invalid s3_conn_string: unknown key '{}'. Expected Endpoint, Region, AccessKey, SecretKey, Bucket",
+                    "Invalid s3_conn_string: unknown key '{}'. Expected Endpoint, Region, AccessKey, SecretKey, and one of Bucket or BucketPrefix",
                     key
                 ),
             }
         }
+
+        let bucket = bucket.filter(|itm| !itm.is_empty());
+        let bucket_prefix = bucket_prefix.filter(|itm| !itm.is_empty());
+
+        // Deliberately an error rather than a default: the two lay the objects out differently, so
+        // guessing would put the data somewhere the operator did not mean, and switching later
+        // means moving every object.
+        let bucket_mode = match (bucket, bucket_prefix) {
+            (Some(bucket), None) => S3BucketMode::Shared(bucket),
+            (None, Some(prefix)) => S3BucketMode::PerNamespace(prefix),
+            (Some(_), Some(_)) => panic!(
+                "Invalid s3_conn_string: Bucket and BucketPrefix are two different layouts - give one, not both. Bucket=x puts everything in one bucket under /x/{{namespace}}/{{topic}}/, BucketPrefix=x gives each namespace its own bucket x-{{namespace}}"
+            ),
+            (None, None) => panic!(
+                "Invalid s3_conn_string: one of Bucket or BucketPrefix is required. Bucket=x puts everything in one bucket under /x/{{namespace}}/{{topic}}/, BucketPrefix=x gives each namespace its own bucket x-{{namespace}}"
+            ),
+        };
 
         Self {
             endpoint: required(endpoint, "Endpoint"),
             region: required(region, "Region"),
             access_key: required(access_key, "AccessKey"),
             secret_key: required(secret_key, "SecretKey"),
-            bucket: required(bucket, "Bucket"),
+            bucket_mode,
         }
     }
 }
@@ -192,13 +222,42 @@ mod tests {
         assert_eq!("AKIA123", parsed.access_key);
         // A base64 secret carries its own '=' - only the first one separates
         assert_eq!("abc/def+ghi=", parsed.secret_key);
-        assert_eq!("my-bucket", parsed.bucket);
+        assert!(
+            matches!(parsed.bucket_mode, S3BucketMode::Shared(bucket) if bucket == "my-bucket")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "'Bucket' is missing")]
-    fn a_missing_key_is_loud() {
+    fn bucket_prefix_selects_the_other_layout() {
+        let parsed = S3ConnectionSettings::parse(
+            "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;BucketPrefix=sb-data",
+        );
+
+        assert!(
+            matches!(parsed.bucket_mode, S3BucketMode::PerNamespace(prefix) if prefix == "sb-data")
+        );
+    }
+
+    /// Neither is not a default to guess at: the two lay the objects out differently, and
+    /// switching later means moving every object.
+    #[test]
+    #[should_panic(expected = "one of Bucket or BucketPrefix is required")]
+    fn neither_bucket_nor_prefix_is_an_error() {
         S3ConnectionSettings::parse("Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b");
+    }
+
+    #[test]
+    #[should_panic(expected = "two different layouts")]
+    fn both_bucket_and_prefix_is_an_error() {
+        S3ConnectionSettings::parse(
+            "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=x;BucketPrefix=y",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "'Region' is missing")]
+    fn a_missing_key_is_loud() {
+        S3ConnectionSettings::parse("Endpoint=https://s3;AccessKey=a;SecretKey=b;Bucket=c");
     }
 
     #[test]
@@ -215,6 +274,6 @@ mod tests {
             "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=c;",
         );
 
-        assert_eq!("c", parsed.bucket);
+        assert!(matches!(parsed.bucket_mode, S3BucketMode::Shared(bucket) if bucket == "c"));
     }
 }
