@@ -64,8 +64,10 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
   chosen by `s3_conn_string` and never guessed: `Bucket=x` puts everything in one bucket under
   `/x/{ns}/{topic}/{file}`, `BucketPrefix=x` gives each namespace its own bucket `x-{ns}` with the
   key starting at the topic. Exactly one of the two, or the connection string fails to parse.
-  Buckets are created on first touch and remembered; uploads are streamed in 512 KB chunks, so
-  memory does not depend on the size of the archive.
+  Buckets are created on first touch (`create_bucket_if_not_exists` - a bucket already ours is
+  fine, one owned by another account fails the startup) and remembered; uploads are streamed in 512 KB chunks, so
+  memory does not depend on the size of the archive. `Debug=1` in `s3_conn_string` turns on
+  per-request tracing to stdout (`S3Client::debug_to_console`).
 - `topic_key/` — `Namespace` (validated `[a-z0-9-]`, 1..=63, no leading `-`), `TopicKey` / `TopicKeyRef`.
 - `grpc/` — tonic service impl (`persistence_grpc_service.rs`), server bootstrap, request/response mappers and contracts.
 - `http/` — `my-http-server` controllers (api/home/logs/prometheus/read/topic), builder, start_up.

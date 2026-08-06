@@ -53,15 +53,29 @@ pub struct ColdStorage {
 
 impl ColdStorage {
     pub fn new(settings: &S3ConnectionSettings) -> Self {
+        // The region argument is `impl Into<S3Region>`: `S3Region` knows the AWS and Hetzner
+        // regions by name and keeps anything else as `Other`, so an unfamiliar endpoint still
+        // signs correctly.
+        let client = S3Client::new(
+            settings.access_key.clone(),
+            settings.secret_key.clone(),
+            settings.region.clone(),
+            settings.endpoint.clone(),
+        );
+
+        // `Debug=1` in the connection string. Every request is then traced to stdout - verb, url
+        // and body size going out, and the whole answer body when it failed, which is the
+        // `<Error><Code>` saying why. A successful answer is printed as a size, since it is the
+        // archive that was just downloaded. The `Authorization` header is never printed.
+        let client = if settings.debug {
+            println!("S3 request tracing is ON (Debug in s3_conn_string)");
+            client.debug_to_console()
+        } else {
+            client
+        };
+
         Self {
-            client: S3Client {
-                access_key: settings.access_key.clone(),
-                secret_key: settings.secret_key.clone(),
-                // `S3Region` knows the AWS and Hetzner regions by name and keeps anything else as
-                // `Other`, so an unfamiliar endpoint still signs correctly.
-                region: settings.region.clone().into(),
-                endpoint: settings.endpoint.clone(),
-            },
+            client,
             bucket_mode: settings.bucket_mode.clone(),
             ensured: Mutex::new(AHashSet::new()),
         }
@@ -104,16 +118,29 @@ impl ColdStorage {
 
         validate_bucket_name(bucket.as_str())?;
 
-        match self.client.create_bucket(bucket.as_str()).await {
-            Ok(_) => println!("Created the cold storage bucket '{}'", bucket),
-            Err(err) => {
-                // Covers both `BucketAlreadyExists` and `BucketAlreadyOwnedByYou`; the second is
-                // what every restart after the first one gets.
-                if !err.bucket_name_is_taken() {
-                    return Err(format!("Can not create the bucket '{}': {:?}", bucket, err));
+        // Absorbs `BucketAlreadyOwnedByYou` only - the answer to every restart after the first one,
+        // and to a bucket an operator created by hand ahead of time.
+        //
+        // `BucketAlreadyExists` is a different answer wearing similar words: the name is held by
+        // *another account*. Since a bucket name is unique across every customer of the provider,
+        // that means a typo in `s3_conn_string`, and the bucket that exists is not the one we are
+        // about to write to. Failing here turns it into a startup error with a clear cause, instead
+        // of a 403 on the first upload hours later.
+        self.client
+            .create_bucket_if_not_exists(bucket.as_str())
+            .await
+            .map_err(|err| {
+                if err.is_bucket_already_exists() {
+                    return format!(
+                        "The cold storage bucket '{}' belongs to another account - bucket names are unique across every customer of the provider. Pick a name of your own in s3_conn_string",
+                        bucket
+                    );
                 }
-            }
-        }
+
+                format!("Can not create the bucket '{}': {:?}", bucket, err)
+            })?;
+
+        println!("Cold storage bucket '{}' is ready", bucket);
 
         self.ensured.lock().insert(bucket);
 
@@ -329,6 +356,7 @@ mod tests {
             access_key: "AKIATEST".to_string(),
             secret_key: "secret".to_string(),
             bucket_mode,
+            debug: false,
         });
 
         (fake, cold_storage)
@@ -506,6 +534,70 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// The bucket already exists because a previous run created it - or because an operator did,
+    /// by hand, before the first start. A fresh process gets `BucketAlreadyOwnedByYou` on its very
+    /// first call, which has to read as success.
+    ///
+    /// A second `ColdStorage` over the same server is what makes this a restart rather than a
+    /// repeat: `ensure_bucket` short-circuits on its own set the second time round, so within one
+    /// instance the 409 never comes back at all.
+    #[tokio::test]
+    async fn a_bucket_that_already_exists_is_accepted() {
+        let (fake, first_run) = connect().await;
+
+        first_run.ensure_bucket("default").await.unwrap();
+
+        let restarted = ColdStorage::new(&S3ConnectionSettings {
+            endpoint: fake.endpoint.clone(),
+            region: "eu-central-1".to_string(),
+            access_key: "AKIATEST".to_string(),
+            secret_key: "secret".to_string(),
+            bucket_mode: S3BucketMode::PerNamespace("sb".to_string()),
+            debug: false,
+        });
+
+        restarted.ensure_bucket("default").await.unwrap();
+
+        // ...and it is usable, not merely accepted
+        let path = temp_file("after_restart", &[1, 2, 3]);
+        restarted
+            .upload_file(orders("default"), "active", path.as_path())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            2,
+            fake.requests()
+                .iter()
+                .filter(|itm| itm.as_str() == "PUT /sb-default")
+                .count()
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The other way a bucket can already exist: the name belongs to somebody else, because bucket
+    /// names are unique across every customer of the provider. Swallowing this the way
+    /// `BucketAlreadyOwnedByYou` is swallowed would turn a typo in the connection string into a 403
+    /// on the first upload, hours later and far from its cause.
+    #[tokio::test]
+    async fn a_bucket_owned_by_another_account_fails_loudly() {
+        let (fake, cold_storage) = connect().await;
+
+        fake.claim_bucket_for_another_account("sb-default");
+
+        let err = cold_storage.ensure_bucket("default").await.unwrap_err();
+
+        assert!(
+            err.contains("belongs to another account"),
+            "unhelpful message: {}",
+            err
+        );
+
+        // And it stays failed - nothing was written into the `ensured` set on the way out
+        assert!(cold_storage.ensure_bucket("default").await.is_err());
     }
 
     #[tokio::test]

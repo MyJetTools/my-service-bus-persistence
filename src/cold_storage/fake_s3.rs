@@ -19,6 +19,9 @@ pub struct FakeS3State {
     /// Whatever path the client actually asked for, exactly as it arrived.
     pub objects: HashMap<String, Vec<u8>>,
     pub buckets: Vec<String>,
+    /// Buckets that answer `BucketAlreadyExists` - the name is held by somebody else. Real S3 tells
+    /// this apart from `BucketAlreadyOwnedByYou`, and the two mean opposite things to us.
+    pub foreign_buckets: Vec<String>,
     pub requests: Vec<String>,
 }
 
@@ -54,6 +57,15 @@ impl FakeS3 {
             endpoint: format!("http://127.0.0.1:{}", port),
             state,
         }
+    }
+
+    /// Makes `bucket` belong to another account, so creating it answers `BucketAlreadyExists`.
+    pub fn claim_bucket_for_another_account(&self, bucket: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .foreign_buckets
+            .push(format!("/{}", bucket));
     }
 
     pub fn get_object(&self, path: &str) -> Option<Vec<u8>> {
@@ -139,19 +151,23 @@ async fn handle(
             let is_bucket = path.trim_matches('/').split('/').count() == 1;
 
             if is_bucket {
-                let existed = {
+                let outcome = {
                     let mut state = state.lock().unwrap();
-                    let existed = state.buckets.contains(&path);
-                    if !existed {
+
+                    if state.foreign_buckets.contains(&path) {
+                        BucketPut::Foreign
+                    } else if state.buckets.contains(&path) {
+                        BucketPut::AlreadyOurs
+                    } else {
                         state.buckets.push(path.clone());
+                        BucketPut::Created
                     }
-                    existed
                 };
 
-                let response = if existed {
-                    bucket_already_owned_by_you()
-                } else {
-                    ok_response(200, "OK", Vec::new(), None)
+                let response = match outcome {
+                    BucketPut::Created => ok_response(200, "OK", Vec::new(), None),
+                    BucketPut::AlreadyOurs => bucket_already_owned_by_you(),
+                    BucketPut::Foreign => bucket_already_exists(),
                 };
 
                 return write_response(socket, response).await;
@@ -198,6 +214,17 @@ async fn write_response(
     socket.write_all(response.as_slice()).await?;
     socket.flush().await?;
     Ok(())
+}
+
+enum BucketPut {
+    Created,
+    AlreadyOurs,
+    Foreign,
+}
+
+fn bucket_already_exists() -> Vec<u8> {
+    let body = b"<Error><Code>BucketAlreadyExists</Code><Message>The requested bucket name is not available.</Message></Error>".to_vec();
+    ok_response(409, "Conflict", body, None)
 }
 
 fn bucket_already_owned_by_you() -> Vec<u8> {

@@ -37,6 +37,13 @@ pub struct S3ConnectionSettings {
     pub access_key: String,
     pub secret_key: String,
     pub bucket_mode: S3BucketMode,
+
+    /// `Debug=1` - trace every S3 request to the console. Off unless asked for.
+    ///
+    /// Meant to be switched on in a running deployment without a rebuild, which is the only way to
+    /// see why the cold tier is refusing a request: the failure is an XML `<Error><Code>` in the
+    /// answer body, and nothing else surfaces it.
+    pub debug: bool,
 }
 
 impl S3ConnectionSettings {
@@ -47,6 +54,7 @@ impl S3ConnectionSettings {
         let mut secret_key = None;
         let mut bucket = None;
         let mut bucket_prefix = None;
+        let mut debug = None;
 
         for pair in conn_string.split(';') {
             let pair = pair.trim();
@@ -70,8 +78,9 @@ impl S3ConnectionSettings {
                 "SecretKey" => secret_key = Some(value),
                 "Bucket" => bucket = Some(value),
                 "BucketPrefix" => bucket_prefix = Some(value),
+                "Debug" => debug = Some(parse_bool(value.as_str(), "Debug")),
                 _ => panic!(
-                    "Invalid s3_conn_string: unknown key '{}'. Expected Endpoint, Region, AccessKey, SecretKey, and one of Bucket or BucketPrefix",
+                    "Invalid s3_conn_string: unknown key '{}'. Expected Endpoint, Region, AccessKey, SecretKey, one of Bucket or BucketPrefix, and optionally Debug",
                     key
                 ),
             }
@@ -100,7 +109,21 @@ impl S3ConnectionSettings {
             access_key: required(access_key, "AccessKey"),
             secret_key: required(secret_key, "SecretKey"),
             bucket_mode,
+            debug: debug.unwrap_or(false),
         }
+    }
+}
+
+/// Spelled out rather than `== "1"`: the setting is typed by hand into a deployment config, and a
+/// `Debug=true` that silently means "off" is worse than a refusal to start.
+fn parse_bool(value: &str, key: &str) -> bool {
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => true,
+        "0" | "false" | "no" | "off" => false,
+        _ => panic!(
+            "Invalid s3_conn_string: '{}' expects 1/0, true/false, yes/no or on/off - got '{}'",
+            key, value
+        ),
     }
 }
 
@@ -265,6 +288,54 @@ mod tests {
     fn a_typo_is_loud() {
         S3ConnectionSettings::parse(
             "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Buckett=c",
+        );
+    }
+
+    /// Off unless the connection string says otherwise - tracing every request is not something to
+    /// end up with by accident.
+    #[test]
+    fn debug_is_off_unless_asked_for() {
+        let parsed = S3ConnectionSettings::parse(
+            "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=c",
+        );
+
+        assert!(!parsed.debug);
+    }
+
+    #[test]
+    fn debug_is_switched_on_by_the_connection_string() {
+        for value in ["1", "true", "TRUE", "yes", "on"] {
+            let parsed = S3ConnectionSettings::parse(
+                format!(
+                    "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=c;Debug={}",
+                    value
+                )
+                .as_str(),
+            );
+
+            assert!(parsed.debug, "'{}' should have switched debug on", value);
+        }
+
+        for value in ["0", "false", "no", "off"] {
+            let parsed = S3ConnectionSettings::parse(
+                format!(
+                    "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=c;Debug={}",
+                    value
+                )
+                .as_str(),
+            );
+
+            assert!(!parsed.debug, "'{}' should have left debug off", value);
+        }
+    }
+
+    /// A value that is neither is a typo, and quietly reading it as "off" would leave the operator
+    /// waiting for a trace that never comes.
+    #[test]
+    #[should_panic(expected = "'Debug' expects 1/0")]
+    fn an_unreadable_debug_value_is_loud() {
+        S3ConnectionSettings::parse(
+            "Endpoint=https://s3;Region=eu;AccessKey=a;SecretKey=b;Bucket=c;Debug=maybe",
         );
     }
 

@@ -67,11 +67,46 @@ Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKI
 | `AccessKey` | Access key id.                                                  |
 | `SecretKey` | Secret access key. Only the **first** `=` separates, so a base64 secret with its own `=` is fine. |
 | `Bucket` *or* `BucketPrefix` | Chooses the cold-tier layout — see below. Exactly one of the two. |
+| `Debug`     | Optional. `Debug=1` traces every S3 request to the console — see below. Off when absent. |
 
 `Endpoint`, `Region`, `AccessKey` and `SecretKey` are all required, plus
 exactly one of `Bucket` / `BucketPrefix`. A missing, doubled or
 misspelled key fails at startup rather than silently disabling the cold
 tier.
+
+### `Debug=1` — tracing the S3 traffic
+
+Add `;Debug=1` to the connection string and restart, and every request
+the cold tier makes is printed to stdout, so `docker logs` shows it.
+There is no rebuild and no separate switch — it is a normal part of the
+connection string, which is what makes it usable on a running
+deployment.
+
+`1`, `true`, `yes` and `on` all mean on (`0` / `false` / `no` / `off`
+mean off, and any other value refuses to start rather than quietly
+reading as off).
+
+What gets printed is deliberately asymmetric:
+
+- **The request** — verb, url and the size of the body. It is printed
+  *before* the answer arrives, so a request that never got one — a
+  timeout, a refused connection — still shows up. That is the case a
+  trace is most needed for.
+- **A failed answer** — the body in full, because that body is the
+  `<Error><Code>` that says why. `AccessDenied`, `SignatureDoesNotMatch`
+  and `NoSuchBucket` are indistinguishable without it.
+- **A successful answer** — its size only. It is the archive that was
+  just downloaded, and nobody wants a few hundred megabytes on the
+  console.
+
+The `Authorization` header is never printed: it carries the access key
+id and the request signature. The connection string itself still holds
+the secret key, so the usual care applies to the config file — but a log
+gathered with `Debug=1` on is safe to hand around.
+
+Leave it off in normal operation: an upload of a sealed archive is a
+rare burst, but a cold read is one request per sub page, and those add
+up in a log.
 
 ### Two layouts for the cold tier
 
@@ -112,10 +147,19 @@ end with a hyphen while a bucket may not, so that combination fails
 loudly rather than at the first upload.
 
 A bucket is created on first use and the fact is remembered, so it is
-one call per bucket per process; an existing bucket of your own is not
-an error. The first one is created at startup, which doubles as the
-connectivity check — a wrong endpoint, region or key pair fails
-immediately instead of hours later on the first upload.
+one call per bucket per process. The first one is created at startup,
+which doubles as the connectivity check — a wrong endpoint, region or
+key pair fails immediately instead of hours later on the first upload.
+
+Creating a bucket that is **already yours** is not an error, so a bucket
+you made by hand ahead of time is fine, and so is every restart after
+the first. A bucket that exists but belongs to **another account** is a
+different matter and fails the startup: bucket names are unique across
+every customer of the provider, so that answer means the name in
+`s3_conn_string` is somebody else's, and every upload would come back
+403 hours later. S3 says which of the two it is
+(`BucketAlreadyOwnedByYou` vs `BucketAlreadyExists`) and the two are
+treated as the opposites they are.
 
 Uploads are streamed from the file in 512 KB chunks, so memory does not
 depend on the size of the object: an archive is hundreds of megabytes,

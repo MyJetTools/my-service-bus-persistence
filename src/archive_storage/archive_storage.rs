@@ -414,6 +414,7 @@ mod tests {
             access_key: "AKIATEST".to_string(),
             secret_key: "secret".to_string(),
             bucket_mode: S3BucketMode::PerNamespace("sb".to_string()),
+            debug: false,
         }));
 
         let topic_key = TopicKeyRef::new("default", "orders");
