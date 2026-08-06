@@ -48,14 +48,12 @@ impl AppContext {
             .get_s3_connection()
             .map(|s3| Arc::new(ColdStorage::new(&s3)));
 
-        // Doubles as the connectivity check: a wrong endpoint, region or key pair fails here
-        // rather than silently at the first upload hours later. Other namespaces get their bucket
-        // on first touch.
+        // Touches the cold storage early so a wrong endpoint, region or key pair shows up in the
+        // log now rather than only at the first upload hours later. It does not gate the start:
+        // the cold tier holds sealed data, and refusing to serve the hot path over it would turn a
+        // storage problem into an outage. Other namespaces get their bucket on first touch.
         if let Some(cold_storage) = cold_storage.as_ref() {
-            cold_storage
-                .ensure_bucket(DEFAULT_NAMESPACE)
-                .await
-                .unwrap_or_else(|err| panic!("Can not reach the cold storage: {}", err));
+            cold_storage.ensure_bucket(DEFAULT_NAMESPACE).await;
         }
 
         let topics_snapshot = CurrentTopicsSnapshot::read_or_create(settings.data.clone()).await;

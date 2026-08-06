@@ -105,46 +105,126 @@ impl ColdStorage {
         }
     }
 
-    /// Creates the bucket unless this process already did.
+    /// Creates the bucket unless this process already did. **Best effort - it never fails the
+    /// caller.**
     ///
     /// Every operation goes through it, so a namespace that appears at runtime gets its bucket on
-    /// first touch. After the first success it is a set lookup.
-    pub async fn ensure_bucket(&self, namespace: &str) -> Result<(), String> {
+    /// first touch. After the first attempt it is a set lookup.
+    ///
+    /// Not being able to *create* a bucket says very little about being able to *use* it, which is
+    /// why a failure here is reported and stepped over rather than raised. An access key scoped to
+    /// one bucket is routinely denied `CreateBucket` while reading and writing inside that bucket
+    /// perfectly well, and a bucket made by hand ahead of time is the normal case in a managed
+    /// deployment. So the operation goes ahead: if the bucket really is unusable, the upload or the
+    /// read says so on its own terms, about the file it was actually working on.
+    pub async fn ensure_bucket(&self, namespace: &str) {
         let bucket = self.get_bucket(namespace);
 
         if self.ensured.lock().contains(bucket.as_str()) {
-            return Ok(());
+            return;
         }
 
-        validate_bucket_name(bucket.as_str())?;
+        if let Err(err) = validate_bucket_name(bucket.as_str()) {
+            // Nothing will work with this name, but that is the operator's to fix, and shouting
+            // about it on every upload would bury it.
+            self.report_bucket_problem(bucket, "use", err.as_str(), false);
+            return;
+        }
 
-        // Absorbs `BucketAlreadyOwnedByYou` only - the answer to every restart after the first one,
-        // and to a bucket an operator created by hand ahead of time.
+        // In the single-bucket layout the name is a fixed one out of the connection string: it is
+        // made once and then used forever, so the question worth asking is whether it is *there*,
+        // not whether we can make it. `HEAD /{bucket}` answers that in one round trip, and it is
+        // the question a scoped key can actually answer - such a key is routinely allowed to use
+        // its one bucket while being denied `CreateBucket`, which would otherwise log a permission
+        // error on every start of a perfectly healthy deployment.
         //
-        // `BucketAlreadyExists` is a different answer wearing similar words: the name is held by
-        // *another account*. Since a bucket name is unique across every customer of the provider,
-        // that means a typo in `s3_conn_string`, and the bucket that exists is not the one we are
-        // about to write to. Failing here turns it into a startup error with a clear cause, instead
-        // of a 403 on the first upload hours later.
-        self.client
-            .create_bucket_if_not_exists(bucket.as_str())
-            .await
-            .map_err(|err| {
-                if err.is_bucket_already_exists() {
-                    return format!(
-                        "The cold storage bucket '{}' belongs to another account - bucket names are unique across every customer of the provider. Pick a name of your own in s3_conn_string",
-                        bucket
-                    );
+        // The per-namespace layout is the opposite case: a bucket genuinely appears at runtime,
+        // when a namespace is first written to, so there creating it is the whole point.
+        if matches!(self.bucket_mode, S3BucketMode::Shared(_)) {
+            match self.client.check_if_bucket_exists(bucket.as_str()).await {
+                Ok(true) => {
+                    println!("Cold storage bucket '{}' is there", bucket);
+                    self.ensured.lock().insert(bucket);
+                    return;
                 }
 
-                format!("Can not create the bucket '{}': {:?}", bucket, err)
-            })?;
+                // Not there at all - a first start against empty storage. Fall through and make it.
+                Ok(false) => {}
 
-        println!("Cold storage bucket '{}' is ready", bucket);
+                // A `HEAD` has no body, so there is no `<Error><Code>` to go on: a 403 here means
+                // either the name is somebody else's or these credentials are wrong, and both are
+                // worth saying out loud rather than papering over with a `CreateBucket` that would
+                // fail differently.
+                Err(err) => {
+                    self.report_bucket_problem(
+                        bucket,
+                        "check",
+                        format!("{:?}", err).as_str(),
+                        err.is_retryable(),
+                    );
+                    return;
+                }
+            }
+        }
 
-        self.ensured.lock().insert(bucket);
+        // `create_bucket_if_not_exists` absorbs `BucketAlreadyOwnedByYou` - the answer to every
+        // restart after the first one, and to a bucket created by hand ahead of time.
+        let err = match self
+            .client
+            .create_bucket_if_not_exists(bucket.as_str())
+            .await
+        {
+            Ok(_) => {
+                println!("Cold storage bucket '{}' is ready", bucket);
+                self.ensured.lock().insert(bucket);
+                return;
+            }
+            Err(err) => err,
+        };
 
-        Ok(())
+        // `BucketAlreadyExists` wears similar words but means the opposite: the name is held by
+        // *another account*. A bucket name is unique across every customer of the provider, so it
+        // points at the name in `s3_conn_string` rather than at anything transient.
+        let message = if err.is_bucket_already_exists() {
+            format!(
+                "the name belongs to another account - bucket names are unique across every customer of the provider, so check the one in s3_conn_string ({:?})",
+                err
+            )
+        } else {
+            format!("{:?}", err)
+        };
+
+        // A transient failure is worth another go on the next operation; a deterministic one -
+        // denied permission, a name that is somebody else's - would only repeat itself, and
+        // retrying it on every single upload turns one problem into a flood of requests.
+        self.report_bucket_problem(bucket, "create", message.as_str(), err.is_retryable());
+    }
+
+    fn report_bucket_problem(
+        &self,
+        bucket: String,
+        what_failed: &str,
+        message: &str,
+        retry_later: bool,
+    ) {
+        let tail = if retry_later {
+            "Going on without it - it will be tried again on the next operation."
+        } else {
+            "Going on without it - the reason is not one a retry would change, so it will not be tried again until a restart."
+        };
+
+        my_logger::LOGGER.write_error(
+            "ColdStorage::ensure_bucket",
+            format!(
+                "Can not {} the cold storage bucket '{}': {}. {}",
+                what_failed, bucket, message, tail
+            ),
+            my_logger::LogEventCtx::new().add("bucket", bucket.as_str()),
+        );
+
+        if !retry_later {
+            self.ensured.lock().insert(bucket);
+        }
     }
 
     /// Streams a file up, one chunk at a time - the whole point being that memory does not depend
@@ -159,7 +239,7 @@ impl ColdStorage {
         file_name: &str,
         path: &Path,
     ) -> Result<(), String> {
-        self.ensure_bucket(topic_key.namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await;
 
         let (bucket, key) = self.resolve(topic_key, file_name);
 
@@ -214,7 +294,7 @@ impl ColdStorage {
         from: u64,
         to: u64,
     ) -> Result<Vec<u8>, String> {
-        self.ensure_bucket(topic_key.namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await;
 
         let (bucket, key) = self.resolve(topic_key, file_name);
 
@@ -229,7 +309,7 @@ impl ColdStorage {
         topic_key: TopicKeyRef<'_>,
         file_name: &str,
     ) -> Result<Option<Vec<u8>>, String> {
-        self.ensure_bucket(topic_key.namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await;
 
         let (bucket, key) = self.resolve(topic_key, file_name);
 
@@ -256,7 +336,7 @@ impl ColdStorage {
         topic_key: TopicKeyRef<'_>,
         file_name: &str,
     ) -> Result<bool, String> {
-        self.ensure_bucket(topic_key.namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await;
 
         let (bucket, key) = self.resolve(topic_key, file_name);
 
@@ -277,7 +357,7 @@ impl ColdStorage {
     }
 
     pub async fn delete(&self, topic_key: TopicKeyRef<'_>, file_name: &str) -> Result<(), String> {
-        self.ensure_bucket(topic_key.namespace).await?;
+        self.ensure_bucket(topic_key.namespace).await;
 
         let (bucket, key) = self.resolve(topic_key, file_name);
 
@@ -547,7 +627,7 @@ mod tests {
     async fn a_bucket_that_already_exists_is_accepted() {
         let (fake, first_run) = connect().await;
 
-        first_run.ensure_bucket("default").await.unwrap();
+        first_run.ensure_bucket("default").await;
 
         let restarted = ColdStorage::new(&S3ConnectionSettings {
             endpoint: fake.endpoint.clone(),
@@ -558,7 +638,7 @@ mod tests {
             debug: false,
         });
 
-        restarted.ensure_bucket("default").await.unwrap();
+        restarted.ensure_bucket("default").await;
 
         // ...and it is usable, not merely accepted
         let path = temp_file("after_restart", &[1, 2, 3]);
@@ -579,33 +659,128 @@ mod tests {
     }
 
     /// The other way a bucket can already exist: the name belongs to somebody else, because bucket
-    /// names are unique across every customer of the provider. Swallowing this the way
-    /// `BucketAlreadyOwnedByYou` is swallowed would turn a typo in the connection string into a 403
-    /// on the first upload, hours later and far from its cause.
+    /// names are unique across every customer of the provider.
+    ///
+    /// It is reported and stepped over, not raised - being unable to create a bucket says little
+    /// about being able to use one. What must not happen is a retry: the answer is deterministic,
+    /// so asking again on every upload would only multiply the requests.
     #[tokio::test]
-    async fn a_bucket_owned_by_another_account_fails_loudly() {
+    async fn a_bucket_owned_by_another_account_is_reported_and_stepped_over() {
         let (fake, cold_storage) = connect().await;
 
         fake.claim_bucket_for_another_account("sb-default");
 
-        let err = cold_storage.ensure_bucket("default").await.unwrap_err();
+        cold_storage.ensure_bucket("default").await;
+        cold_storage.ensure_bucket("default").await;
 
-        assert!(
-            err.contains("belongs to another account"),
-            "unhelpful message: {}",
-            err
+        assert_eq!(
+            1,
+            fake.requests()
+                .iter()
+                .filter(|itm| itm.as_str() == "PUT /sb-default")
+                .count(),
+            "a deterministic failure must not be retried"
         );
 
-        // And it stays failed - nothing was written into the `ensured` set on the way out
-        assert!(cold_storage.ensure_bucket("default").await.is_err());
+        // And the work goes on: the upload is attempted, against the bucket that is there
+        let path = temp_file("foreign_bucket", &[1, 2, 3]);
+
+        cold_storage
+            .upload_file(orders("default"), "active", path.as_path())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            vec!["/sb-default/orders/active".to_string()],
+            fake.object_paths()
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The opposite half of the same rule: a 503 says nothing about the bucket, only about the
+    /// moment, so the next operation tries again rather than writing the bucket off until restart.
+    #[tokio::test]
+    async fn a_transient_failure_is_tried_again() {
+        let (fake, cold_storage) = connect().await;
+
+        fake.fail_bucket_creation_times("sb-default", 1);
+
+        cold_storage.ensure_bucket("default").await;
+        cold_storage.ensure_bucket("default").await;
+
+        assert_eq!(
+            2,
+            fake.requests()
+                .iter()
+                .filter(|itm| itm.as_str() == "PUT /sb-default")
+                .count()
+        );
+
+        // The second attempt got through, so a third one is the set lookup again
+        cold_storage.ensure_bucket("default").await;
+
+        assert_eq!(
+            2,
+            fake.requests()
+                .iter()
+                .filter(|itm| itm.as_str() == "PUT /sb-default")
+                .count()
+        );
+    }
+
+    /// The single-bucket layout asks `HEAD /{bucket}` instead of trying to create what is already
+    /// there. That is not a micro-optimisation: a key scoped to this one bucket is routinely
+    /// allowed to use it and denied `CreateBucket`, so asking the other question would log a
+    /// permission error on every start of a healthy deployment.
+    #[tokio::test]
+    async fn the_single_bucket_layout_checks_rather_than_creates() {
+        let (fake, cold_storage) = connect_with(S3BucketMode::Shared("sb-data".to_string())).await;
+
+        fake.create_bucket("sb-data");
+
+        cold_storage.ensure_bucket("default").await;
+
+        assert_eq!(vec!["HEAD /sb-data".to_string()], fake.requests());
+
+        // Confirmed once, then it is a set lookup - including for another namespace, which shares
+        // the bucket
+        cold_storage.ensure_bucket("alpha").await;
+
+        assert_eq!(1, fake.requests().len());
+    }
+
+    /// A first start against empty storage still has to make the bucket - the check is what comes
+    /// first, not what replaces creating it.
+    #[tokio::test]
+    async fn the_single_bucket_layout_creates_a_bucket_that_is_missing() {
+        let (fake, cold_storage) = connect_with(S3BucketMode::Shared("sb-data".to_string())).await;
+
+        cold_storage.ensure_bucket("default").await;
+
+        assert_eq!(
+            vec!["HEAD /sb-data".to_string(), "PUT /sb-data".to_string()],
+            fake.requests()
+        );
+    }
+
+    /// The per-namespace layout is the opposite case - a bucket appears when a namespace is first
+    /// written to, so creating it is the point and there is nothing to check first.
+    #[tokio::test]
+    async fn the_per_namespace_layout_goes_straight_to_creating() {
+        let (fake, cold_storage) = connect().await;
+
+        cold_storage.ensure_bucket("default").await;
+
+        assert_eq!(vec!["PUT /sb-default".to_string()], fake.requests());
     }
 
     #[tokio::test]
     async fn the_bucket_is_created_once_per_bucket() {
         let (fake, cold_storage) = connect().await;
 
-        cold_storage.ensure_bucket("default").await.unwrap();
-        cold_storage.ensure_bucket("default").await.unwrap();
+        cold_storage.ensure_bucket("default").await;
+        cold_storage.ensure_bucket("default").await;
 
         assert_eq!(
             1,
@@ -615,7 +790,7 @@ mod tests {
                 .count()
         );
 
-        cold_storage.ensure_bucket("alpha").await.unwrap();
+        cold_storage.ensure_bucket("alpha").await;
         assert!(fake.requests().iter().any(|itm| itm == "PUT /sb-alpha"));
     }
 

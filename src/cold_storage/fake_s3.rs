@@ -22,6 +22,9 @@ pub struct FakeS3State {
     /// Buckets that answer `BucketAlreadyExists` - the name is held by somebody else. Real S3 tells
     /// this apart from `BucketAlreadyOwnedByYou`, and the two mean opposite things to us.
     pub foreign_buckets: Vec<String>,
+    /// Bucket -> how many more creation attempts answer 503. Lets a test drive the difference
+    /// between a transient failure and a deterministic one.
+    pub flaky_buckets: HashMap<String, usize>,
     pub requests: Vec<String>,
 }
 
@@ -66,6 +69,25 @@ impl FakeS3 {
             .unwrap()
             .foreign_buckets
             .push(format!("/{}", bucket));
+    }
+
+    /// Puts a bucket there before anything runs - the deployment where an operator created it by
+    /// hand and the service only ever has to find it.
+    pub fn create_bucket(&self, bucket: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .buckets
+            .push(format!("/{}", bucket));
+    }
+
+    /// Makes the next `times` creation attempts for `bucket` fail with a 503, which is retryable.
+    pub fn fail_bucket_creation_times(&self, bucket: &str, times: usize) {
+        self.state
+            .lock()
+            .unwrap()
+            .flaky_buckets
+            .insert(format!("/{}", bucket), times);
     }
 
     pub fn get_object(&self, path: &str) -> Option<Vec<u8>> {
@@ -154,7 +176,17 @@ async fn handle(
                 let outcome = {
                     let mut state = state.lock().unwrap();
 
-                    if state.foreign_buckets.contains(&path) {
+                    let is_flaky = match state.flaky_buckets.get_mut(&path) {
+                        Some(left) if *left > 0 => {
+                            *left -= 1;
+                            true
+                        }
+                        _ => false,
+                    };
+
+                    if is_flaky {
+                        BucketPut::Unavailable
+                    } else if state.foreign_buckets.contains(&path) {
                         BucketPut::Foreign
                     } else if state.buckets.contains(&path) {
                         BucketPut::AlreadyOurs
@@ -168,6 +200,9 @@ async fn handle(
                     BucketPut::Created => ok_response(200, "OK", Vec::new(), None),
                     BucketPut::AlreadyOurs => bucket_already_owned_by_you(),
                     BucketPut::Foreign => bucket_already_exists(),
+                    BucketPut::Unavailable => {
+                        ok_response(503, "Service Unavailable", Vec::new(), None)
+                    }
                 };
 
                 return write_response(socket, response).await;
@@ -180,6 +215,27 @@ async fn handle(
             state.lock().unwrap().objects.remove(&path);
             // What S3 actually answers a successful delete with
             ok_response(204, "No Content", Vec::new(), None)
+        }
+        "HEAD" => {
+            // Answers `check_if_bucket_exists`. A HEAD has no body either way - the status code is
+            // the whole answer, which is exactly what makes this worth exercising for real.
+            let is_bucket = path.trim_matches('/').split('/').count() == 1;
+
+            let exists = {
+                let state = state.lock().unwrap();
+
+                if is_bucket {
+                    state.buckets.contains(&path) || state.foreign_buckets.contains(&path)
+                } else {
+                    state.objects.contains_key(&path)
+                }
+            };
+
+            if exists {
+                ok_response(200, "OK", Vec::new(), None)
+            } else {
+                ok_response(404, "Not Found", Vec::new(), None)
+            }
         }
         "GET" => {
             let object = state.lock().unwrap().objects.get(&path).cloned();
@@ -220,6 +276,7 @@ enum BucketPut {
     Created,
     AlreadyOurs,
     Foreign,
+    Unavailable,
 }
 
 fn bucket_already_exists() -> Vec<u8> {

@@ -146,20 +146,47 @@ alphanumeric. In the per-namespace layout note that a namespace *may*
 end with a hyphen while a bucket may not, so that combination fails
 loudly rather than at the first upload.
 
-A bucket is created on first use and the fact is remembered, so it is
-one call per bucket per process. The first one is created at startup,
-which doubles as the connectivity check — a wrong endpoint, region or
-key pair fails immediately instead of hours later on the first upload.
+The bucket is settled on first use and the fact is remembered, so it is
+one round trip per bucket per process. It happens at startup for the
+first one, so a wrong endpoint, region or key pair shows up in the log
+straight away rather than only at the first upload hours later.
 
-Creating a bucket that is **already yours** is not an error, so a bucket
-you made by hand ahead of time is fine, and so is every restart after
-the first. A bucket that exists but belongs to **another account** is a
-different matter and fails the startup: bucket names are unique across
-every customer of the provider, so that answer means the name in
-`s3_conn_string` is somebody else's, and every upload would come back
-403 hours later. S3 says which of the two it is
-(`BucketAlreadyOwnedByYou` vs `BucketAlreadyExists`) and the two are
-treated as the opposites they are.
+**The two layouts ask different questions**, because the bucket means
+different things in them:
+
+- `Bucket` — the name is fixed in the connection string, made once and
+  used forever, so the service asks whether it is *there*
+  (`HEAD /{bucket}`) and only creates it if it is not. This matters for
+  a key scoped to that single bucket: such a key is routinely allowed to
+  use it while being denied `CreateBucket`, and asking the other
+  question first would log a permission error on every start of a
+  perfectly healthy deployment.
+- `BucketPrefix` — a bucket genuinely appears at runtime, the first time
+  a namespace is written to, so creating it is the point and there is
+  nothing to check beforehand.
+
+**Creating the bucket is best effort and never stops the service.** Not
+being able to create a bucket says very little about being able to use
+one: an access key scoped to a single bucket is routinely denied
+`CreateBucket` while reading and writing inside that bucket perfectly
+well, and a bucket made by hand ahead of time is the normal case in a
+managed deployment. So a failure is written to the log and the work goes
+on — if the bucket really is unusable, the upload or the read says so on
+its own terms, naming the file it was working on. The cold tier holds
+sealed data, and refusing to start over it would turn a storage problem
+into an outage.
+
+Creating a bucket that is **already yours** is not a failure at all — so
+a hand-made bucket is fine, and so is every restart after the first. Two
+failures are told apart by whether asking again could ever help:
+
+- **Transient** (a 5xx, a timeout, a refused connection) — tried again
+  on the next operation.
+- **Deterministic** (permission denied, or `BucketAlreadyExists`, which
+  means the name belongs to *another account* — bucket names are unique
+  across every customer of the provider) — logged once and not tried
+  again until a restart, because repeating it on every upload would turn
+  one problem into a flood of requests.
 
 Uploads are streamed from the file in 512 KB chunks, so memory does not
 depend on the size of the object: an archive is hundreds of megabytes,

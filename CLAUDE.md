@@ -64,8 +64,10 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
   chosen by `s3_conn_string` and never guessed: `Bucket=x` puts everything in one bucket under
   `/x/{ns}/{topic}/{file}`, `BucketPrefix=x` gives each namespace its own bucket `x-{ns}` with the
   key starting at the topic. Exactly one of the two, or the connection string fails to parse.
-  Buckets are created on first touch (`create_bucket_if_not_exists` - a bucket already ours is
-  fine, one owned by another account fails the startup) and remembered; uploads are streamed in 512 KB chunks, so
+  Buckets are settled on first touch, best-effort - `Bucket=x` asks `check_if_bucket_exists`
+  first and only creates what is missing, `BucketPrefix=x` creates straight away: a failure is logged and stepped over (never
+  fatal - a key scoped to one bucket is often denied `CreateBucket` yet can use it), retried later
+  only if the error was transient; uploads are streamed in 512 KB chunks, so
   memory does not depend on the size of the archive. `Debug=1` in `s3_conn_string` turns on
   per-request tracing to stdout (`S3Client::debug_to_console`).
 - `topic_key/` — `Namespace` (validated `[a-z0-9-]`, 1..=63, no leading `-`), `TopicKey` / `TopicKeyRef`.
