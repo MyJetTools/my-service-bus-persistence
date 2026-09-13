@@ -28,7 +28,10 @@ cargo run --release          # local run; reads YAML config from $HOME/.myservic
   build time (via `ci-utils::sync_and_build_proto_file`) and compiles it into the `crate::persistence_grpc`
   module (`tonic::include_proto!("persistence")`). The local `proto/` copy is a synced artifact — the proto
   contract lives in the remote repo, so edit it there, not here.
-- Requires `$HOME` to be set: the settings filename is resolved relative to it. mimalloc is the global allocator.
+- Requires `$HOME` to be set: the settings filename is resolved relative to it. jemalloc is the global allocator on Linux
+  (a target-specific dependency); other platforms, e.g. macOS for local dev, use the system allocator.
+  It is tuned through `_rjem_malloc_conf` in `main.rs` (background purge thread, fast decay), which only takes
+  effect while `tikv-jemallocator` stays prefixed — do not add `unprefixed_malloc_on_supported_platforms`.
 - There is no Azure dependency any more. Storage is plain files under `data_folder`, plus `my-s3` for the cold tier.
 
 ## MyJetTools dependencies (important)

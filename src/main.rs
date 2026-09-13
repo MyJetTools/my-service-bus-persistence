@@ -35,8 +35,18 @@ pub mod persistence_grpc {
     tonic::include_proto!("persistence");
 }
 
+#[cfg(target_os = "linux")]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+// Read by jemalloc before `main`: a background thread purges freed pages back to the OS
+// after ~1s (dirty) and skips the MADV_FREE stage (muzzy), even when the service is idle.
+// tikv-jemalloc-sys builds prefixed by default, hence `_rjem_malloc_conf`.
+#[cfg(target_os = "linux")]
+#[allow(non_upper_case_globals)]
+#[export_name = "_rjem_malloc_conf"]
+pub static malloc_conf: Option<&'static std::ffi::c_char> =
+    Some(unsafe { &*c"background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:0".as_ptr() });
 
 #[tokio::main]
 async fn main() {

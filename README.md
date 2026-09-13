@@ -329,7 +329,8 @@ a late write for a closed year work without any special case.
 - `cargo run --release` — local run with the YAML config from
   `$HOME`.
 - The repo expects a Tokio multi-threaded runtime (default
-  `#[tokio::main]`) and uses mimalloc as the global allocator.
+  `#[tokio::main]`) and uses jemalloc as the global allocator on Linux;
+  other platforms use the system allocator.
 
 ## Project conventions
 
