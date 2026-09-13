@@ -48,17 +48,21 @@ async fn read(
 
     match payload {
         Ok(payload) => {
-            let sub_page = SubPageInner::from_compressed_payload(sub_page_id, payload?.as_slice());
-
-            if let Err(err) = &sub_page {
-                my_logger::LOGGER.write_warning(
-                    "get_sub_page_to_read",
-                    format!("{:?}", err),
-                    LogEventCtx::new().add("topicId", topic_key.to_string()),
-                );
-            }
-
-            let sub_page = sub_page.unwrap();
+            // A payload that can not be decompressed carries no data: the page is missing.
+            let sub_page =
+                match SubPageInner::from_compressed_payload(sub_page_id, payload?.as_slice()) {
+                    Ok(sub_page) => sub_page,
+                    Err(err) => {
+                        my_logger::LOGGER.write_warning(
+                            "get_sub_page_to_read",
+                            format!("Can not decompress the sub page. Err: {:?}", err),
+                            LogEventCtx::new()
+                                .add("topicId", topic_key.to_string())
+                                .add("subPageId", sub_page_id.get_value().to_string()),
+                        );
+                        return None;
+                    }
+                };
 
             let sub_page = Arc::new(SubPage::restore_from_archive(sub_page));
             Some(sub_page)

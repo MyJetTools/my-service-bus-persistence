@@ -1,4 +1,5 @@
-use my_service_bus::shared::{page_compressor::CompressedPageReaderError, sub_page::SubPageId};
+use my_logger::LogEventCtx;
+use my_service_bus::shared::sub_page::SubPageId;
 use rust_extensions::{date_time::DateTimeAsMicroseconds, StopWatch};
 
 use crate::{
@@ -12,13 +13,6 @@ use crate::{
 pub enum RestoreSubPageError {
     NotFound,
     ArchiveStorageError(crate::archive_storage::ArchiveStorageError),
-    CompressedPageReaderError(CompressedPageReaderError),
-}
-
-impl From<CompressedPageReaderError> for RestoreSubPageError {
-    fn from(err: CompressedPageReaderError) -> Self {
-        Self::CompressedPageReaderError(err)
-    }
 }
 
 impl From<crate::archive_storage::ArchiveStorageError> for RestoreSubPageError {
@@ -59,7 +53,21 @@ pub async fn restore_sub_page(
 
     let compressed_payload = compressed_payload.unwrap();
 
-    let result = SubPageInner::from_compressed_payload(sub_page_id, compressed_payload.as_slice())?;
+    // A payload that can not be decompressed carries no data: the page is missing, not broken.
+    let result =
+        match SubPageInner::from_compressed_payload(sub_page_id, compressed_payload.as_slice()) {
+            Ok(result) => result,
+            Err(err) => {
+                my_logger::LOGGER.write_warning(
+                    "restore_sub_page",
+                    format!("Can not decompress the sub page. Err: {:?}", err),
+                    LogEventCtx::new()
+                        .add("topicId", topic_data.get_topic_key().to_string())
+                        .add("subPageId", sub_page_id.get_value().to_string()),
+                );
+                return Err(RestoreSubPageError::NotFound);
+            }
+        };
 
     Ok(SubPage::restore_from_archive(result))
 }
