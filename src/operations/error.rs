@@ -1,5 +1,3 @@
-use zip::result::ZipError;
-
 use crate::message_pages::PageOperationError;
 
 #[derive(Debug)]
@@ -8,7 +6,6 @@ pub enum OperationError {
     PageOperationError(PageOperationError),
     ProtobufDecodeError(prost::DecodeError),
     ProtobufEncodeError(prost::EncodeError),
-    ZipError(ZipError),
     FileStorageError(String),
 }
 
@@ -27,12 +24,6 @@ impl From<prost::DecodeError> for OperationError {
 impl From<prost::EncodeError> for OperationError {
     fn from(src: prost::EncodeError) -> Self {
         Self::ProtobufEncodeError(src)
-    }
-}
-
-impl From<ZipError> for OperationError {
-    fn from(src: ZipError) -> Self {
-        Self::ZipError(src)
     }
 }
 

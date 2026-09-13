@@ -10,14 +10,9 @@ pub async fn get_compressed_page(
     topic_key: TopicKeyRef<'_>,
     from_message_id: MessageId,
     to_message_id: MessageId,
-    v0: bool,
     max_payload_size: usize,
 ) -> Vec<Vec<u8>> {
-    let mut compressed_writer = if v0 {
-        CompressedPageBuilder::new_as_single_file()
-    } else {
-        CompressedPageBuilder::new_by_files()
-    };
+    let mut compressed_writer = CompressedPageBuilder::new();
 
     let mut sub_page_read_copy = None;
 
@@ -43,7 +38,7 @@ pub async fn get_compressed_page(
         let message = sub_page_read_copy.as_ref().unwrap().get(message_id);
 
         if let Some(message) = message {
-            compressed_writer.add_message(message).unwrap();
+            compressed_writer.add_message(message);
         }
     }
 

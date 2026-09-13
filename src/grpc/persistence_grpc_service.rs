@@ -150,7 +150,6 @@ impl MyServiceBusMessagesPersistenceGrpcService for MyServicePersistenceGrpc {
             TopicKeyRef::new(namespace.as_str(), req.topic_id.as_str()),
             from_message_id,
             to_message_id,
-            req.version == 0,
             MAX_PAYLOAD_SIZE,
         )
         .await;

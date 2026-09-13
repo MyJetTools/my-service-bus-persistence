@@ -89,7 +89,7 @@ impl SubPageInner {
 
         let mut messages = SortedVecOfArc::new();
 
-        while let Some(msg) = compressed_payload.get_next_message().unwrap() {
+        while let Some(msg) = compressed_payload.get_next_message() {
             messages.insert_or_replace(Arc::new(msg));
         }
 

@@ -27,8 +27,7 @@ pub async fn unzip_and_deserialize(
     }
 
     let unzipped =
-        my_service_bus::shared::page_compressor::zip::decompress_payload(payload.as_slice())
-            .unwrap();
+        my_service_bus::shared::page_compressor::decompress_payload(payload.as_slice()).unwrap();
 
     let contract = NewMessagesProtobufContract::parse(unzipped.as_slice());
 

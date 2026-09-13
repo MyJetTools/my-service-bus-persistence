@@ -131,13 +131,13 @@ impl SubPage {
         match self {
             SubPage::Active(_, sub_page_inner) => {
                 let mut page_compressor =
-                    my_service_bus::shared::page_compressor::CompressedPageBuilder::new_as_single_file();
+                    my_service_bus::shared::page_compressor::CompressedPageBuilder::new();
 
                 {
                     let data = sub_page_inner.lock();
 
                     for msg in data.messages.iter() {
-                        page_compressor.add_message(msg).unwrap();
+                        page_compressor.add_message(msg);
                     }
                 }
 
