@@ -248,8 +248,9 @@ service directly from application code.
             active                the open tail - the sub page still being filled
 ```
 
-In the cold tier the namespace is either the first key segment or the
-bucket, depending on the layout — see the settings section above.
+In the cold tier the namespace is a key segment inside the one bucket:
+`/{bucket}/my-sb-persistence/{namespace}/{topic}/{file}` — see the
+settings section above.
 
 `default` is not special — it gets its own folder like any other
 namespace. Data written before namespaces existed sits directly at the

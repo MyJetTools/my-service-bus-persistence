@@ -105,7 +105,8 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
             {:019}.archive      .{year}.yearindex      active
 ```
 
-Locally the namespace is a folder; in the cold tier it is the bucket. `default` is not special — it has its own folder, and pre-namespace
+Locally the namespace is a folder; in the cold tier it is a key segment inside the one bucket
+(`/{bucket}/my-sb-persistence/{namespace}/...`), never a bucket of its own. `default` is not special — it has its own folder, and pre-namespace
 data sitting at the root is renamed into `default/` on first start (`operations::migrate_legacy_layout`), guarded by
 `.layout-version` — its *absence* is the marker, because before namespaces every folder at the root was a topic.
 A second marker, `.layout-migrating`, makes an interrupted run resumable: without it a resumed migration can not
