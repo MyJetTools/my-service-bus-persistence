@@ -15,10 +15,8 @@ use crate::{archive_storage::ArchiveFileNo, topic_key::TopicKeyRef, typing::Year
 ///             active                the open tail - the sub page still being filled
 /// ```
 ///
-/// In the cold tier the namespace becomes the **bucket** (`{prefix}-{namespace}`), so the key is
-/// what is left: `{topic}/{file}`. Locally the namespace is a folder, in S3 it is a bucket, and
-/// `ColdStorage` is the one place that spells the difference - the key depends on the bucket
-/// layout, so it is built there, not here.
+/// In the cold tier the same relative path is the key, under a fixed root in the one bucket:
+/// `/{bucket}/my-sb-persistence/{namespace}/{topic}/{file}`.
 ///
 /// `default` is not special: it gets its own folder like every other namespace, so the layout has
 /// no exceptions. Data written before namespaces existed sits directly at the root and is moved
@@ -31,12 +29,13 @@ pub const ACTIVE_FILE_NAME: &str = "active";
 pub const ARCHIVE_FILE_EXTENSION: &str = ".archive";
 pub const YEAR_INDEX_FILE_EXTENSION: &str = ".yearindex";
 
-/// `{namespace}/{topic}` - the S3 key prefix and the local sub-folder alike.
+/// `{namespace}/{topic}` - the local sub-folder.
 pub fn get_topic_relative_path(topic_key: TopicKeyRef<'_>) -> String {
     format!("{}/{}", topic_key.namespace, topic_key.topic_id)
 }
 
-/// `{namespace}/{topic}/{file_name}` - used verbatim as the S3 key.
+/// `{namespace}/{topic}/{file_name}` - the path under the data folder, and the S3 key under the
+/// `my-sb-persistence/` root.
 pub fn get_relative_path(topic_key: TopicKeyRef<'_>, file_name: &str) -> String {
     format!("{}/{}", get_topic_relative_path(topic_key), file_name)
 }

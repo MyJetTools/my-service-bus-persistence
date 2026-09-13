@@ -9,7 +9,7 @@ use crate::{
     index_by_minute::{IndexByMinuteUtils, YearlyIndexByMinute},
     settings::SettingsModel,
     topic_data::TopicsDataList,
-    topic_key::{TopicKeyRef, DEFAULT_NAMESPACE},
+    topic_key::TopicKeyRef,
     topics_snapshot::current_snapshot::CurrentTopicsSnapshot,
     typing::Year,
 };
@@ -51,9 +51,9 @@ impl AppContext {
         // Touches the cold storage early so a wrong endpoint, region or key pair shows up in the
         // log now rather than only at the first upload hours later. It does not gate the start:
         // the cold tier holds sealed data, and refusing to serve the hot path over it would turn a
-        // storage problem into an outage. Other namespaces get their bucket on first touch.
+        // storage problem into an outage.
         if let Some(cold_storage) = cold_storage.as_ref() {
-            cold_storage.ensure_bucket(DEFAULT_NAMESPACE).await;
+            cold_storage.ensure_bucket().await;
         }
 
         let topics_snapshot = CurrentTopicsSnapshot::read_or_create(settings.data.clone()).await;

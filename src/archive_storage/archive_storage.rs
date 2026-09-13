@@ -387,7 +387,7 @@ mod tests {
     #[tokio::test]
     async fn a_cold_archive_is_read_over_ranged_gets() {
         use crate::cold_storage::fake_s3::FakeS3;
-        use crate::settings::{S3BucketMode, S3ConnectionSettings};
+        use crate::settings::S3ConnectionSettings;
         use crate::topic_key::TopicKeyRef;
 
         let path = temp_path("cold_read");
@@ -413,7 +413,7 @@ mod tests {
             region: "eu-central-1".to_string(),
             access_key: "AKIATEST".to_string(),
             secret_key: "secret".to_string(),
-            bucket_mode: S3BucketMode::PerNamespace("sb".to_string()),
+            bucket: "sb-data".to_string(),
             debug: false,
         }));
 

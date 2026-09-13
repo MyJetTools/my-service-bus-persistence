@@ -221,18 +221,19 @@ async fn handle(
             // the whole answer, which is exactly what makes this worth exercising for real.
             let is_bucket = path.trim_matches('/').split('/').count() == 1;
 
-            let exists = {
-                let state = state.lock().unwrap();
+            let state = state.lock().unwrap();
 
-                if is_bucket {
-                    state.buckets.contains(&path) || state.foreign_buckets.contains(&path)
-                } else {
-                    state.objects.contains_key(&path)
-                }
+            let exists = if is_bucket {
+                state.buckets.contains(&path)
+            } else {
+                state.objects.contains_key(&path)
             };
 
             if exists {
                 ok_response(200, "OK", Vec::new(), None)
+            } else if is_bucket && state.foreign_buckets.contains(&path) {
+                // What S3 answers a HEAD on a bucket that is somebody else's
+                ok_response(403, "Forbidden", Vec::new(), None)
             } else {
                 ok_response(404, "Not Found", Vec::new(), None)
             }

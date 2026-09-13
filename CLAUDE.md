@@ -60,12 +60,12 @@ Per the global rules, consult the `development-best-practices` MCP resources fir
   `(namespace, topic_id)` onto a path / S3 key), Prometheus metrics.
 - `file_storage/` — random-access file (`read`/`write` at offset, `append`, `read_all`/`write_all`). Reads past EOF
   come back zero-filled, which is what the offset-addressed TOC and year index rely on.
-- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete. Two layouts,
-  chosen by `s3_conn_string` and never guessed: `Bucket=x` puts everything in one bucket under
-  `/x/{ns}/{topic}/{file}`, `BucketPrefix=x` gives each namespace its own bucket `x-{ns}` with the
-  key starting at the topic. Exactly one of the two, or the connection string fails to parse.
-  Buckets are settled on first touch, best-effort - `Bucket=x` asks `check_if_bucket_exists`
-  first and only creates what is missing, `BucketPrefix=x` creates straight away: a failure is logged and stepped over (never
+- `cold_storage/` — thin wrapper over `my-s3`: upload, ranged download, exists, delete. One bucket
+  (`Bucket=x` in `s3_conn_string`, required) for every namespace, keys under
+  `/x/my-sb-persistence/{ns}/{topic}/{file}` — the fixed root is `KEY_ROOT` in `cold_storage.rs`,
+  the rest is `storage_layout::get_relative_path`.
+  The bucket is settled on first touch, best-effort - `check_if_bucket_exists`
+  first, and only what is missing is created: a failure is logged and stepped over (never
   fatal - a key scoped to one bucket is often denied `CreateBucket` yet can use it), retried later
   only if the error was transient; uploads are streamed in 512 KB chunks, so
   memory does not depend on the size of the archive. `Debug=1` in `s3_conn_string` turns on

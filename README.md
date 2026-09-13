@@ -38,7 +38,7 @@ delete_topic_secret_key: "some-shared-secret"
 # listen_unix_socket: "/tmp/my-sb-persistence.sock"
 
 # Optional cold tier. Omit it and everything stays on the local disk forever.
-# Bucket=x -> /x/{ns}/{topic}/{file}   |   BucketPrefix=x -> /x-{ns}/{topic}/{file}
+# Everything goes into one bucket: /{Bucket}/my-sb-persistence/{namespace}/{topic}/{file}
 # s3_conn_string: "Endpoint=https://fsn1.your-objectstorage.com;Region=fsn1;AccessKey=...;SecretKey=...;Bucket=sb-data"
 
 # Only for the first start after upgrading from the three-folder layout. Remove it afterwards.
@@ -66,13 +66,12 @@ Endpoint=https://s3.eu-central-1.amazonaws.com;Region=eu-central-1;AccessKey=AKI
 | `Region`    | Region used for the SigV4 signature.                            |
 | `AccessKey` | Access key id.                                                  |
 | `SecretKey` | Secret access key. Only the **first** `=` separates, so a base64 secret with its own `=` is fine. |
-| `Bucket` *or* `BucketPrefix` | Chooses the cold-tier layout — see below. Exactly one of the two. |
+| `Bucket`    | The one bucket every namespace goes into — see below.           |
 | `Debug`     | Optional. `Debug=1` traces every S3 request to the console — see below. Off when absent. |
 
-`Endpoint`, `Region`, `AccessKey` and `SecretKey` are all required, plus
-exactly one of `Bucket` / `BucketPrefix`. A missing, doubled or
-misspelled key fails at startup rather than silently disabling the cold
-tier.
+`Endpoint`, `Region`, `AccessKey`, `SecretKey` and `Bucket` are all
+required. A missing or misspelled key fails at startup rather than
+silently disabling the cold tier.
 
 ### `Debug=1` — tracing the S3 traffic
 
@@ -108,62 +107,35 @@ Leave it off in normal operation: an upload of a sealed archive is a
 rare burst, but a cold read is one request per sub page, and those add
 up in a log.
 
-### Two layouts for the cold tier
+### Cold tier layout
 
-Exactly one of `Bucket` or `BucketPrefix` — neither, or both, is a parse
-error at startup. They lay the objects out differently, so guessing a
-default would put the data somewhere you did not mean, and switching
-later means moving every object.
+One bucket, named by `Bucket`, holds every namespace. Inside it the key
+is the local layout under a fixed `my-sb-persistence/` root, so the
+bucket can be shared with other services:
 
 ```text
-Bucket=sb-data         /sb-data/{namespace}/{topic}/{file}
-BucketPrefix=sb-data   /sb-data-{namespace}/{topic}/{file}
+/{bucket}/my-sb-persistence/{namespace}/{topic}/{file}
 ```
 
-**`Bucket` — one bucket for everything.** The namespace is the first
-segment of the key. One bucket to create, one set of credentials, and no
-account bucket limit to think about.
+A bucket name is unique across *every customer of the provider* — AWS
+partition-wide, and on Hetzner "unique amongst all Hetzner Object
+Storage users and across all locations" — so pick a distinctive one.
+Pick it once and keep it in the config: changing it later means moving
+every object.
 
-**`BucketPrefix` — a bucket per namespace.** A namespace is then a
-separate product all the way down: its own access keys, lifecycle rules,
-storage class and line on the invoice, and retiring one is deleting a
-bucket. The cost is the account-wide bucket limit — 100 on Hetzner, 100
-(raisable) on AWS — so this suits a handful of namespaces, not one per
-customer.
-
-Either way it is a prefix and not a bare name, and that is not
-decoration: a bucket name is unique across *every customer of the
-provider* — AWS partition-wide, and on Hetzner "unique amongst all
-Hetzner Object Storage users and across all locations" — so a bare
-`default` or `alpha` already belongs to somebody else.
-
-Pick it once and keep it in the config — never generate it at runtime,
-or a restart would create fresh empty buckets and orphan the old ones.
-
-Name rules, checked before a bucket is created: 3–63 characters,
+Name rules, checked before the bucket is touched: 3–63 characters,
 lowercase letters, digits and hyphens, first and last character
-alphanumeric. In the per-namespace layout note that a namespace *may*
-end with a hyphen while a bucket may not, so that combination fails
-loudly rather than at the first upload.
+alphanumeric.
 
-The bucket is settled on first use and the fact is remembered, so it is
-one round trip per bucket per process. It happens at startup for the
-first one, so a wrong endpoint, region or key pair shows up in the log
-straight away rather than only at the first upload hours later.
+The bucket is settled once per process, at startup, so a wrong endpoint,
+region or key pair shows up in the log straight away rather than only
+at the first upload hours later.
 
-**The two layouts ask different questions**, because the bucket means
-different things in them:
-
-- `Bucket` — the name is fixed in the connection string, made once and
-  used forever, so the service asks whether it is *there*
-  (`HEAD /{bucket}`) and only creates it if it is not. This matters for
-  a key scoped to that single bucket: such a key is routinely allowed to
-  use it while being denied `CreateBucket`, and asking the other
-  question first would log a permission error on every start of a
-  perfectly healthy deployment.
-- `BucketPrefix` — a bucket genuinely appears at runtime, the first time
-  a namespace is written to, so creating it is the point and there is
-  nothing to check beforehand.
+The service asks whether the bucket is *there* (`HEAD /{bucket}`) and
+only creates it if it is not. This matters for a key scoped to that
+single bucket: such a key is routinely allowed to use it while being
+denied `CreateBucket`, and trying to create it first would log a
+permission error on every start of a perfectly healthy deployment.
 
 **Creating the bucket is best effort and never stops the service.** Not
 being able to create a bucket says very little about being able to use

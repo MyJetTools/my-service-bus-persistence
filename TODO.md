@@ -134,6 +134,19 @@ as an optional cold tier.
   addressed by offset - which makes a late write for a closed year work with no
   special case, and the uploader sends the updated copy back up.
 
+- The cold tier is one bucket (`Bucket=x`, required) for every namespace, keys under
+  `/x/my-sb-persistence/{ns}/{topic}/{file}`. The per-namespace `BucketPrefix` layout was dropped
+  before production.
+- Uploads are streamed from the file in 512 KB chunks, so memory does not depend on the size of the
+  archive. This closed the production OOM: a 260 MB archive read whole into a 512 MB container was
+  killed by SIGKILL, which leaves no panic and no log line.
+- Settling the bucket is **best effort and never fatal**. It asks `check_if_bucket_exists`
+  first and only creates what is missing - a key scoped to one bucket is routinely allowed to use it
+  and denied `CreateBucket`. A failure is logged and stepped over; a transient one is tried again on
+  the next operation, a deterministic one is not retried until a restart.
+- `Debug=1` in `s3_conn_string` traces every S3 request to the console, so a refusing cold tier can
+  be diagnosed on a running deployment without a rebuild.
+
 ### Audits
 
 Two adversarial passes have run over this code. The first produced 20 findings, all 20 verified by
@@ -201,37 +214,27 @@ dependency - and no unit test removed the last topic of a namespace.
   file the tail could be appended to as messages arrive, shrinking the loss window
   to the last fsync and removing the shutdown path entirely. It changes the file
   format, so it is a deliberate decision rather than a refactor.
-- **`my-s3`: streaming upload.** `upload_file` takes the body as a `Vec<u8>`, and the caller has
-  read the file whole to produce it, so a upload peaks at roughly twice the file size in RAM. With
-  260 MB archives in a 512 MB container that is an OOM kill - which arrives as SIGKILL, so there is
-  no panic and no log line, only a container restarting every few seconds; and because the
-  migration is idempotent it looks like slow progress rather than a failure. Until the crate can
-  stream (multipart, or a body from an `AsyncRead`), `max_upload_size_mb` refuses anything larger
-  and says why, and the file stays local.
-- **`my-s3`: `BucketAlreadyOwnedByYou`** is not modelled, so a restart against your own bucket
-  arrives as `Other` and has to be matched by string in `cold_storage::already_ours`.
-- **`my-s3`: a typed `KeyNotFound`** instead of `Other("Status Code: 404...")`, which
-  `cold_storage::is_not_found` has to match by string today. `If-Match` on PUT is not
-  needed while a topic has a single writer, and listing is not needed at all.
 - **`ARCHIVE_MESSAGES_PER_FILE`** (10M) drives both the local disk peak and the size of a single
   upload. It can **not** simply be turned into a setting: `ArchiveFileNo::from_sub_page_id` divides
   by it, so changing it re-numbers every existing archive and silently misaddresses stored data.
   Changing it needs a layout version and a migration.
-- **Nothing has run against a real AWS/MinIO endpoint yet.** The client is exercised against an
+- **Nothing has run against a real AWS/Hetzner/MinIO endpoint yet.** The client is exercised against an
   in-process S3-compatible server (`cold_storage::fake_s3`), which covers SigV4 signing, the
   `Range` header, 200/206/204/404 handling, the key spelling and the cold archive read - but not
   a real provider's quirks. One smoke test against the actual bucket is still worth doing.
 - **No automated end-to-end test.** The storage primitives, the layout and the migration are
-  covered by 55 unit tests, and the whole flow has been driven by hand against a live process
+  covered by 91 unit tests, and the whole flow has been driven by hand against a live process
   (migration, two namespaces, archive, restart, year index, per-namespace YAML). Nothing runs it
   automatically, and `cargo test` is still commented out in CI.
+- **A cold read still panics on a storage failure.** `AppContext::restore_year_index_from_cold_storage`
+  and `try_open_archive` panic when S3 answers anything other than success or "not there"
+  (`app/app_ctx.rs`). Creating a bucket is best-effort and never fatal, so a deployment whose key
+  can not create *or read* now starts happily and dies on the first archive read instead. The
+  alternative - treating a 403 as "no data" - would look exactly like message loss to the bus node,
+  which is worse, so this wants a deliberate answer rather than a quiet `unwrap_or_default`.
 - **`PagesGcTimer` is driven by the topics snapshot, not by memory.** `gc_pages` iterates
   `topics_snapshot.snapshot.data`, so a topic that has received messages but is not in a saved
   snapshot never has its sub pages evicted or archived - they accumulate in RAM. The bus node
   pushes a snapshot every couple of seconds, so in practice the window is seconds; but the same
   shape already caused a real bug in `restore()` and is worth making memory-driven, using the
   snapshot entry only for the `persist` flag.
-- **`my-s3` answers a successful DELETE with 204**, which the crate treats as an error, so every
-  delete came back as `Other("Status Code: 204...")` and hard delete removed nothing from the cold
-  tier. Worked around in `cold_storage::is_no_content` by matching the rendered status code -
-  replace it once the crate handles 204 (and gives a typed `KeyNotFound`).
